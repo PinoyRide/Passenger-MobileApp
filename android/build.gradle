@@ -46,3 +46,18 @@ allprojects {
         }
     }
 }
+
+// --- ADDED: Workaround for react-native-gradle-plugin unconditionally
+// adding the oss.sonatype.org snapshots repo (see DependencyUtils.kt in
+// @react-native/gradle-plugin). That repo is slow/flaky; when it times out
+// with a 504, Gradle disables it and cascades into unrelated dependency
+// resolution failures (kotlin-stdlib, etc). This strips it out after the
+// RN plugin has finished configuring every subproject.
+gradle.projectsEvaluated {
+    allprojects {
+        repositories.removeAll { repo ->
+            repo instanceof MavenArtifactRepository &&
+                repo.url.toString().contains("oss.sonatype.org")
+        }
+    }
+}

@@ -41,7 +41,7 @@ const OTPScreen = () => {
   }, [mobileNumber]);
 
   const fetchOtp = mobileNumber => {
-    getOtpCode.makePostRequest(Constants.ENDPOINT.GENERATE_OTP, {
+    getOtpCode.makePostRequest(Constants.ENDPOINT.GENERATE_LOGIN, {
       mobile_no: mobileNumber,
     });
   };
@@ -59,7 +59,7 @@ const OTPScreen = () => {
 
   // Verify OTP when 6 digits entered
   const verifyOtp = code => {
-    verifyOtpCode.makePostRequest(Constants.ENDPOINT.VERIFY_OTP, {
+    verifyOtpCode.makePostRequest(Constants.ENDPOINT.VERIFY_LOGIN, {
       mobile_no: mobileNumber,
       code,
     });
@@ -131,7 +131,7 @@ const OTPScreen = () => {
     setTimeout(() => setResendDisabled(false), 60000); // 60s cooldown
 
     try {
-      await getOtpCode.makePostRequest(Constants.ENDPOINT.GENERATE_OTP, {
+      await getOtpCode.makePostRequest(Constants.ENDPOINT.GENERATE_LOGIN, {
         mobile_no: mobileNumber,
       });
     } catch (error) {

@@ -21,6 +21,8 @@ const BASE_DEV = {
     SIGN_UP: 'customers/sign_up/',
     GET_CUSTOMER_DETAILS: 'customers/get_customer_details/',
     //OTP
+    GENERATE_LOGIN: 'otp/generate-login/',
+    VERIFY_LOGIN: 'otp/verify-login/',
     GENERATE_OTP: 'otp/generate/',
     VERIFY_OTP: 'otp/verify/',
     //BOOKING
@@ -34,6 +36,7 @@ const BASE_DEV = {
     RATE_BOOKING: 'booking/rate/',
     GET_PROMO_LIST: 'booking/get_promo_list/',
     CHECK_PROMO_CODE: 'booking/check_promo_code/',
+    GET_RIDER_LOCATION: 'customers/get_rider_location',
 
     ADD_TIP: 'booking/add_tip/',
     //EKYC

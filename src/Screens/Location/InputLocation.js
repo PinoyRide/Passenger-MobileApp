@@ -477,7 +477,7 @@ const InputLocation = () => {
           {/* Pickup */}
           <View style={styles.iconWithTextButton}>
             <Image
-              source={require('@/Assets/Common/HomeScreen/BottomModal/Ellipse_5.png')}
+              source={require('@/Assets/Common/Pick_Up_Icon.png')}
               style={styles.iconSmall}
               resizeMode="contain"
             />
@@ -520,7 +520,7 @@ const InputLocation = () => {
           {/* Dropoff */}
           <View style={styles.iconWithTextButton}>
             <Image
-              source={require('@/Assets/Common/HomeScreen/BottomModal/Ellipse_8.png')}
+              source={require('@/Assets/Common/Drop_Off_Icon.png')}
               style={styles.iconSmall}
               resizeMode="contain"
             />

@@ -115,6 +115,21 @@ const HomeScreen = () => {
   // 🆕 Rider real-time location state (transient, not persisted in Redux)
   const [riderLocation, setRiderLocation] = useState(null);
 
+  // 🔍 Diagnostic: confirms whether riderLocation state is actually updating.
+  // If this never logs a non-null value while status is 1 or 2, the map
+  // props are correctly empty and the bug is upstream (handleGetBookingDetails
+  // not extracting rider_details, or bookingStatus not reaching this component).
+  // If it DOES log a value but the marker still doesn't appear, the bug is
+  // inside AppMap.js's rendering/prop handling instead.
+  useEffect(() => {
+    console.log(
+      '🗺️ [Map] riderLocation state changed:',
+      riderLocation,
+      '| bookingStatus:',
+      bookingStatus,
+    );
+  }, [riderLocation, bookingStatus]);
+
   const statusMessages = {
     0: 'Waiting for the Rider to accept your Booking',
     1: 'Your Rider will arrive soon',
@@ -137,8 +152,6 @@ const HomeScreen = () => {
   const updateBookingStatus = usePostRequest();
   const getBookingDetails = usePostRequest();
   const getPromoList = usePostRequest();
-  // 🆕 Rider location request instance
-  const getRiderLocation = usePostRequest();
   const isLoading = inquireBooking.loading || createBooking.loading;
 
   const onBookPressed = async () => {
@@ -305,6 +318,20 @@ const HomeScreen = () => {
       // Restore rider details if available
       if (booking.rider_details) {
         dispatch(setRiderDetails(booking.rider_details));
+
+        // 🆕 Seed the live map marker immediately from the restored data so
+        // the rider shows up right away instead of waiting for the next poll
+        const restoredStatusNum = Number(booking.status);
+        if (
+          (restoredStatusNum === 1 || restoredStatusNum === 2) &&
+          booking.rider_details?.current_lat &&
+          booking.rider_details?.current_long
+        ) {
+          setRiderLocation({
+            lat: booking.rider_details.current_lat,
+            long: booking.rider_details.current_long,
+          });
+        }
 
         // Show rider found alert if status is 1
         if (booking.status === 1 && !riderAlertShownRef.current) {
@@ -509,19 +536,45 @@ const HomeScreen = () => {
 
     if (code === 200 && data) {
       const { status, rider_details } = data;
+      const statusNum = Number(status);
 
       // ✅ Update Redux
       dispatch(setBookingStatus(status));
       AppUtil.debugDeep(rider_details);
 
-      if (status === 1) {
+      if (statusNum === 1) {
         dispatch(setRiderDetails(rider_details));
         if (!riderAlertShownRef.current) {
           setShowRiderFound(true);
           riderAlertShownRef.current = true;
         }
       }
-      if (status === 3) {
+
+      // 🆕 The booking-details response already carries the rider's live
+      // GPS coordinates inside rider_details (current_lat / current_long) —
+      // there's no separate "get rider location" endpoint. Since this poll
+      // already runs every 1-2s while a booking is active, just read the
+      // coordinates off it directly for both legs of the trip:
+      // status 1 = heading to pickup, status 2 = heading to dropoff.
+      if (
+        (statusNum === 1 || statusNum === 2) &&
+        rider_details?.current_lat &&
+        rider_details?.current_long
+      ) {
+        console.log(
+          '📍 Rider location (from booking details):',
+          rider_details.current_lat,
+          rider_details.current_long,
+        );
+        setRiderLocation({
+          lat: rider_details.current_lat,
+          long: rider_details.current_long,
+        });
+      } else if (statusNum !== 1 && statusNum !== 2) {
+        setRiderLocation(null);
+      }
+
+      if (statusNum === 3) {
         // ✅ Clear Redux state when completed
         dispatch(clearBookingState());
         // 🆕 Clear rider location when booking is completed
@@ -621,67 +674,11 @@ const HomeScreen = () => {
     handleUpdateBookingStatus();
   }, [updateBookingStatus.response, updateBookingStatus.error]);
 
-  // 🆕 GET RIDER LOCATION
-  const triggerGetRiderLocation = () => {
-    const postdata = {
-      customer_id: userInfo?.id,
-      booking_id: activeBooking?.id,
-    };
-    getRiderLocation.makePostRequest(
-      Constants.ENDPOINT.GET_RIDER_LOCATION,
-      postdata,
-    );
-  };
-
-  // 🆕 Handle rider location response
-  const handleGetRiderLocation = () => {
-    if (getRiderLocation.error) {
-      console.warn('Error fetching rider location:', getRiderLocation.error);
-      return;
-    }
-
-    if (!getRiderLocation.response) {
-      return;
-    }
-
-    const results = getRiderLocation.response;
-
-    if (results?.code === 200 && results?.data) {
-      setRiderLocation({
-        lat: results.data.current_lat,
-        long: results.data.current_long,
-      });
-      console.log(
-        '📍 Rider location updated:',
-        results.data.current_lat,
-        results.data.current_long,
-      );
-    }
-  };
-
-  useEffect(() => {
-    handleGetRiderLocation();
-  }, [getRiderLocation.response, getRiderLocation.error]);
-
-  // 🆕 Poll rider location every 30 seconds only when status === 1 (rider on the way to pickup)
-  useEffect(() => {
-    if (bookingStatus !== 1 || !activeBooking?.id) {
-      // Clear rider location when not on status 1
-      setRiderLocation(null);
-      return;
-    }
-
-    // Fetch immediately on status change to 1
-    triggerGetRiderLocation();
-
-    const intervalId = setInterval(() => {
-      triggerGetRiderLocation();
-    }, 30000); // 30 seconds
-
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, [bookingStatus, activeBooking?.id]);
+  // Note: rider live location is no longer fetched from a separate endpoint —
+  // it comes bundled inside rider_details on the existing booking-details
+  // poll (see handleGetBookingDetails above), which already runs every 1-2s
+  // while a booking is active. This mirrors your backend, which returns
+  // current_lat/current_long as part of the rider object on get_details/.
 
   const handlePromoSelect = promo => {
     setSelectedPromo(promo);
@@ -725,9 +722,11 @@ const HomeScreen = () => {
           firstMarkerLong={pickupLocation?.long}
           secondMarkerLat={dropoffLocation?.lat}
           secondMarkerLong={dropoffLocation?.long}
-          // 🆕 Pass rider location to map (only has value when status === 1)
+          // 🆕 Pass rider location + booking status so the map can track the
+          // rider live through both legs of the trip (to pickup, then to dropoff)
           riderMarkerLat={riderLocation?.lat}
           riderMarkerLong={riderLocation?.long}
+          bookingStatus={bookingStatus}
           interactive
           style={styles.map}
         />

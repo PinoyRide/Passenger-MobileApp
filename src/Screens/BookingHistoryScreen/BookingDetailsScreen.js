@@ -41,7 +41,7 @@ const BookingDetailsScreen = () => {
   const handleBack = () => navigation.goBack();
 
   const getBookingTypeLabel = type => {
-    const types = { 1: 'Motorcycle', 2: 'Tricycle', 3: 'Car' };
+    const types = { 1: 'Motorcycle', 2: 'Car', 3: 'Car' };
     return types[type] || 'Ride';
   };
 
@@ -386,7 +386,7 @@ const BookingDetailsScreen = () => {
             {/* Pickup Location */}
             <View style={styles.locationRow}>
               <Image
-                source={require('@/Assets/Common/HomeScreen/BottomModal/Ellipse_5.png')}
+                source={require('@/Assets/Common/Pick_Up_Icon.png')}
                 style={styles.iconSmall}
                 resizeMode="contain"
               />
@@ -398,7 +398,7 @@ const BookingDetailsScreen = () => {
             {/* Dropoff Location */}
             <View style={styles.locationRow}>
               <Image
-                source={require('@/Assets/Common/HomeScreen/BottomModal/Ellipse_8.png')}
+                source={require('@/Assets/Common/Drop_Off_Icon.png')}
                 style={styles.iconSmall}
                 resizeMode="contain"
               />

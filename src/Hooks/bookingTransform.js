@@ -1,5 +1,5 @@
 export const getBookingTypeLabel = type => {
-  const types = { 1: 'Motorcycle', 2: 'Tricycle', 3: 'Car' };
+  const types = { 1: 'Motorcycle', 2: 'Car', 3: 'Car' };
   return types[type] || 'Ride';
 };
 

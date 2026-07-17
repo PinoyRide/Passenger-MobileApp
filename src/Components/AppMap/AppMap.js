@@ -5,9 +5,14 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { StyleSheet } from 'react-native';
+import { Image, StyleSheet } from 'react-native';
 import { useTheme } from 'react-native-paper';
-import MapView, { Marker, Polyline } from 'react-native-maps';
+import MapView, {
+  AnimatedRegion,
+  Marker,
+  MarkerAnimated,
+  Polyline,
+} from 'react-native-maps';
 import { Constants } from '@/Utils';
 
 const AppMap = forwardRef(
@@ -20,9 +25,12 @@ const AppMap = forwardRef(
       firstMarkerLong,
       secondMarkerLat,
       secondMarkerLong,
-      // 🆕 Rider marker props (only passed when bookingStatus === 1)
+      // Rider marker props (only meaningful when bookingStatus === 1 or 2)
       riderMarkerLat,
       riderMarkerLong,
+      // 🆕 Booking status drives which leg of the trip we're tracking:
+      // 1 = rider heading to pickup, 2 = rider (with customer) heading to dropoff
+      bookingStatus,
       minDelta = 0.02,
       latOffset = -0.01,
       onMapPress,
@@ -36,6 +44,62 @@ const AppMap = forwardRef(
     const mapRef = useRef(null);
     const [mapReady, setMapReady] = useState(false);
     const [routeCoords, setRouteCoords] = useState([]);
+
+    // 🔧 Normalize bookingStatus to a Number once — it may arrive as a string
+    // ("1") from Redux/the API, and strict "1" === 1 comparisons would fail.
+    const statusNum = Number(bookingStatus);
+
+    // 🆕 Animated coordinate for the rider marker. Instead of the marker
+    // snapping instantly to each new poll result, this glides smoothly
+    // between the old and new position — like Grab/Uber's live tracking.
+    const riderAnimatedCoordRef = useRef(
+      new AnimatedRegion({
+        latitude: 0,
+        longitude: 0,
+        latitudeDelta: 0,
+        longitudeDelta: 0,
+      }),
+    );
+    // Tracks whether we've placed the marker at least once, so the very
+    // first appearance snaps directly instead of gliding in from (0,0).
+    const riderCoordInitializedRef = useRef(false);
+
+    useEffect(() => {
+      if (!riderMarkerLat || !riderMarkerLong) {
+        // Rider marker isn't showing right now — reset so that if/when it
+        // reappears (new trip, status flips back to 1/2), it snaps into
+        // place instead of gliding in from wherever it last was.
+        riderCoordInitializedRef.current = false;
+        return;
+      }
+
+      const newCoordinate = {
+        latitude: parseFloat(riderMarkerLat),
+        longitude: parseFloat(riderMarkerLong),
+      };
+
+      if (!riderCoordInitializedRef.current) {
+        riderAnimatedCoordRef.current.setValue({
+          ...newCoordinate,
+          latitudeDelta: 0,
+          longitudeDelta: 0,
+        });
+        riderCoordInitializedRef.current = true;
+        return;
+      }
+
+      // Glide to the new position over 1.5s — tune this to roughly match
+      // however often the location poll actually updates, so the marker
+      // finishes one glide right around when the next update arrives.
+      riderAnimatedCoordRef.current
+        .timing({
+          latitude: newCoordinate.latitude,
+          longitude: newCoordinate.longitude,
+          duration: 1500,
+          useNativeDriver: false,
+        })
+        .start();
+    }, [riderMarkerLat, riderMarkerLong]);
 
     useImperativeHandle(ref, () => ({
       fitToMarkers: () => {
@@ -60,8 +124,19 @@ const AppMap = forwardRef(
       },
     }));
 
+    // Initial camera framing (pickup/dropoff pins) before a rider is assigned
     useEffect(() => {
       if (!mapReady || !mapRef.current || !locationReady) {
+        return;
+      }
+
+      // Once a rider is actively being tracked, the rider-follow effect below
+      // takes over framing — don't fight it with this effect.
+      if (
+        riderMarkerLat &&
+        riderMarkerLong &&
+        (statusNum === 1 || statusNum === 2)
+      ) {
         return;
       }
 
@@ -112,16 +187,130 @@ const AppMap = forwardRef(
       secondMarkerLong,
       initialLat,
       initialLong,
+      riderMarkerLat,
+      riderMarkerLong,
+      bookingStatus,
     ]);
 
+    // 🆕 Keep camera framed on the rider + their current destination while a
+    // trip is active. Status 1 = rider heading to pickup, status 2 = rider
+    // (with the customer aboard) heading to dropoff. Mirrors Grab/FoodPanda
+    // style live-tracking camera behavior.
     useEffect(() => {
+      if (
+        !mapReady ||
+        !mapRef.current ||
+        !riderMarkerLat ||
+        !riderMarkerLong ||
+        (statusNum !== 1 && statusNum !== 2)
+      ) {
+        return;
+      }
+
+      const destLat = statusNum === 2 ? secondMarkerLat : firstMarkerLat;
+      const destLong = statusNum === 2 ? secondMarkerLong : firstMarkerLong;
+
+      if (destLat && destLong) {
+        mapRef.current.fitToCoordinates(
+          [
+            {
+              latitude: parseFloat(riderMarkerLat),
+              longitude: parseFloat(riderMarkerLong),
+            },
+            {
+              latitude: parseFloat(destLat),
+              longitude: parseFloat(destLong),
+            },
+          ],
+          {
+            edgePadding: { top: 150, right: 80, bottom: 260, left: 80 },
+            animated: true,
+          },
+        );
+      } else {
+        mapRef.current.animateToRegion(
+          {
+            latitude: parseFloat(riderMarkerLat),
+            longitude: parseFloat(riderMarkerLong),
+            latitudeDelta: minDelta,
+            longitudeDelta: minDelta,
+          },
+          500,
+        );
+      }
+    }, [
+      mapReady,
+      riderMarkerLat,
+      riderMarkerLong,
+      bookingStatus,
+      firstMarkerLat,
+      firstMarkerLong,
+      secondMarkerLat,
+      secondMarkerLong,
+      minDelta,
+    ]);
+
+    // 🆕 Route line follows the active leg of the trip, but only refetches
+    // the Directions API once per leg instead of on every location poll:
+    // - Rider assigned + status 1 -> draw rider -> pickup (fetched once when this leg starts)
+    // - Rider assigned + status 2 -> draw rider -> dropoff (fetched once when this leg starts)
+    // - No rider yet (pre-booking preview) -> static pickup -> dropoff
+    // The rider's marker still moves every poll (see the animation effect
+    // above) — only the drawn road-path line stays fixed within a leg,
+    // which is both cheaper (fewer Directions API calls) and matches how
+    // Grab/Uber behave (the planned route doesn't redraw itself constantly).
+    const lastFetchedLegKeyRef = useRef(null);
+    const hasRiderCoords = Boolean(riderMarkerLat && riderMarkerLong);
+
+    useEffect(() => {
+      // Build a key that identifies the current "leg" — deliberately does
+      // NOT include the rider's live lat/long, so it only changes when we
+      // actually enter a new leg (status flips, or the booking's pickup/
+      // dropoff points change), not on every single location update.
+      let legKey = null;
+      if (statusNum === 1 && hasRiderCoords) {
+        legKey = `pickup:${firstMarkerLat},${firstMarkerLong}`;
+      } else if (statusNum === 2 && hasRiderCoords) {
+        legKey = `dropoff:${secondMarkerLat},${secondMarkerLong}`;
+      } else if (firstMarkerLat && secondMarkerLat) {
+        legKey = `preview:${firstMarkerLat},${firstMarkerLong}-${secondMarkerLat},${secondMarkerLong}`;
+      }
+
+      if (!legKey || legKey === lastFetchedLegKeyRef.current) {
+        // Either nothing to draw, or we've already fetched this exact leg —
+        // skip the API call entirely.
+        return;
+      }
+
       const fetchRoute = async () => {
-        if (!firstMarkerLat || !secondMarkerLat) {
+        let originLat, originLong, destLat, destLong;
+
+        if (statusNum === 1 && hasRiderCoords) {
+          originLat = riderMarkerLat;
+          originLong = riderMarkerLong;
+          destLat = firstMarkerLat;
+          destLong = firstMarkerLong;
+        } else if (statusNum === 2 && hasRiderCoords) {
+          originLat = riderMarkerLat;
+          originLong = riderMarkerLong;
+          destLat = secondMarkerLat;
+          destLong = secondMarkerLong;
+        } else if (firstMarkerLat && secondMarkerLat) {
+          originLat = firstMarkerLat;
+          originLong = firstMarkerLong;
+          destLat = secondMarkerLat;
+          destLong = secondMarkerLong;
+        } else {
           return;
         }
+
+        if (!originLat || !originLong || !destLat || !destLong) {
+          return;
+        }
+
         try {
           const response = await fetch(
-            `https://maps.googleapis.com/maps/api/directions/json?origin=${firstMarkerLat},${firstMarkerLong}&destination=${secondMarkerLat},${secondMarkerLong}&mode=driving&key=${Constants.GOOGLE_MAP_API_KEY}`,
+            `https://maps.googleapis.com/maps/api/directions/json?origin=${originLat},${originLong}&destination=${destLat},${destLong}&mode=driving&key=${Constants.GOOGLE_MAP_API_KEY}`,
           );
           const data = await response.json();
           if (data.routes && data.routes.length > 0) {
@@ -133,8 +322,17 @@ const AppMap = forwardRef(
           console.error('Error fetching route:', e);
         }
       };
+
       fetchRoute();
-    }, [firstMarkerLat, firstMarkerLong, secondMarkerLat, secondMarkerLong]);
+      lastFetchedLegKeyRef.current = legKey;
+    }, [
+      statusNum,
+      firstMarkerLat,
+      firstMarkerLong,
+      secondMarkerLat,
+      secondMarkerLong,
+      hasRiderCoords,
+    ]);
 
     const decodePolyline = encoded => {
       let points = [],
@@ -183,6 +381,8 @@ const AppMap = forwardRef(
         rotateEnabled={interactive}
         pitchEnabled={interactive}
         toolbarEnabled={interactive}
+        showsPointsOfInterest={true}
+        mapType="standard"
         onPress={
           interactive && onMapPress
             ? e => {
@@ -198,8 +398,14 @@ const AppMap = forwardRef(
               longitude: parseFloat(firstMarkerLong),
             }}
             title="Pickup"
-            pinColor="blue"
-          />
+            anchor={{ x: 0.5, y: 0.5 }} // bottom-center — the icon's point touches the exact coordinate
+          >
+            <Image
+              source={require('@/Assets/Common/Pick_Up_Icon.png')}
+              style={styles.pinIcon}
+              resizeMode="contain"
+            />
+          </Marker>
         )}
         {secondMarkerLat && secondMarkerLong && (
           <Marker
@@ -208,26 +414,41 @@ const AppMap = forwardRef(
               longitude: parseFloat(secondMarkerLong),
             }}
             title="Dropoff"
-            pinColor="red"
-          />
+            anchor={{ x: 0.5, y: 0.5 }}>
+            <Image
+              source={require('@/Assets/Common/Drop_Off_Icon.png')}
+              style={styles.pinIcon}
+              resizeMode="contain"
+            />
+          </Marker>
         )}
-        {/* 🆕 Rider marker - only visible when bookingStatus === 1 (rider on the way to pickup) */}
+        {/* Rider marker - visible when bookingStatus === 1 (heading to pickup)
+            or bookingStatus === 2 (heading to dropoff with customer aboard).
+            Uses MarkerAnimated so it glides between location updates instead
+            of snapping instantly. */}
         {riderMarkerLat && riderMarkerLong && (
-          <Marker
-            coordinate={{
-              latitude: parseFloat(riderMarkerLat),
-              longitude: parseFloat(riderMarkerLong),
-            }}
+          <MarkerAnimated
+            coordinate={riderAnimatedCoordRef.current}
             title="Rider"
-            description="Your rider is on the way"
-            pinColor="yellow"
-          />
+            description={
+              statusNum === 2
+                ? 'On the way to drop-off'
+                : 'On the way to pick you up'
+            }
+            anchor={{ x: 0.5, y: 0.5 }} // center-anchored — a vehicle icon sits ON the coordinate, not above it
+          >
+            <Image
+              source={require('@/Assets/Common/Rider_Icon.png')}
+              style={styles.riderIcon}
+              resizeMode="contain"
+            />
+          </MarkerAnimated>
         )}
         {routeCoords.length > 0 && (
           <Polyline
             coordinates={routeCoords}
             strokeColor={colors.primary}
-            strokeWidth={6}
+            strokeWidth={5}
           />
         )}
       </MapView>
@@ -237,4 +458,18 @@ const AppMap = forwardRef(
 
 export default AppMap;
 
-const getStyles = ({ colors }) => StyleSheet.create({ container: { flex: 1 } });
+const getStyles = ({ colors }) =>
+  StyleSheet.create({
+    container: { flex: 1 },
+    // 🆕 Custom marker icon sizes. Tweak these to match your actual PNG
+    // dimensions/design — pickup & dropoff are typically a bit larger
+    // "pin"-style icons, rider is usually a smaller vehicle/avatar icon.
+    pinIcon: {
+      width: 40,
+      height: 40,
+    },
+    riderIcon: {
+      width: 50,
+      height: 50,
+    },
+  });
