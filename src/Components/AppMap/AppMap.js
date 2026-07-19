@@ -45,6 +45,26 @@ const AppMap = forwardRef(
     const [mapReady, setMapReady] = useState(false);
     const [routeCoords, setRouteCoords] = useState([]);
 
+    // 🆕 Road-snapped pickup/dropoff coordinates. The Directions API snaps
+    // origin/destination to the nearest routable road before drawing the
+    // polyline, so the raw address lat/long (which can sit inside a
+    // building, parking lot, etc.) doesn't match where the line actually
+    // starts/ends. We pull the *actual* snapped point straight out of the
+    // Directions response (leg.start_location / leg.end_location) so the
+    // pin always sits exactly on the polyline, the way Grab/Angkas do it.
+    const [snappedPickup, setSnappedPickup] = useState(null);
+    const [snappedDropoff, setSnappedDropoff] = useState(null);
+
+    // Reset the snapped point whenever the underlying address changes, so
+    // we don't keep showing a stale snap while the new route is fetching.
+    useEffect(() => {
+      setSnappedPickup(null);
+    }, [firstMarkerLat, firstMarkerLong]);
+
+    useEffect(() => {
+      setSnappedDropoff(null);
+    }, [secondMarkerLat, secondMarkerLong]);
+
     // 🔧 Normalize bookingStatus to a Number once — it may arrive as a string
     // ("1") from Redux/the API, and strict "1" === 1 comparisons would fail.
     const statusNum = Number(bookingStatus);
@@ -314,9 +334,40 @@ const AppMap = forwardRef(
           );
           const data = await response.json();
           if (data.routes && data.routes.length > 0) {
-            setRouteCoords(
-              decodePolyline(data.routes[0].overview_polyline.points),
-            );
+            const route = data.routes[0];
+            setRouteCoords(decodePolyline(route.overview_polyline.points));
+
+            // 🆕 Pull the road-snapped endpoints straight out of the
+            // Directions response so the pickup/dropoff pins line up
+            // exactly with where the polyline actually starts/ends.
+            // The rider marker is NEVER snapped — it should always show
+            // real GPS, or it would appear to teleport onto roads.
+            const leg = route.legs && route.legs[0];
+            if (leg) {
+              if (statusNum === 1 && hasRiderCoords) {
+                // This leg's destination IS the pickup point
+                setSnappedPickup({
+                  latitude: leg.end_location.lat,
+                  longitude: leg.end_location.lng,
+                });
+              } else if (statusNum === 2 && hasRiderCoords) {
+                // This leg's destination IS the dropoff point
+                setSnappedDropoff({
+                  latitude: leg.end_location.lat,
+                  longitude: leg.end_location.lng,
+                });
+              } else if (firstMarkerLat && secondMarkerLat) {
+                // Pre-booking preview leg: start = pickup, end = dropoff
+                setSnappedPickup({
+                  latitude: leg.start_location.lat,
+                  longitude: leg.start_location.lng,
+                });
+                setSnappedDropoff({
+                  latitude: leg.end_location.lat,
+                  longitude: leg.end_location.lng,
+                });
+              }
+            }
           }
         } catch (e) {
           console.error('Error fetching route:', e);
@@ -364,6 +415,27 @@ const AppMap = forwardRef(
       return points;
     };
 
+    // 🆕 Final coordinates used by the Marker components below. Prefer the
+    // road-snapped point (matches the polyline exactly); fall back to the
+    // raw address lat/long until the route has loaded for the first time.
+    const pickupCoord =
+      snappedPickup ||
+      (firstMarkerLat && firstMarkerLong
+        ? {
+            latitude: parseFloat(firstMarkerLat),
+            longitude: parseFloat(firstMarkerLong),
+          }
+        : null);
+
+    const dropoffCoord =
+      snappedDropoff ||
+      (secondMarkerLat && secondMarkerLong
+        ? {
+            latitude: parseFloat(secondMarkerLat),
+            longitude: parseFloat(secondMarkerLong),
+          }
+        : null);
+
     return (
       <MapView
         ref={mapRef}
@@ -391,12 +463,9 @@ const AppMap = forwardRef(
               }
             : null
         }>
-        {firstMarkerLat && firstMarkerLong && (
+        {pickupCoord && (
           <Marker
-            coordinate={{
-              latitude: parseFloat(firstMarkerLat),
-              longitude: parseFloat(firstMarkerLong),
-            }}
+            coordinate={pickupCoord}
             title="Pickup"
             anchor={{ x: 0.5, y: 0.5 }} // bottom-center — the icon's point touches the exact coordinate
           >
@@ -407,12 +476,9 @@ const AppMap = forwardRef(
             />
           </Marker>
         )}
-        {secondMarkerLat && secondMarkerLong && (
+        {dropoffCoord && (
           <Marker
-            coordinate={{
-              latitude: parseFloat(secondMarkerLat),
-              longitude: parseFloat(secondMarkerLong),
-            }}
+            coordinate={dropoffCoord}
             title="Dropoff"
             anchor={{ x: 0.5, y: 0.5 }}>
             <Image

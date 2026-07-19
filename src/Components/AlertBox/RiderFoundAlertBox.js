@@ -23,7 +23,11 @@ const RiderFoundAlertBox = ({
       <View style={styles.container}>
         <Text style={styles.title}>Congratulations</Text>
         <Text style={styles.subtitle}>We found you a Rider!</Text>
-        <Image source={imageSource} style={styles.profileImage} />
+        <Image
+          source={imageSource}
+          style={styles.profileImage}
+          resizeMode="contain"
+        />
         <Text style={styles.riderName}>{riderName}</Text>
         <Text style={styles.plateNumber}>{plateNumber}</Text>
         <Text style={styles.vehicle}>{vehicle}</Text>
@@ -77,6 +81,7 @@ const getStyles = ({ colors }) =>
       height: 124,
       borderRadius: 32,
       marginBottom: 12,
+      backgroundColor: colors.surfaceVariant,
     },
     riderName: {
       fontSize: 14,
