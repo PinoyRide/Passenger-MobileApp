@@ -1,6 +1,6 @@
 {
   "name": "pinoy-ride",
-  "version": "1.0.17",
+  "version": "1.0.18",
   "main": "index.js",
   "scripts": {
     "start": "expo start --dev-client",
@@ -12,7 +12,8 @@
     "prepare": "husky install",
     "commit": "cz",
     "dev:android": "cd android && ./gradlew clean && npm run android",
-    "build:android:apk": "cd android && ./gradlew clean && ./gradlew assembleRelease && cd .."
+    "build:android:apk": "cd android && ./gradlew clean && ./gradlew assembleRelease && cd ..",
+    "bump": "node bump-version.js"
   },
   "dependencies": {
     "@expo/metro-runtime": "~4.0.1",
