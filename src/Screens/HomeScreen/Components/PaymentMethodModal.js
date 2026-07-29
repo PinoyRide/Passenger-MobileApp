@@ -87,7 +87,7 @@ const PaymentMethodModal = ({
           </TouchableOpacity>
 
           {/* wallet option */}
-          <TouchableOpacity
+          {/* <TouchableOpacity
             style={[
               styles.option,
               selectedPayment === 'wallet' && styles.optionSelected,
@@ -106,9 +106,9 @@ const PaymentMethodModal = ({
                 <View style={styles.radioInner} />
               </View>
             )}
-          </TouchableOpacity>
+          </TouchableOpacity> */}
 
-          <AppButton title="Top Up" onPress={handleNext} isBold />
+          {/* <AppButton title="Top Up" onPress={handleNext} isBold /> */}
         </View>
       </Modal>
 

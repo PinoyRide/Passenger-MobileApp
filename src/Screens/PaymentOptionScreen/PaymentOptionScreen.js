@@ -46,7 +46,7 @@ const PaymentOptionScreen = () => {
           </View>
           <Text style={styles.status}>Default</Text>
         </View>
-
+        {/*
         <Text style={styles.title}>Add Methods</Text>
 
         {addMethods.map((method, index) => (
@@ -60,7 +60,7 @@ const PaymentOptionScreen = () => {
               <Text style={styles.label}>{method.label}</Text>
             </View>
           </View>
-        ))}
+        ))} */}
 
         <View style={styles.divider} />
 
