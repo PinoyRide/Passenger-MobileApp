@@ -19,6 +19,7 @@ const BASE_DEV = {
     //AUTH
     LOGIN: 'customers/login/',
     SIGN_UP: 'customers/sign_up/',
+    LOGOUT: 'customers/logout/',
     GET_CUSTOMER_DETAILS: 'customers/get_customer_details/',
     //OTP
     GENERATE_LOGIN: 'otp/generate-login/',

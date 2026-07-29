@@ -18,7 +18,8 @@ import {
   selectUserInfo,
 } from '@/Redux/Slices/userSlice';
 import { useDispatch, useSelector } from 'react-redux';
-import { AppUtil } from '@/Utils';
+import usePostRequest from '@/Services/Api';
+import { AppUtil, Constants } from '@/Utils';
 
 const SettingsScreen = () => {
   const { colors } = useTheme();
@@ -26,29 +27,28 @@ const SettingsScreen = () => {
   const navigation = useNavigation();
   const dispatch = useDispatch();
   const userInfo = useSelector(selectUserInfo);
+  const { makePostRequest, loading: loggingOut } = usePostRequest();
 
   useEffect(() => {
     AppUtil.debugDeep(userInfo);
   });
 
-  // Intercept hardware back button
   useEffect(() => {
     const backHandler = BackHandler.addEventListener(
       'hardwareBackPress',
       () => {
-        navigation.popToTop(); // Go straight to HomeScreen
-        return true; // Prevent default behavior
+        navigation.popToTop();
+        return true;
       },
     );
 
-    return () => backHandler.remove(); // Cleanup on unmount
+    return () => backHandler.remove();
   }, [navigation]);
 
   const getDisplayName = () => {
     if (userInfo?.ekyc_details) {
       const { first_name, last_name } = userInfo.ekyc_details;
 
-      // convert the title case into good formatting
       const toTitleCase = str => {
         return str
           .toLowerCase()
@@ -89,26 +89,28 @@ const SettingsScreen = () => {
     navigation.popToTop();
   };
 
+  const performLogout = async () => {
+    await makePostRequest(Constants.ENDPOINT.LOGOUT, {});
+
+    dispatch(clearUserInfo());
+    dispatch(clearBookingState());
+    dispatch(clearSavedPlaces());
+
+    navigation.dispatch(
+      CommonActions.reset({
+        index: 0,
+        routes: [{ name: 'LandingScreen' }],
+      }),
+    );
+  };
+
   const handleLogout = () => {
     Alert.alert('Log Out', 'Are you sure you want to log out?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Log Out',
         style: 'destructive',
-        onPress: () => {
-          // Clear all user-related Redux state
-          dispatch(clearUserInfo());
-          dispatch(clearBookingState());
-          dispatch(clearSavedPlaces());
-
-          // Reset navigation stack so user can't go back to HomeScreen
-          navigation.dispatch(
-            CommonActions.reset({
-              index: 0,
-              routes: [{ name: 'LandingScreen' }],
-            }),
-          );
-        },
+        onPress: performLogout,
       },
     ]);
   };
@@ -151,8 +153,11 @@ const SettingsScreen = () => {
         ))}
         <TouchableOpacity
           style={[styles.buttons, styles.logoutButton]}
-          onPress={handleLogout}>
-          <Text style={[styles.label, styles.logoutLabel]}>Log Out</Text>
+          onPress={handleLogout}
+          disabled={loggingOut}>
+          <Text style={[styles.label, styles.logoutLabel]}>
+            {loggingOut ? 'Logging Out...' : 'Log Out'}
+          </Text>
         </TouchableOpacity>
       </View>
     </Container>
