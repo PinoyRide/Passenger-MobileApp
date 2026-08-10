@@ -90,18 +90,35 @@ const SettingsScreen = () => {
   };
 
   const performLogout = async () => {
-    await makePostRequest(Constants.ENDPOINT.LOGOUT, {});
+    try {
+      const response = await makePostRequest(Constants.ENDPOINT.LOGOUT, {});
+      if (response?.status === 'error' || response?.code === 400) {
+        Alert.alert(
+          'Ongoing Booking',
+          response?.message ??
+            'You have an ongoing booking. Please complete your current booking first.',
+        );
+        return;
+      }
 
-    dispatch(clearUserInfo());
-    dispatch(clearBookingState());
-    dispatch(clearSavedPlaces());
+      dispatch(clearUserInfo());
+      dispatch(clearBookingState());
+      dispatch(clearSavedPlaces());
 
-    navigation.dispatch(
-      CommonActions.reset({
-        index: 0,
-        routes: [{ name: 'LandingScreen' }],
-      }),
-    );
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{ name: 'LandingScreen' }],
+        }),
+      );
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ??
+        error?.data?.message ??
+        'Unable to log out. Please try again.';
+
+      Alert.alert('Ongoing Booking', message);
+    }
   };
 
   const handleLogout = () => {
