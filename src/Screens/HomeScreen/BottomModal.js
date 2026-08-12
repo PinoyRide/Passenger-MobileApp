@@ -23,7 +23,6 @@ const BottomModal = ({
   onInquireBooking,
   onCreateBooking,
   onCancelBooking,
-  // ✅ NEW: Goes back to confirm screen without cancelling the booking or clearing any data
   onBackToConfirm,
   onPickupChange,
   onDropoffChange,
@@ -40,6 +39,7 @@ const BottomModal = ({
   noteToRider,
   inquireBookingResponse,
   isLoading,
+  isOnline = true,
 }) => {
   const { colors } = useTheme();
   const styles = getStyles({ colors });
@@ -74,21 +74,19 @@ const BottomModal = ({
       visible: !isBooked,
       title: 'Book',
       onPress: onInquireBooking,
-      color: pickup && dropoff ? colors.primary : colors.grey5,
-      disabled: !pickup || !dropoff || isLoading,
+      color: pickup && dropoff && isOnline ? colors.primary : colors.grey5,
+      disabled: !pickup || !dropoff || isLoading || !isOnline,
     },
     {
       visible: isBooked && !isConfirmed,
-      title: 'Confirm',
+      title: isOnline ? 'Confirm' : 'No Internet',
       onPress: onCreateBooking,
-      color: colors.primary,
-      disabled: isLoading,
+      color: isOnline ? colors.primary : colors.grey5,
+      disabled: isLoading || !isOnline,
     },
     {
       visible: isConfirmed,
       title: 'Cancel',
-      // ✅ Goes straight back to the confirm screen with all details intact,
-      // does NOT call the cancel booking API
       onPress: onBackToConfirm,
       color: colors.error,
       outlined: true,
@@ -270,7 +268,12 @@ const BottomModal = ({
               Choose a service <Text style={styles.arrow}>{'>'}</Text>
             </Text>
           </TouchableOpacity>
-          <AppButton title="Book" isBold buttonColor={colors.grey5} disabled />
+          <AppButton
+            title={isOnline ? 'Book' : 'No Internet'}
+            isBold
+            buttonColor={colors.grey5}
+            disabled
+          />
         </>
       )}
     </View>

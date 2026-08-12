@@ -14,6 +14,7 @@ import MapView, {
   Polyline,
 } from 'react-native-maps';
 import { Constants } from '@/Utils';
+import { fetchWithTimeout } from '@/Utils/Network';
 
 const AppMap = forwardRef(
   (
@@ -329,7 +330,7 @@ const AppMap = forwardRef(
         }
 
         try {
-          const response = await fetch(
+          const response = await fetchWithTimeout(
             `https://maps.googleapis.com/maps/api/directions/json?origin=${originLat},${originLong}&destination=${destLat},${destLong}&mode=driving&key=${Constants.GOOGLE_MAP_API_KEY}`,
           );
           const data = await response.json();

@@ -35,7 +35,6 @@ const PaymentMethodModal = ({
   };
 
   const handleTopUpSuccess = () => {
-    // close the payment method modal when top-up is successful
     onClose();
   };
 

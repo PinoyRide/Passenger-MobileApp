@@ -52,6 +52,12 @@ import NoteToRiderModal from './Components/NoteToRiderModal';
 import PromoModal from './Components/PromoModal';
 import { ensureLocationPermission } from '@/Utils/Permissions';
 import { useLocationWatch } from '@/Hooks/useLocation';
+import useNetworkStatus from '@/Hooks/useNetworkStatus';
+import { checkIsOnline } from '@/Utils/Network';
+
+const OFFLINE_ALERT_TITLE = 'No Internet Connection';
+const OFFLINE_ALERT_MESSAGE =
+  'This action needs an internet connection. Please reconnect and try again.';
 
 const HomeScreen = () => {
   const { colors } = useTheme();
@@ -75,6 +81,10 @@ const HomeScreen = () => {
   const [alertMessage, setAlertMessage] = useState('');
   const [showAlert, setShowAlert] = useState(false);
   const [modalHeight, setModalHeight] = useState(0);
+
+  // ✅ NEW: live connectivity flag used to gate actions and show a banner
+  const isOnline = useNetworkStatus();
+  const wasOnlineRef = useRef(isOnline);
 
   // Use location watch hook for real-time location updates
   const {
@@ -152,9 +162,27 @@ const HomeScreen = () => {
   const updateBookingStatus = usePostRequest();
   const getBookingDetails = usePostRequest();
   const getPromoList = usePostRequest();
-  const isLoading = inquireBooking.loading || createBooking.loading;
+  // 🆕 Any request that represents a user-initiated state transition
+  // (book, confirm, cancel) locks the relevant buttons. A button only
+  // re-enables once the API actually responds — success or error — never
+  // before. This is the real guarantee: no navigation/transition without
+  // a confirmed response, regardless of what NetInfo thinks connectivity is.
+  const isLoading =
+    inquireBooking.loading ||
+    createBooking.loading ||
+    updateBookingStatus.loading;
 
   const onBookPressed = async () => {
+    // "booking should not go through when there is no internet".
+    const online = await checkIsOnline();
+    if (!online) {
+      Alert.alert(
+        OFFLINE_ALERT_TITLE,
+        'You need an internet connection to book a ride. Please reconnect and try again.',
+      );
+      return;
+    }
+
     // Check location permission before allowing booking
     const permission = await ensureLocationPermission();
 
@@ -224,14 +252,12 @@ const HomeScreen = () => {
     }
   }, [hasShownLoginSuccess, dispatch]);
 
-  // ✅ NEW: Check for active booking on app launch (from Redux)
   useEffect(() => {
     AppUtil.debugDeep(userInfo);
     AppUtil.debugDeep(selectedService);
 
     triggerGetPromoList();
 
-    // ✅ If there's an active booking in Redux, verify it's still valid
     if (activeBooking?.id) {
       console.log('🔄 Found active booking in Redux:', activeBooking.id);
       setIsRestoringBooking(true);
@@ -263,6 +289,17 @@ const HomeScreen = () => {
   // ✅ NEW: Handle restored booking response
   const handleRestoredBooking = () => {
     if (checkActiveBooking.error) {
+      // if we simply have no connection, DO NOT wipe the booking out of
+      // Redux — the booking is very likely still active on the backend.
+      // Just stop the "restoring" spinner and let it fall through to the
+      // normal poll loop, which will pick things up as soon as we're back
+      // online (see the reconnect-resync effect below).
+      if (checkActiveBooking.isOffline) {
+        console.warn('⚠️ Could not verify active booking — offline');
+        setIsRestoringBooking(false);
+        return;
+      }
+
       console.warn(
         '❌ Error fetching active booking:',
         checkActiveBooking.error,
@@ -381,6 +418,19 @@ const HomeScreen = () => {
 
   //INQUIRE BOOKING
   const triggerInquireBooking = async () => {
+    // guard against a double-tap firing a second request before the
+    // button's disabled state has re-rendered.
+    if (inquireBooking.loading) {
+      return;
+    }
+
+    // block — no fare inquiry, no booking, without a connection.
+    const online = await checkIsOnline();
+    if (!online) {
+      Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
+      return;
+    }
+
     const permission = await ensureLocationPermission();
 
     if (permission !== 'granted') {
@@ -424,7 +474,7 @@ const HomeScreen = () => {
     AppUtil.debugDeep(results?.data);
 
     if (results?.code === 200) {
-      // ✅ Save to Redux instead of local state
+      // save to Redux instead of local state
       dispatch(setInquireBookingResponse(results.data));
       dispatch(setIsBooked(true));
     }
@@ -435,8 +485,19 @@ const HomeScreen = () => {
   }, [inquireBooking.response, inquireBooking.error]);
 
   //CREATE BOOKING
-  //CREATE BOOKING
   const triggerCreateBooking = async () => {
+    if (createBooking.loading) {
+      return;
+    }
+
+    // block — this is the actual booking-creation call, the one that
+    // absolutely must not go through while offline.
+    const online = await checkIsOnline();
+    if (!online) {
+      Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
+      return;
+    }
+
     const permission = await ensureLocationPermission();
 
     if (permission !== 'granted') {
@@ -498,7 +559,7 @@ const HomeScreen = () => {
     AppUtil.debugDeep(results);
 
     if (results?.code === 200) {
-      // ✅ Save to Redux (automatically persisted)
+      // save to Redux (automatically persisted)
       dispatch(setIsConfirmed(true));
       dispatch(setActiveBooking(results?.data));
       setShowWaitingBanner(true);
@@ -511,6 +572,14 @@ const HomeScreen = () => {
 
   //GET BOOKING DETAILS
   const triggerGetBookingDetails = () => {
+    // don't even fire the poll while offline — Api.js would fail it fast
+    // anyway, but skipping it here avoids needless loading-state churn and
+    // makes the "temporarily stop, resume after reconnection" behavior the
+    // client asked for explicit rather than incidental.
+    if (!isOnline) {
+      return;
+    }
+
     const postdata = {
       booking_id: activeBooking?.id,
     };
@@ -522,6 +591,13 @@ const HomeScreen = () => {
 
   const handleGetBookingDetails = () => {
     if (getBookingDetails.error) {
+      // a poll failing because we're offline is expected and should be
+      // silent — real-time updates just pause and resume on reconnect.
+      // This is the fix for "modal keeps popping up with a weak connection
+      // warning" (issue c). Only surface an alert for a genuine API error.
+      if (getBookingDetails.isOffline) {
+        return;
+      }
       setAlertMessage(getBookingDetails.error);
       setShowAlert(true);
       return;
@@ -550,12 +626,8 @@ const HomeScreen = () => {
         }
       }
 
-      // 🆕 The booking-details response already carries the rider's live
-      // GPS coordinates inside rider_details (current_lat / current_long) —
-      // there's no separate "get rider location" endpoint. Since this poll
-      // already runs every 1-2s while a booking is active, just read the
-      // coordinates off it directly for both legs of the trip:
-      // status 1 = heading to pickup, status 2 = heading to dropoff.
+      // The booking-details response already carries the rider's live GPS
+      // coordinates inside rider_details (current_lat / current_long).
       if (
         (statusNum === 1 || statusNum === 2) &&
         rider_details?.current_lat &&
@@ -575,9 +647,8 @@ const HomeScreen = () => {
       }
 
       if (statusNum === 3) {
-        // ✅ Clear Redux state when completed
+        // clear Redux state when completed
         dispatch(clearBookingState());
-        // 🆕 Clear rider location when booking is completed
         setRiderLocation(null);
 
         navigation.reset({
@@ -613,12 +684,39 @@ const HomeScreen = () => {
     return () => {
       clearInterval(intervalId);
     };
-  }, [bookingStatus, activeBooking?.id]);
+  }, [bookingStatus, activeBooking?.id, isOnline]);
+
+  // reconnect resync: the moment connectivity comes back while a booking
+  // is active, immediately fetch the latest status instead of waiting up to
+  // 2s for the next interval tick. This is what actually fixes the customer
+  // being stuck on "Waiting for the Rider..." after the ride already moved
+  // on while they were offline.
+  useEffect(() => {
+    const cameBackOnline = isOnline && !wasOnlineRef.current;
+    wasOnlineRef.current = isOnline;
+
+    if (cameBackOnline && activeBooking?.id) {
+      console.log('🔄 Back online — resyncing booking status immediately');
+      triggerGetBookingDetails();
+    }
+  }, [isOnline, activeBooking?.id]);
 
   //UPDATE BOOKING STATUS
-  const triggerUpdateBookingStatus = () => {
+  const triggerUpdateBookingStatus = async () => {
+    if (updateBookingStatus.loading) {
+      return;
+    }
+
+    // cancelling is also an explicit user action that must reach the
+    // server — block it offline rather than let it silently no-op.
+    const online = await checkIsOnline();
+    if (!online) {
+      Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
+      return;
+    }
+
     const postdata = {
-      customer_id: userInfo?.id, // ✅ added missing customer_id
+      customer_id: userInfo?.id,
       booking_id: activeBooking?.id,
       status: '4',
     };
@@ -630,8 +728,10 @@ const HomeScreen = () => {
 
   const handleUpdateBookingStatus = () => {
     if (updateBookingStatus.error) {
-      setAlertMessage(updateBookingStatus.error);
-      setShowAlert(true);
+      if (!updateBookingStatus.isOffline) {
+        setAlertMessage(updateBookingStatus.error);
+        setShowAlert(true);
+      }
       return;
     }
 
@@ -643,12 +743,8 @@ const HomeScreen = () => {
     AppUtil.debugDeep(results);
 
     if (results?.code === 200) {
-      // ✅ Check if this cancel was triggered by "go back to confirm" or a full cancel
+      // check if this cancel was triggered by "go back to confirm" or a full cancel
       if (isCancellingToConfirmRef.current) {
-        // Coming back to confirm screen — only clear the booking ID so a new
-        // one can be created on next Confirm press. Keep everything else intact:
-        // selectedService, pickupLocation, dropoffLocation, inquireBookingResponse,
-        // selectedPayment, selectedPromo, noteToRider all stay as-is.
         console.log('🔄 Cancelled booking to return to confirm screen');
         dispatch(setActiveBooking(null));
         dispatch(setIsConfirmed(false));
@@ -664,7 +760,6 @@ const HomeScreen = () => {
         // Reset selections
         setSelectedPromo(null);
         setNoteToRider('');
-        // 🆕 Clear rider location when booking is cancelled
         setRiderLocation(null);
       }
     }
@@ -690,7 +785,7 @@ const HomeScreen = () => {
     console.log('Note to rider:', note);
   };
 
-  // ✅ Show loading indicator while restoring
+  // show loading indicator while restoring
   if (isRestoringBooking) {
     return (
       <View style={styles.container}>
@@ -722,8 +817,6 @@ const HomeScreen = () => {
           firstMarkerLong={pickupLocation?.long}
           secondMarkerLat={dropoffLocation?.lat}
           secondMarkerLong={dropoffLocation?.long}
-          // 🆕 Pass rider location + booking status so the map can track the
-          // rider live through both legs of the trip (to pickup, then to dropoff)
           riderMarkerLat={riderLocation?.lat}
           riderMarkerLong={riderLocation?.long}
           bookingStatus={bookingStatus}
@@ -771,6 +864,16 @@ const HomeScreen = () => {
           />
         )}
 
+        {/* persistent, non-blocking offline banner — replaces alert-spam
+            with a single quiet indicator that clears itself on reconnect. */}
+        {!isOnline && (
+          <View style={[styles.offlineBanner, { top: 60 }]}>
+            <Text style={styles.offlineBannerText}>
+              No internet connection — updates paused
+            </Text>
+          </View>
+        )}
+
         {showWaitingBanner && (
           <View style={[styles.banner, { bottom: modalHeight + 15 }]}>
             <Text style={styles.bannerText}>
@@ -796,10 +899,8 @@ const HomeScreen = () => {
               triggerUpdateBookingStatus();
               setShowWaitingBanner(false);
             }}
-            // ✅ Cancel the booking on the server but keep all form details
-            // so the user lands back on the Confirm screen ready to re-confirm
             onBackToConfirm={() => {
-              isCancellingToConfirmRef.current = true; // flag for handleUpdateBookingStatus
+              isCancellingToConfirmRef.current = true;
               triggerUpdateBookingStatus();
             }}
             onBackToEdit={() => {
@@ -819,6 +920,9 @@ const HomeScreen = () => {
             inquireBookingResponse={inquireBookingResponse}
             isLoading={isLoading}
             permissionStatus={permissionStatus}
+            // lets the modal disable Book/Confirm buttons while offline
+            // too (defense-in-depth on top of the checks in the triggers)
+            isOnline={isOnline}
           />
         )}
 
@@ -914,6 +1018,22 @@ const getStyles = ({ colors }) =>
     bannerText: {
       fontWeight: '600',
       color: colors.onPrimary,
+    },
+    offlineBanner: {
+      position: 'absolute',
+      left: 20,
+      right: 100,
+      padding: 8,
+      borderRadius: 8,
+      backgroundColor: colors.error,
+      alignItems: 'center',
+      zIndex: 20,
+      elevation: 999,
+    },
+    offlineBannerText: {
+      fontWeight: '600',
+      fontSize: 12,
+      color: colors.primaryLight,
     },
     loadingContainer: {
       flex: 1,

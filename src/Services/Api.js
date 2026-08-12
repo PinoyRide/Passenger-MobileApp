@@ -1,10 +1,15 @@
 var qs = require('qs');
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { AppUtil, Constants } from '@/Utils';
 import { useSelector } from 'react-redux';
 import { selectUserInfo } from '@/Redux/Slices/userSlice';
 import { getCurrentRouteName, navigate } from '@/Utils/NavigationService';
+import { checkIsOnline } from '@/Utils/Network';
+
+const REQUEST_TIMEOUT_MS = 15000;
+const OFFLINE_MESSAGE =
+  'No internet connection. Please check your connection and try again.';
 
 // Force-update signal is code === 426, from ANY endpoint.
 function getForceUpdateData(data) {
@@ -30,6 +35,18 @@ const usePostRequest = () => {
   const [response, setResponse] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  // True only when the most recent call failed because the device was
+  // offline — lets callers (e.g. a polling loop) tell that apart from a
+  // real API error and stay silent instead of alert-spamming the user.
+  const [isOffline, setIsOffline] = useState(false);
+
+  // Bumped on every call. A response/error is only applied to state if it
+  // still belongs to the latest call — this stops an old, slow-to-resolve
+  // request (e.g. one made right before a connection drop) from landing
+  // AFTER a newer request already resolved and overwriting fresher state
+  // with stale data. This is what caused bookings to get stuck showing an
+  // old status after reconnecting.
+  const requestIdRef = useRef(0);
 
   const userInfo = useSelector(selectUserInfo);
 
@@ -151,8 +168,22 @@ const usePostRequest = () => {
     config = {},
     contentType = 'form',
   ) => {
+    const thisRequestId = ++requestIdRef.current;
+    const isLatest = () => thisRequestId === requestIdRef.current;
+
     setLoading(true);
     setError(null);
+    setIsOffline(false);
+
+    const online = await checkIsOnline();
+    if (!online) {
+      if (isLatest()) {
+        setError(OFFLINE_MESSAGE);
+        setIsOffline(true);
+        setLoading(false);
+      }
+      return { response: null, error: OFFLINE_MESSAGE, offline: true };
+    }
 
     try {
       const url = baseUrl + endpoint;
@@ -174,8 +205,18 @@ const usePostRequest = () => {
 
       const res = await axios.post(url, requestData, {
         headers,
+        timeout: REQUEST_TIMEOUT_MS,
         ...config,
       });
+
+      // 🛑 Stale-response guard: a newer request has already fired (and
+      // possibly already resolved) since this one started — e.g. this call
+      // was in flight when the connection dropped and only resolved after
+      // reconnection, by which point a fresher poll already succeeded.
+      // Applying it now would regress the UI to old data.
+      if (!isLatest()) {
+        return { response: res.data, error: null, stale: true };
+      }
 
       // Always set response
       setResponse(res.data);
@@ -198,6 +239,10 @@ const usePostRequest = () => {
         return { response: res.data, error: null };
       }
     } catch (err) {
+      if (!isLatest()) {
+        return { response: null, error: null, stale: true };
+      }
+
       // Force-update check on the thrown-error path — a 426 status makes
       // axios throw, and the payload lands in err.response.data.
       const forceUpdate = getForceUpdateData(err.response?.data);
@@ -207,6 +252,7 @@ const usePostRequest = () => {
       }
 
       let message = '';
+      let offline = false;
 
       //  Handle error response with proper extraction
       if (err.response?.data) {
@@ -216,23 +262,31 @@ const usePostRequest = () => {
         // Generic server error
         message =
           'We are currently under system maintenance. Please try again later.';
+      } else if (err.code === 'ECONNABORTED') {
+        // Our own timeout fired — connection is too weak/slow to complete.
+        message = OFFLINE_MESSAGE;
+        offline = true;
       } else if (err.request) {
-        // Network error
+        // Network error (request went out, no response came back at all)
         message =
           'Oops, you may have weak or no data connection... Keep calm, wait for a few minutes and try again.';
+        offline = true;
       } else {
         // Other error
         message = err.message || 'An unknown error occurred';
       }
 
       setError(message);
-      return { response: null, error: message };
+      setIsOffline(offline);
+      return { response: null, error: message, offline };
     } finally {
-      setLoading(false);
+      if (isLatest()) {
+        setLoading(false);
+      }
     }
   };
 
-  return { makePostRequest, response, loading, error };
+  return { makePostRequest, response, loading, error, isOffline };
 };
 
 export default usePostRequest;

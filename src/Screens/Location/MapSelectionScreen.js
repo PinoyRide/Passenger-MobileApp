@@ -14,6 +14,7 @@ import { useTheme } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { openSettings } from 'react-native-permissions';
 import { Constants } from '@/Utils';
+import { fetchWithTimeout } from '@/Utils/Network';
 import { useLocation } from '@/Hooks/useLocation';
 
 const MapSelectionScreen = () => {
@@ -79,7 +80,7 @@ const MapSelectionScreen = () => {
 
   const reverseGeocode = async (latitude, longitude, setAddress) => {
     try {
-      const response = await fetch(
+      const response = await fetchWithTimeout(
         `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${Constants.GOOGLE_MAP_API_KEY}`,
       );
       const data = await response.json();
@@ -90,6 +91,9 @@ const MapSelectionScreen = () => {
         setAddress(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
       }
     } catch (error) {
+      // Offline, timed out, or Google API error — the pin/coordinates are
+      // already set from the map tap regardless, this just falls back to
+      // showing raw coordinates instead of a human-readable address.
       console.error('Geocoding error:', error);
       setAddress(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
     }

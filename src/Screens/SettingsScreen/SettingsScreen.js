@@ -20,6 +20,7 @@ import {
 import { useDispatch, useSelector } from 'react-redux';
 import usePostRequest from '@/Services/Api';
 import { AppUtil, Constants } from '@/Utils';
+import { checkIsOnline } from '@/Utils/Network';
 
 const SettingsScreen = () => {
   const { colors } = useTheme();
@@ -90,13 +91,25 @@ const SettingsScreen = () => {
   };
 
   const performLogout = async () => {
-    const { response, error } = await makePostRequest(
+    const online = await checkIsOnline();
+    if (!online) {
+      Alert.alert(
+        'No Internet Connection',
+        'Logging out requires an internet connection. Please reconnect and try again.',
+      );
+      return;
+    }
+
+    const { response, error, offline } = await makePostRequest(
       Constants.ENDPOINT.LOGOUT,
       {},
     );
 
     if (error) {
-      Alert.alert('Ongoing Booking', error);
+      Alert.alert(
+        offline ? 'No Internet Connection' : 'Ongoing Booking',
+        error,
+      );
       return;
     }
 

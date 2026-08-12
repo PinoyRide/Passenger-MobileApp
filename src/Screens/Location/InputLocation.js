@@ -3,8 +3,6 @@ import {
   Alert,
   FlatList,
   Image,
-  KeyboardAvoidingView,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,6 +15,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import usePostRequest from '@/Services/Api';
 import { Constants } from '@/Utils';
+import { fetchWithTimeout } from '@/Utils/Network';
 import Geolocation from 'react-native-geolocation-service';
 import { removeSavedPlace, selectSavedPlaces } from '@/Redux/Slices/userSlice';
 
@@ -75,6 +74,8 @@ const InputLocation = () => {
   const [searchResults, setSearchResults] = useState([]);
   const [focusedField, setFocusedField] = useState(null);
   const [dropdownTop, setDropdownTop] = useState(0);
+  const [isLocatingCurrentPosition, setIsLocatingCurrentPosition] =
+    useState(false);
 
   const searchLocationRequest = usePostRequest();
   const debounceRef = useRef(null);
@@ -177,12 +178,17 @@ const InputLocation = () => {
   };
 
   const handleUseCurrentLocation = async () => {
+    if (isLocatingCurrentPosition) {
+      return;
+    }
+    setIsLocatingCurrentPosition(true);
+
     Geolocation.getCurrentPosition(
       async position => {
         const { latitude, longitude } = position.coords;
 
         try {
-          const response = await fetch(
+          const response = await fetchWithTimeout(
             `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${Constants.GOOGLE_MAP_API_KEY}`,
           );
           const data = await response.json();
@@ -223,13 +229,17 @@ const InputLocation = () => {
             navigation.goBack();
           }
         } catch (error) {
+          // Offline, timed out, or Google API error
           console.error('Reverse geocode error:', error);
           alert('Unable to get address from location.');
+        } finally {
+          setIsLocatingCurrentPosition(false);
         }
       },
       error => {
         console.error('Location error:', error);
         alert('Unable to get location. Please try again.');
+        setIsLocatingCurrentPosition(false);
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 },
     );
@@ -568,13 +578,18 @@ const InputLocation = () => {
         contentContainerStyle={styles.scrollContent}>
         <TouchableOpacity
           style={styles.currentLocationButton}
-          onPress={handleUseCurrentLocation}>
+          onPress={handleUseCurrentLocation}
+          disabled={isLocatingCurrentPosition}>
           <Image
             source={require('@/Assets/Common/Location/Location.png')}
             style={styles.iconSmall}
             resizeMode="contain"
           />
-          <Text style={styles.iconText}>Use my current location</Text>
+          <Text style={styles.iconText}>
+            {isLocatingCurrentPosition
+              ? 'Locating...'
+              : 'Use my current location'}
+          </Text>
         </TouchableOpacity>
 
         <Text style={styles.savedPlacesText}>Saved Places</Text>
