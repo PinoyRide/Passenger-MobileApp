@@ -31,4 +31,26 @@ export const subscribeToNetworkStatus = callback => {
   });
 };
 
-export default { checkIsOnline, subscribeToNetworkStatus };
+/**
+ * fetch() with a hard timeout via AbortController. Prevents calls (e.g. the
+ * Directions API) from hanging indefinitely when the device is offline or
+ * has a dead connection — after `timeoutMs` the request is aborted and
+ * fetch() rejects, so callers relying on try/catch (like AppMap's
+ * fetchRoute) fail fast instead of hanging forever.
+ */
+export const fetchWithTimeout = async (url, options = {}, timeoutMs = 8000) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
+export default { checkIsOnline, subscribeToNetworkStatus, fetchWithTimeout };
