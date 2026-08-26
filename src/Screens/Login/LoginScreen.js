@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Alert,
   Image,
   Keyboard,
   ScrollView,
@@ -13,6 +14,12 @@ import Container from '@/Components/Container/Container';
 import { useTheme } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { AlertBox, AppButton, AppTextInput } from '@/Components';
+import usePostRequest from '@/Services/Api';
+import { Constants } from '@/Utils';
+
+const OFFLINE_ALERT_TITLE = 'No Internet Connection';
+const OFFLINE_ALERT_MESSAGE =
+  'This action needs an internet connection. Please reconnect and try again.';
 
 const LoginScreen = () => {
   const { colors } = useTheme();
@@ -25,6 +32,16 @@ const LoginScreen = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [isPhoneValid, setIsPhoneValid] = useState(false);
 
+  const [alertMessage, setAlertMessage] = useState('');
+  const [showAlert, setShowAlert] = useState(false);
+
+  // ✅ NEW: this is the one and only LOGIN call for the whole sign-in
+  // flow. Its response is held (passed to OTPScreen via route params)
+  // and NOT dispatched to Redux here — the user isn't treated as signed
+  // in until OTP verification succeeds in OTPScreen, which is what
+  // actually commits this data to userInfo.
+  const loginCheck = usePostRequest();
+
   useEffect(() => {
     if (route.params?.registrationComplete) {
       setShowSuccessModal(true);
@@ -35,7 +52,7 @@ const LoginScreen = () => {
     navigation.navigate('LandingScreen');
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (!mobileNumber) {
       setErrorMessage('Mobile number is required');
       return;
@@ -47,7 +64,35 @@ const LoginScreen = () => {
     }
 
     setErrorMessage('');
-    navigation.navigate('OTPScreen', { mobileNumber });
+
+    const { response, error, offline } = await loginCheck.makePostRequest(
+      Constants.ENDPOINT.LOGIN,
+      { mobile_no: mobileNumber },
+    );
+
+    if (offline) {
+      Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
+      return;
+    }
+
+    if (error || !response || response?.code !== 200 || !response?.data) {
+      // Not registered (or some other LOGIN failure) — stay on this
+      // screen and surface why, instead of proceeding to OTP.
+      setAlertMessage(
+        response?.message ||
+          error ||
+          'No account was found for this mobile number.',
+      );
+      setShowAlert(true);
+      return;
+    }
+
+    // ✅ Registered — carry the LOGIN response forward. OTPScreen holds
+    // it until OTP verification passes, then dispatches it.
+    navigation.navigate('OTPScreen', {
+      mobileNumber,
+      pendingUserData: response.data,
+    });
   };
 
   return (
@@ -61,6 +106,15 @@ const LoginScreen = () => {
           onConfirm={() => setShowSuccessModal(false)}
         />
       )}
+
+      {alertMessage ? (
+        <AlertBox
+          title="Error"
+          message={alertMessage}
+          visible={showAlert}
+          setVisible={setShowAlert}
+        />
+      ) : null}
 
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
@@ -98,7 +152,12 @@ const LoginScreen = () => {
               Enter your active number to receive a verification code. This
               helps us keep your account secure.
             </Text>
-            <AppButton title="Next" onPress={handleNext} isBold />
+            <AppButton
+              title={loginCheck.loading ? 'Please wait…' : 'Next'}
+              onPress={handleNext}
+              isBold
+              disabled={loginCheck.loading}
+            />
           </View>
         </ScrollView>
       </TouchableWithoutFeedback>

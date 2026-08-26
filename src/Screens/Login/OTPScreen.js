@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Alert,
   Image,
   Keyboard,
   ScrollView,
@@ -17,12 +18,20 @@ import { AppUtil, Constants } from '@/Utils';
 import { useDispatch, useSelector } from 'react-redux';
 import { selectUserInfo, setUserInfo } from '@/Redux/Slices/userSlice';
 
+// ⚠️ Unconfirmed for this app's backend — carried over from the rider
+// app where GENERATE_LOGIN returns this exact text for an unregistered
+// number. In the normal flow LoginScreen already gates this (via its own
+// LOGIN call) before we ever get here, so this is just a defense-in-depth
+// fallback. If this app's backend uses different wording, update the
+// pattern (or drop the check) accordingly.
+const NOT_REGISTERED_ERROR_PATTERN = /does not exist/i;
+
 const OTPScreen = () => {
   const { colors } = useTheme();
   const styles = getStyles({ colors });
   const navigation = useNavigation();
   const route = useRoute();
-  const { mobileNumber } = route.params;
+  const { mobileNumber, pendingUserData } = route.params;
 
   const getOtpCode = usePostRequest();
   const verifyOtpCode = usePostRequest();
@@ -49,6 +58,20 @@ const OTPScreen = () => {
   // Handle OTP generation response
   useEffect(() => {
     if (getOtpCode.error) {
+      if (NOT_REGISTERED_ERROR_PATTERN.test(getOtpCode.error)) {
+        Alert.alert(
+          'Account Not Found',
+          'No account was found for this mobile number. Please check the number or sign up.',
+          [
+            {
+              text: 'OK',
+              onPress: () => navigation.navigate('LoginScreen'),
+            },
+          ],
+        );
+        return;
+      }
+
       setAlertMessage(getOtpCode.error);
       setShowAlert(true);
       return;
@@ -65,6 +88,16 @@ const OTPScreen = () => {
     });
   };
 
+  const flattenAndSetUser = userData => {
+    const flattenedUser = {
+      ...userData,
+      ...(userData.customer_address?.[0] || {}),
+    };
+    delete flattenedUser.customer_address;
+
+    dispatch(setUserInfo(flattenedUser));
+  };
+
   // Handle OTP verification response
   useEffect(() => {
     if (verifyOtpCode.error) {
@@ -76,20 +109,31 @@ const OTPScreen = () => {
     AppUtil.debugDeep(results);
 
     if (results?.code === 200) {
-      login();
+      // ✅ NEW: no second LOGIN call — LoginScreen already fetched this
+      // data (before OTP was even sent) and held it here via route
+      // params. It only gets committed to Redux now, after OTP
+      // verification has actually passed.
+      if (pendingUserData) {
+        flattenAndSetUser(pendingUserData);
+      } else {
+        // Fallback safety net — shouldn't normally happen, since
+        // LoginScreen always passes this along before navigating here.
+        login();
+      }
     } else if (otpCode.length === 6) {
       setAlertMessage('Invalid OTP, please try again.');
       setShowAlert(true);
     }
   }, [verifyOtpCode.response, verifyOtpCode.error]);
 
+  // Fallback-only path — see the `else` branch above.
   const login = () => {
     loginUser.makePostRequest(Constants.ENDPOINT.LOGIN, {
       mobile_no: mobileNumber,
     });
   };
 
-  // Handle login response
+  // Handle fallback login response
   useEffect(() => {
     if (loginUser.error) {
       setAlertMessage(loginUser.error);
@@ -99,14 +143,7 @@ const OTPScreen = () => {
     const results = loginUser.response;
 
     if (results?.code === 200 && results.data) {
-      const userData = results.data;
-      const flattenedUser = {
-        ...userData,
-        ...(userData.customer_address?.[0] || {}),
-      };
-      delete flattenedUser.customer_address;
-
-      dispatch(setUserInfo(flattenedUser));
+      flattenAndSetUser(results.data);
     }
   }, [loginUser.response, loginUser.error]);
 
