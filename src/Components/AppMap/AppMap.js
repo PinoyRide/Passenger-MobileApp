@@ -468,8 +468,8 @@ const AppMap = forwardRef(
           <Marker
             coordinate={pickupCoord}
             title="Pickup"
-            anchor={{ x: 0.5, y: 0.5 }} // bottom-center — the icon's point touches the exact coordinate
-          >
+            anchor={{ x: 0.5, y: 0.5 }}
+            tracksViewChanges={false}>
             <Image
               source={require('@/Assets/Common/Pick_Up_Icon.png')}
               style={styles.pinIcon}
@@ -481,7 +481,8 @@ const AppMap = forwardRef(
           <Marker
             coordinate={dropoffCoord}
             title="Dropoff"
-            anchor={{ x: 0.5, y: 0.5 }}>
+            anchor={{ x: 0.5, y: 0.5 }}
+            tracksViewChanges={false}>
             <Image
               source={require('@/Assets/Common/Drop_Off_Icon.png')}
               style={styles.pinIcon}
@@ -502,8 +503,8 @@ const AppMap = forwardRef(
                 ? 'On the way to drop-off'
                 : 'On the way to pick you up'
             }
-            anchor={{ x: 0.5, y: 0.5 }} // center-anchored — a vehicle icon sits ON the coordinate, not above it
-          >
+            anchor={{ x: 0.5, y: 0.5 }}
+            tracksViewChanges={false}>
             <Image
               source={require('@/Assets/Common/Rider_Icon.png')}
               style={styles.riderIcon}
