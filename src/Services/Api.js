@@ -31,6 +31,12 @@ function handleForceUpdate(fu) {
   });
 }
 
+// A value counts as a "file" for multipart requests when it looks like an
+// image-picker/document-picker asset: an object with a `uri`.
+function isFileLike(value) {
+  return !!value && typeof value === 'object' && typeof value.uri === 'string';
+}
+
 const usePostRequest = () => {
   const [response, setResponse] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -61,6 +67,8 @@ const usePostRequest = () => {
     );
   }
 
+  // Builds the standard param set every endpoint sends: user_type,
+  // customer_id, app_version + a hash signature over every value.
   async function buildParams(obj) {
     const requiredParams = {
       user_type: 'customer',
@@ -78,6 +86,25 @@ const usePostRequest = () => {
 
     const sig = await AppUtil.getHash(512, stringParams);
     return { ...params, signature: sig };
+  }
+
+  // Splits a params object into { fields, files } so multipart requests can
+  // append plain values as form fields and file-like values as attachments.
+  function splitFilesFromFields(obj) {
+    const fields = {};
+    const files = {};
+    for (const key in obj) {
+      const value = obj[key];
+      if (value === undefined || value === null) {
+        continue;
+      }
+      if (isFileLike(value)) {
+        files[key] = value;
+      } else {
+        fields[key] = value;
+      }
+    }
+    return { fields, files };
   }
 
   const extractErrorMessage = errorData => {
@@ -162,6 +189,16 @@ const usePostRequest = () => {
 
   const baseUrl = Constants.BASE_URI;
 
+  /**
+   * @param {string} endpoint
+   * @param {object} obj - request params. Merged with the standard
+   *   user_type/customer_id/app_version/signature envelope. For
+   *   contentType 'multipart', any value shaped like { uri, name, type }
+   *   (an image/document-picker asset) is sent as a file attachment;
+   *   everything else is sent as a plain field.
+   * @param {object} config - extra axios config, merged in last.
+   * @param {'form'|'json'|'multipart'} contentType
+   */
   const makePostRequest = async (
     endpoint,
     obj,
@@ -187,21 +224,41 @@ const usePostRequest = () => {
 
     try {
       const url = baseUrl + endpoint;
+
       const params = await buildParams(obj);
 
       AppUtil.debug('=====> PARAMS <=====');
       AppUtil.debug(url);
       AppUtil.debugDeep(params);
 
-      // Determine content type and data format
-      const isJson = contentType === 'json';
-      const requestData = isJson ? params : qs.stringify(params);
+      let requestData;
       const headers = {
-        'Content-Type': isJson
-          ? 'application/json'
-          : 'application/x-www-form-urlencoded',
         'x-api-key': Constants.API_KEY,
       };
+
+      if (contentType === 'multipart') {
+        const { fields, files } = splitFilesFromFields(params);
+        const form = new FormData();
+        for (const key in fields) {
+          form.append(key, String(fields[key]));
+        }
+        for (const key in files) {
+          const file = files[key];
+          form.append(key, {
+            uri: file.uri,
+            name: file.fileName || file.name || 'upload.jpg',
+            type: file.type || 'image/jpeg',
+          });
+        }
+        requestData = form;
+        headers['Content-Type'] = 'multipart/form-data';
+      } else if (contentType === 'json') {
+        requestData = params;
+        headers['Content-Type'] = 'application/json';
+      } else {
+        requestData = qs.stringify(params);
+        headers['Content-Type'] = 'application/x-www-form-urlencoded';
+      }
 
       const res = await axios.post(url, requestData, {
         headers,

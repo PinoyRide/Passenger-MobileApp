@@ -1,5 +1,5 @@
 import { AppButton } from '@/Components';
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -11,6 +11,13 @@ import {
   View,
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
+import { useNavigation } from '@react-navigation/native';
+import { useSelector } from 'react-redux';
+import { selectUserInfo } from '@/Redux/Slices/userSlice';
+import { Constants } from '@/Utils';
+import usePostRequest from '@/Services/Api';
+
+const UNREAD_POLL_INTERVAL_MS = 5000;
 
 const BookingStatusModal = ({
   onLayout,
@@ -25,6 +32,8 @@ const BookingStatusModal = ({
 }) => {
   const { colors } = useTheme();
   const styles = getStyles({ colors });
+  const navigation = useNavigation();
+  const userInfo = useSelector(selectUserInfo);
 
   // ✅ payment_details may be a JSON string if echoed back from API
   const paymentDetails =
@@ -38,6 +47,56 @@ const BookingStatusModal = ({
         })()
       : bookingDetails?.payment_details ?? {};
 
+  // ── Unread message badge ────────────────────────────────────────────
+  const getUnreadCount = usePostRequest();
+  const [unreadCount, setUnreadCount] = useState(0);
+  const unreadPollRef = useRef(null);
+
+  useEffect(() => {
+    const bookingId = bookingDetails?.id;
+
+    if (!bookingId || !riderDetails) {
+      setUnreadCount(0);
+      if (unreadPollRef.current) {
+        clearInterval(unreadPollRef.current);
+        unreadPollRef.current = null;
+      }
+      return;
+    }
+
+    const fetchUnreadCount = async () => {
+      const customerId = userInfo?.id;
+      const { response, error } = await getUnreadCount.makePostRequest(
+        Constants.ENDPOINT.GET_UNREAD_MESSAGE_COUNT,
+        { booking_id: bookingId, user_id: customerId, user_type: 'customer' },
+        {},
+        'json',
+      );
+      if (error) {
+        return;
+      }
+      // Response shape assumed to match the other messages/* endpoints:
+      // { code: 200, data: { unread_count } }. Adjust the field name here
+      // if your backend returns something different (e.g. `count`).
+      const count = response?.data?.unread_count ?? response?.data?.count ?? 0;
+      setUnreadCount(Number(count) || 0);
+    };
+
+    fetchUnreadCount();
+    unreadPollRef.current = setInterval(
+      fetchUnreadCount,
+      UNREAD_POLL_INTERVAL_MS,
+    );
+
+    return () => {
+      if (unreadPollRef.current) {
+        clearInterval(unreadPollRef.current);
+        unreadPollRef.current = null;
+      }
+    };
+  }, [bookingDetails?.id, riderDetails]);
+  // ─────────────────────────────────────────────────────────────────────
+
   const handleCall = () => {
     const phoneNumber = riderDetails?.ekyc_details?.pretty_mobile_no;
     if (!phoneNumber) {
@@ -47,11 +106,24 @@ const BookingStatusModal = ({
   };
 
   const handleMessage = () => {
-    const phoneNumber = riderDetails?.ekyc_details?.pretty_mobile_no;
-    if (!phoneNumber) {
+    if (!bookingDetails?.id) {
       return;
     }
-    Linking.openURL(`sms:${phoneNumber}`);
+
+    // Clear the badge immediately on open — the ChatScreen's own
+    // mark-as-read call will confirm this with the server; this just
+    // avoids the badge lingering visually until the next poll tick.
+    setUnreadCount(0);
+
+    const ekyc = riderDetails?.ekyc_details;
+    const otherPartyName =
+      `${ekyc?.first_name || ''} ${ekyc?.last_name || ''}`.trim() || 'Rider';
+
+    navigation.navigate('ChatScreen', {
+      bookingId: bookingDetails.id,
+      otherPartyName,
+      otherPartyAvatar: ekyc?.selfie || null,
+    });
   };
 
   const handleShareTrip = async () => {
@@ -219,6 +291,13 @@ const BookingStatusModal = ({
           <View style={styles.actions}>
             <TouchableOpacity style={styles.circleBtn} onPress={handleMessage}>
               <Text>💬</Text>
+              {unreadCount > 0 && (
+                <View style={styles.unreadBadge}>
+                  <Text style={styles.unreadBadgeText}>
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </Text>
+                </View>
+              )}
             </TouchableOpacity>
             <TouchableOpacity style={styles.circleBtn} onPress={handleCall}>
               <Text>📞</Text>
@@ -326,6 +405,26 @@ const getStyles = ({ colors }) =>
       borderRadius: 30,
       padding: 10,
       marginLeft: 8,
+    },
+    unreadBadge: {
+      position: 'absolute',
+      top: -2,
+      right: -2,
+      minWidth: 16,
+      height: 16,
+      borderRadius: 8,
+      paddingHorizontal: 3,
+      backgroundColor: '#FF3B30',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1.5,
+      borderColor: '#fff',
+    },
+    unreadBadgeText: {
+      color: '#fff',
+      fontSize: 9,
+      fontFamily: 'Poppins SemiBold',
+      lineHeight: 11,
     },
     locationColumn: {
       marginTop: 20,

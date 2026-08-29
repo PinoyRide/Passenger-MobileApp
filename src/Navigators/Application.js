@@ -6,6 +6,7 @@ import {
   BookingDetailsScreen,
   BookingHistoryScreen,
   CashInScreen,
+  ChatScreen,
   ConfirmDetailsScreen,
   CongratsScreen,
   EKYCScreen,
@@ -134,6 +135,11 @@ const ApplicationNavigator = () => {
             <Stack.Screen
               name="HomeScreen"
               component={HomeScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="ChatScreen"
+              component={ChatScreen}
               options={{ headerShown: false }}
             />
             <Stack.Screen

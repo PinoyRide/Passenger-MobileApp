@@ -46,6 +46,12 @@ const BASE_DEV = {
     //PAYMENT
     QRPH_REQUEST_TO_PAY: 'qrph/request-to-pay/',
     QRPH_CHECK_STATUS: 'qrph/check_status/',
+
+    //MESSAGES (in-app booking chat)
+    GET_CONVERSATION: 'messages/conversation/',
+    MARK_MESSAGES_READ: 'messages/mark-read/',
+    SEND_MESSAGE: 'messages/send/',
+    GET_UNREAD_MESSAGE_COUNT: 'messages/unread-count/',
   },
 
   FEATURE_STATUS: {},
