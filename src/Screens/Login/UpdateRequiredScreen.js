@@ -1,5 +1,6 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
+  ActivityIndicator,
   BackHandler,
   Linking,
   StyleSheet,
@@ -9,11 +10,24 @@ import {
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
+import { useDispatch } from 'react-redux';
+
+import usePostRequest from '@/Services/Api';
+import { Constants } from '@/Utils';
+import {
+  clearBookingState,
+  clearSavedPlaces,
+  clearUserInfo,
+} from '@/Redux/Slices/userSlice';
 
 const UpdateRequiredScreen = ({ route }) => {
   const { updateLink, currentVersion, minimumVersion } = route.params || {};
   const { colors } = useTheme();
   const styles = getStyles({ colors });
+  const dispatch = useDispatch();
+
+  const { makePostRequest } = usePostRequest();
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Block the hardware back button — nowhere to go back to, the app is outdated.
   useFocusEffect(
@@ -28,8 +42,37 @@ const UpdateRequiredScreen = ({ route }) => {
   );
 
   const handleUpdatePress = async () => {
-    if (updateLink) {
-      await Linking.openURL(updateLink);
+    if (isProcessing) {
+      return;
+    }
+    setIsProcessing(true);
+
+    try {
+      // Best-effort logout — a force-update gate shouldn't get stuck
+      // waiting on (or blocked by) the network. Whatever happens, we
+      // still want to clear local session state and send the person
+      // to the update link.
+      const { response, error } = await makePostRequest(
+        Constants.ENDPOINT.LOGOUT,
+        {},
+      );
+
+      if (error || !response) {
+        console.warn('Logout before force-update failed (continuing):', error);
+      } else {
+        console.log('Logged out before force-update redirect:', response);
+      }
+    } catch (err) {
+      console.warn('Logout before force-update threw (continuing):', err);
+    } finally {
+      dispatch(clearUserInfo());
+      dispatch(clearBookingState());
+      dispatch(clearSavedPlaces());
+
+      if (updateLink) {
+        await Linking.openURL(updateLink);
+      }
+      setIsProcessing(false);
     }
   };
 
@@ -41,8 +84,15 @@ const UpdateRequiredScreen = ({ route }) => {
         version is now {minimumVersion || '—'}. Please update the app to
         continue.
       </Text>
-      <TouchableOpacity style={styles.button} onPress={handleUpdatePress}>
-        <Text style={styles.buttonText}>Update Now</Text>
+      <TouchableOpacity
+        style={[styles.button, isProcessing && styles.buttonDisabled]}
+        onPress={handleUpdatePress}
+        disabled={isProcessing}>
+        {isProcessing ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <Text style={styles.buttonText}>Update Now</Text>
+        )}
       </TouchableOpacity>
     </View>
   );
@@ -79,6 +129,12 @@ const getStyles = ({ colors }) =>
       paddingHorizontal: 24,
       paddingVertical: 12,
       borderRadius: 8,
+      minWidth: 140,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    buttonDisabled: {
+      opacity: 0.6,
     },
     buttonText: {
       fontSize: 14,
