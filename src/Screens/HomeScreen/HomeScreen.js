@@ -813,8 +813,8 @@ const HomeScreen = () => {
           initialLat={currentLocation.latitude}
           initialLong={currentLocation.longitude}
           locationReady={locationReady}
-          firstMarkerLat={pickupLocation?.lat}
-          firstMarkerLong={pickupLocation?.long}
+          firstMarkerLat={bookingStatus === 2 ? null : pickupLocation?.lat}
+          firstMarkerLong={bookingStatus === 2 ? null : pickupLocation?.long}
           secondMarkerLat={dropoffLocation?.lat}
           secondMarkerLong={dropoffLocation?.long}
           riderMarkerLat={riderLocation?.lat}
