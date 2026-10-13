@@ -2,6 +2,7 @@
 import React from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
+import { AppButton } from '@/Components';
 
 const RiderFoundAlertBox = ({
   visible,
@@ -31,6 +32,13 @@ const RiderFoundAlertBox = ({
         <Text style={styles.riderName}>{riderName}</Text>
         <Text style={styles.plateNumber}>{plateNumber}</Text>
         <Text style={styles.vehicle}>{vehicle}</Text>
+        <AppButton
+          title="Okay"
+          onPress={onClose}
+          isBold
+          noSpacing
+          featureStyle={styles.okayButton}
+        />
       </View>
     </Pressable>
   );
@@ -98,5 +106,15 @@ const getStyles = ({ colors }) =>
       fontSize: 16,
       fontFamily: 'Poppins Regular',
       color: colors.shadow,
+      marginBottom: 20,
+    },
+    // same pill as AdvanceBookingAcceptedModal "Okay"
+    okayButton: {
+      width: 266,
+      height: 47,
+      borderRadius: 23.5,
+      elevation: 0,
+      shadowOpacity: 0,
+      marginTop: 0,
     },
   });

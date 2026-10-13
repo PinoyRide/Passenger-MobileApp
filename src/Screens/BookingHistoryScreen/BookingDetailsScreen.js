@@ -9,7 +9,9 @@ import {
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
+import { selectUserInfo } from '@/Redux/Slices/userSlice';
+import CancelPenaltyModal from '@/Components/AlertBox/CancelPenaltyModal';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AlertBox } from '@/Components';
 import { AppUtil, Constants } from '@/Utils';
@@ -20,6 +22,32 @@ import {
   setSelectedService,
 } from '@/Redux/Slices/userSlice';
 import ReportIssueModal from './Components/ReportIssueModal';
+import { getRiderPhoto } from '@/Hooks/bookingTransform';
+
+// pretty_mobile_no (always filled by the backend now), else the raw number;
+// shown as Figma's "+63 999 999 9999".
+const getRiderContact = rd => {
+  const src = String(
+    rd?.ekyc_details?.pretty_mobile_no ||
+      rd?.pretty_mobile_no ||
+      rd?.ekyc_details?.mobile_no ||
+      rd?.mobile_no ||
+      '',
+  ).trim();
+  if (!src) {
+    return 'Not available';
+  }
+  let d = src.replace(/\D/g, '');
+  if (d.startsWith('0')) {
+    d = `63${d.slice(1)}`;
+  } else if (d.length === 10 && d.startsWith('9')) {
+    d = `63${d}`;
+  }
+  if (d.length === 12 && d.startsWith('63')) {
+    return `+63 ${d.slice(2, 5)} ${d.slice(5, 8)} ${d.slice(8)}`;
+  }
+  return src;
+};
 
 const BookingDetailsScreen = () => {
   const { colors } = useTheme();
@@ -27,7 +55,67 @@ const BookingDetailsScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const dispatch = useDispatch();
-  const { bookingDetails } = route.params;
+  const { bookingDetails: initialDetails } = route.params;
+  const userInfo = useSelector(selectUserInfo);
+  const [bookingDetails, setBookingDetails] = useState(initialDetails);
+
+  // Advance booking cancel (Figma 296-3522): preview → dialog → cancel.
+  const [cancelPreview, setCancelPreview] = useState(null);
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const cancelAdvance = usePostRequest();
+  const isCancelled = /^cancel/i.test(String(bookingDetails.status || ''));
+  const canCancelAdvance =
+    Boolean(bookingDetails.is_advance) &&
+    /^(scheduled|accepted)/i.test(String(bookingDetails.status || ''));
+  const fmtAmount = v => (Number(v) || 0).toFixed(2);
+  const displayAmount = isCancelled
+    ? fmtAmount(bookingDetails.penalty_amount)
+    : bookingDetails.price;
+
+  const showCancelError = message => {
+    setReportAlertTitle('Error');
+    setReportAlertMessage(message);
+    setShowReportAlert(true);
+  };
+
+  const handleCancelAdvance = async () => {
+    setCancelLoading(true);
+    const { response, error } = await cancelAdvance.makePostRequest(
+      Constants.ENDPOINT.CANCEL_ADVANCE,
+      {
+        booking_id: bookingDetails.id,
+        customer_id: userInfo?.id,
+        preview: true,
+      },
+    );
+    setCancelLoading(false);
+    if (error) {
+      showCancelError(error);
+      return;
+    }
+    setCancelPreview(response?.data || {});
+  };
+
+  const confirmCancelAdvance = async () => {
+    setCancelLoading(true);
+    const { response, error } = await cancelAdvance.makePostRequest(
+      Constants.ENDPOINT.CANCEL_ADVANCE,
+      { booking_id: bookingDetails.id, customer_id: userInfo?.id },
+    );
+    setCancelLoading(false);
+    setCancelPreview(null);
+    if (error) {
+      showCancelError(error);
+      return;
+    }
+    const result = response?.data || {};
+    setBookingDetails(prev => ({
+      ...prev,
+      status: 'Cancelled',
+      pretty_status: 'Cancelled',
+      penalty_amount: result.penalty_amount ?? 0,
+    }));
+  };
 
   const [showBreakdown, setShowBreakdown] = useState(false);
 
@@ -38,7 +126,11 @@ const BookingDetailsScreen = () => {
 
   const reportIssue = usePostRequest();
 
-  const handleBack = () => navigation.goBack();
+  // Always go back (navigate() pushes a duplicate History in RN Navigation 7);
+  // Booking History refetches itself on focus.
+  const handleBack = () => {
+    navigation.goBack();
+  };
 
   const getBookingTypeLabel = type => {
     const types = { 1: 'Motorcycle', 2: 'Car', 3: 'Car' };
@@ -268,8 +360,10 @@ const BookingDetailsScreen = () => {
 
       {/* Final Fare */}
       <View style={styles.finalFareRow}>
-        <Text style={styles.finalFareLabel}>Final Fare</Text>
-        <Text style={styles.finalFareValue}>₱{bookingDetails.price}</Text>
+        <Text style={styles.finalFareLabel}>
+          {isCancelled ? 'Penalty Fee' : 'Final Fare'}
+        </Text>
+        <Text style={styles.finalFareValue}>₱{displayAmount}</Text>
       </View>
 
       <View style={styles.divider} />
@@ -297,8 +391,8 @@ const BookingDetailsScreen = () => {
           <View style={styles.riderRow}>
             <Image
               source={
-                bookingDetails.rider_details?.selfie
-                  ? { uri: bookingDetails.rider_details.selfie }
+                getRiderPhoto(bookingDetails.rider_details)
+                  ? { uri: getRiderPhoto(bookingDetails.rider_details) }
                   : require('@/Assets/Common/Sample_Profile.png')
               }
               style={styles.profileImage}
@@ -312,6 +406,13 @@ const BookingDetailsScreen = () => {
                 <Text style={styles.noRatingText}>No rating yet</Text>
               )}
             </View>
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.paymentRow}>
+            <Text style={styles.paymentLabel}>Rider Contact Number :</Text>
+            <Text style={styles.paymentMethodText}>
+              {getRiderContact(bookingDetails.rider_details)}
+            </Text>
           </View>
           <View style={styles.divider} />
         </>
@@ -344,6 +445,15 @@ const BookingDetailsScreen = () => {
           setVisible={setShowReportAlert}
         />
       ) : null}
+
+      <CancelPenaltyModal
+        visible={Boolean(cancelPreview)}
+        penaltyApplies={Boolean(cancelPreview?.penalty_applies)}
+        penaltyAmount={cancelPreview?.penalty_amount}
+        loading={cancelLoading}
+        onYes={confirmCancelAdvance}
+        onNo={() => setCancelPreview(null)}
+      />
 
       {/* Header */}
       <View style={styles.headerContainer}>
@@ -411,6 +521,18 @@ const BookingDetailsScreen = () => {
             {bookingDetails.status === 'Completed' && (
               <TouchableOpacity style={styles.rebookBtn} onPress={handleRebook}>
                 <Text style={styles.rebookText}>Rebook</Text>
+              </TouchableOpacity>
+            )}
+
+            {canCancelAdvance && (
+              <TouchableOpacity
+                style={styles.cancelAdvanceBtn}
+                disabled={cancelLoading}
+                onPress={handleCancelAdvance}
+                testID="cancel-advance-button">
+                <Text style={styles.cancelAdvanceText}>
+                  {cancelLoading ? 'Please wait...' : 'Cancel Booking'}
+                </Text>
               </TouchableOpacity>
             )}
           </View>
@@ -532,6 +654,20 @@ const getStyles = ({ colors }) =>
       paddingHorizontal: 10,
       paddingVertical: 5,
       borderRadius: 8,
+    },
+    cancelAdvanceBtn: {
+      marginTop: 16,
+      height: 44,
+      borderRadius: 22,
+      borderWidth: 1,
+      borderColor: '#E4423F',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    cancelAdvanceText: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 15,
+      color: '#E4423F',
     },
     rebookText: {
       fontWeight: '400',

@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
 
-const services = [
+export const services = [
   {
     id: 1,
     icon: require('@/Assets/Common/HomeScreen/Motorcycle.png'),

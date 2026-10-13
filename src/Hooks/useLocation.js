@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ensureLocationPermission } from '@/Utils/Permissions';
 import Geolocation from 'react-native-geolocation-service';
 
@@ -16,14 +16,23 @@ import Geolocation from 'react-native-geolocation-service';
  * // Don't request on mount, request manually
  * const { location, requestLocation } = useLocation(false);
  */
+const DEFAULT_LOCATION_OPTIONS = {
+  enableHighAccuracy: true,
+  timeout: 30000,
+  maximumAge: 10000,
+};
+
 export const useLocation = (
   requestOnMount = true,
-  options = {
-    enableHighAccuracy: true,
-    timeout: 30000,
-    maximumAge: 10000,
-  },
+  options = DEFAULT_LOCATION_OPTIONS,
 ) => {
+  // The default options object used to be re-created every render, which
+  // re-created requestLocation and re-ran the mount effect after every
+  // setState: an endless request/error loop (froze "Choose from Map" on web
+  // with location blocked). Keep options in a ref so the request is stable.
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
+  const requestedOnMountRef = useRef(false);
   const [location, setLocation] = useState(null);
   const [loading, setLoading] = useState(requestOnMount);
   const [error, setError] = useState(null);
@@ -61,7 +70,7 @@ export const useLocation = (
             setError(err.message || 'Failed to get location');
             setLoading(false);
           },
-          options,
+          optionsRef.current,
         );
       } else {
         // Permission not granted
@@ -81,11 +90,13 @@ export const useLocation = (
       setError(err.message || 'Failed to request location');
       setLoading(false);
     }
-  }, [options]);
+  }, []);
 
-  // Request location on mount if enabled
+  // Request location once on mount if enabled (no retry on error/denied;
+  // callers can call requestLocation() again explicitly).
   useEffect(() => {
-    if (requestOnMount) {
+    if (requestOnMount && !requestedOnMountRef.current) {
+      requestedOnMountRef.current = true;
       requestLocation();
     }
   }, [requestOnMount, requestLocation]);
@@ -113,7 +124,7 @@ export const useLocationWatch = (enabled = false) => {
   const [watching, setWatching] = useState(false);
   const [error, setError] = useState(null);
   const [permissionStatus, setPermissionStatus] = useState(null);
-  const watchIdRef = useState(null);
+  const watchIdRef = useRef(null);
 
   const startWatching = useCallback(async () => {
     try {
@@ -137,6 +148,13 @@ export const useLocationWatch = (enabled = false) => {
           err => {
             console.error('Location watch error:', err);
             setError(err.message);
+            // Permission denied won't recover by itself; stop the watch so
+            // it doesn't keep firing errors (seen on web with location blocked).
+            if (err?.code === 1 && watchIdRef.current !== null) {
+              Geolocation.clearWatch(watchIdRef.current);
+              watchIdRef.current = null;
+              setWatching(false);
+            }
           },
           {
             enableHighAccuracy: true,

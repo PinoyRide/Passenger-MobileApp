@@ -3,6 +3,7 @@ import {
   Alert,
   BackHandler,
   Image,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -105,12 +106,14 @@ const SettingsScreen = () => {
       {},
     );
 
-    if (error) {
-      Alert.alert(
-        offline ? 'No Internet Connection' : 'Ongoing Booking',
-        error,
-      );
+    if (error && offline) {
+      Alert.alert('No Internet Connection', error);
       return;
+    }
+    // Any server refusal (e.g. "ongoing booking", often from a stale saved
+    // booking) must not trap the user: log out locally regardless.
+    if (error) {
+      console.warn('Logout API refused; logging out locally:', error);
     }
 
     dispatch(clearUserInfo());
@@ -126,6 +129,13 @@ const SettingsScreen = () => {
   };
 
   const handleLogout = () => {
+    if (Platform.OS === 'web') {
+      // Alert.alert buttons are no-ops on react-native-web.
+      if (window.confirm('Are you sure you want to log out?')) {
+        performLogout();
+      }
+      return;
+    }
     Alert.alert('Log Out', 'Are you sure you want to log out?', [
       { text: 'Cancel', style: 'cancel' },
       {

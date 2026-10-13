@@ -15,11 +15,11 @@ import Container from '@/Components/Container/Container';
 import { useTheme } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useDispatch } from 'react-redux';
-import { clearBookingState } from '@/Redux/Slices/userSlice';
+import { addRatedBookingId, clearBookingState } from '@/Redux/Slices/userSlice';
 import { AlertBox, AppButton, AppTextInput } from '@/Components';
 import { AppUtil, Constants } from '@/Utils';
 import usePostRequest from '@/Services/Api';
-import { transformBooking } from '@/Hooks/bookingTransform';
+import { bookingKey, transformBooking } from '@/Hooks/bookingTransform';
 
 const RatingScreen = () => {
   const { colors } = useTheme();
@@ -36,8 +36,20 @@ const RatingScreen = () => {
 
   const rateBooking = usePostRequest();
 
-  const handleBack = () => {
+  // Remember this trip as rated/skipped, then drop the saved booking. Home
+  // keeps the completed booking saved until here so a reload re-prompts.
+  const finishRating = () => {
+    const b = route?.params?.bookingDetails;
+    dispatch(
+      addRatedBookingId(
+        b?.id != null ? bookingKey(b) : paymentDetails?.booking_id,
+      ),
+    );
     dispatch(clearBookingState());
+  };
+
+  const handleBack = () => {
+    finishRating();
 
     navigation.reset({
       index: 0,
@@ -84,7 +96,7 @@ const RatingScreen = () => {
       return;
     }
 
-    dispatch(clearBookingState());
+    finishRating();
 
     navigation.reset({
       index: 0,

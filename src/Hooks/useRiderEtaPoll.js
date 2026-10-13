@@ -1,0 +1,52 @@
+import { useEffect, useRef } from 'react';
+import usePostRequest from '@/Services/Api';
+import { Constants } from '@/Utils';
+
+const DEFAULT_REFRESH_S = 15;
+
+/**
+ * Polls POST booking/get_eta while a booking is accepted (status 1) and maps
+ * {eta_state, eta_minutes, pretty_eta} to the riderEta shape used by
+ * getRiderEtaText ({state, eta_minutes, pretty}).
+ */
+const useRiderEtaPoll = ({ bookingId, customerId, enabled, onEta }) => {
+  const api = usePostRequest();
+  const onEtaRef = useRef(onEta);
+  onEtaRef.current = onEta;
+
+  useEffect(() => {
+    if (!enabled || !bookingId) {
+      return undefined;
+    }
+    let cancelled = false;
+    let timer;
+    const tick = async () => {
+      const { response } = await api.makePostRequest(
+        Constants.ENDPOINT.GET_ETA,
+        { booking_id: bookingId, customer_id: customerId },
+      );
+      if (cancelled) {
+        return;
+      }
+      const d = response?.data;
+      if (d && d.eta_state) {
+        onEtaRef.current?.({
+          state: d.eta_state,
+          eta_minutes: d.eta_minutes,
+          pretty: d.pretty_eta,
+        });
+      }
+      const next = Number(d?.refresh_after_seconds) || DEFAULT_REFRESH_S;
+      if (d?.eta_state !== 'arrived') {
+        timer = setTimeout(tick, Math.max(5, next) * 1000);
+      }
+    };
+    tick();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [enabled, bookingId, customerId]);
+};
+
+export default useRiderEtaPoll;

@@ -95,6 +95,20 @@ const InputLocation = () => {
     }
   }, [route.params?.pickup, route.params?.dropoff]);
 
+  // BUG-2: after Confirm Date and Time, open with the drop-off field focused
+  // and no pickup suggestions showing.
+  useEffect(() => {
+    if (!route.params?.focusDropoff) {
+      return undefined;
+    }
+    setSearchResults([]);
+    const t = setTimeout(() => {
+      setFocusedField('dropoff');
+      dropoffInputRef.current?.focus();
+    }, 350);
+    return () => clearTimeout(t);
+  }, [route.params?.focusDropoff]);
+
   const searchLocation = query => {
     if (!query) {
       setSearchResults([]);
@@ -108,10 +122,13 @@ const InputLocation = () => {
   const handleSearchLocationRequest = async () => {
     if (searchLocationRequest.error) {
       console.error('Search location error:', searchLocationRequest.error);
+      // don't fall through to the previous (stale) response's results
       setSearchResults([]);
+      return;
     }
     const results = searchLocationRequest.response?.data || [];
-    setSearchResults(results);
+    // BUG-2: ignore late responses once no field is being edited
+    setSearchResults(focusedField ? results : []);
   };
 
   useEffect(() => {
@@ -120,9 +137,14 @@ const InputLocation = () => {
 
   const handleTextChange = (text, setFieldValue, inputRef) => {
     setFieldValue(text);
+    // drop the previous search's list right away; the new query refills it
+    setSearchResults([]);
     setFocusedField(setFieldValue === setPickup ? 'pickup' : 'dropoff');
 
-    inputRef.current?.measure((x, y, width, height, pageX, pageY) => {
+    // BUG-2: the pickup list opens below the drop-off field (like the
+    // drop-off list sits below its own field) so drop-off stays visible.
+    const anchorRef = setFieldValue === setPickup ? dropoffInputRef : inputRef;
+    anchorRef.current?.measure((x, y, width, height, pageX, pageY) => {
       setDropdownTop(pageY + height);
     });
 
@@ -148,15 +170,45 @@ const InputLocation = () => {
     });
   };
 
+  // Web: the input blurs on mousedown, before the suggestion's click lands.
+  // Closing the list right away made a real tap miss the item, so close it
+  // a moment later and cancel that when a suggestion is picked.
+  const blurTimerRef = useRef(null);
+  const clearBlurTimer = () => {
+    if (blurTimerRef.current) {
+      clearTimeout(blurTimerRef.current);
+      blurTimerRef.current = null;
+    }
+  };
+  const handleFieldFocus = field => {
+    clearBlurTimer();
+    setFocusedField(field);
+  };
+  const handleFieldBlur = () => {
+    clearBlurTimer();
+    blurTimerRef.current = setTimeout(() => {
+      blurTimerRef.current = null;
+      setFocusedField(null);
+      setSearchResults([]);
+    }, 300);
+  };
+  useEffect(() => clearBlurTimer, []);
+
   const handleSelectItem = item => {
+    clearBlurTimer();
     let shouldNavigate = false;
+    // BUG-2: a pending debounced search must not reopen the list after a pick
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
 
     if (focusedField === 'pickup') {
       setPickup(item.address);
       setPickupLocation(item);
       route.params?.onPickupSelect?.(item);
 
-      if (dropoffLocation) {
+      // Advance Booking: go back to the map ("Choose this pick up" + Pick a Date)
+      if (dropoffLocation || route.params?.returnAfterPickup) {
         shouldNavigate = true;
       }
     } else if (focusedField === 'dropoff') {
@@ -217,7 +269,7 @@ const InputLocation = () => {
             setPickupLocation(locationData);
             route.params?.onPickupSelect?.(locationData);
 
-            if (dropoffLocation) {
+            if (dropoffLocation || route.params?.returnAfterPickup) {
               shouldNavigate = true;
             }
           }
@@ -288,7 +340,8 @@ const InputLocation = () => {
       setPickupLocation(locationData);
       route.params?.onPickupSelect?.(locationData);
 
-      if (dropoffLocation) {
+      // Advance Booking: go back to the map ("Choose this pick up" + Pick a Date)
+      if (dropoffLocation || route.params?.returnAfterPickup) {
         shouldNavigate = true;
       }
     }
@@ -498,11 +551,8 @@ const InputLocation = () => {
                 onChangeText={text =>
                   handleTextChange(text, setPickup, pickupInputRef)
                 }
-                onFocus={() => setFocusedField('pickup')}
-                onBlur={() => {
-                  setFocusedField(null);
-                  setSearchResults([]);
-                }}
+                onFocus={() => handleFieldFocus('pickup')}
+                onBlur={handleFieldBlur}
                 placeholder="Input pickup location"
                 style={styles.locationIconText}
                 placeholderTextColor={colors.onPrimary}
@@ -541,11 +591,8 @@ const InputLocation = () => {
                 onChangeText={text =>
                   handleTextChange(text, setDropoff, dropoffInputRef)
                 }
-                onFocus={() => setFocusedField('dropoff')}
-                onBlur={() => {
-                  setFocusedField(null);
-                  setSearchResults([]);
-                }}
+                onFocus={() => handleFieldFocus('dropoff')}
+                onBlur={handleFieldBlur}
                 placeholder="Drop off to?"
                 style={styles.locationIconText}
                 placeholderTextColor={colors.onPrimary}

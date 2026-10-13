@@ -1,5 +1,61 @@
 import { createSlice } from '@reduxjs/toolkit';
 
+// get_details returns the rider flat (first_name, mobile_no, ...) with no
+// ekyc_details; the UI reads ekyc_details.*, so mirror the flat fields there.
+const normalizeRiderDetails = rd => {
+  if (!rd || typeof rd !== 'object') {
+    return rd;
+  }
+  // backend sends {} for "no rider": store that as no rider at all
+  if (Object.keys(rd).length === 0) {
+    return null;
+  }
+  if (rd.ekyc_details) {
+    const e0 = rd.ekyc_details;
+    const e = e0.selfie
+      ? e0
+      : {
+          ...e0,
+          selfie:
+            rd.selfie || rd.selfie_pretty || rd.profile_img_pretty || null,
+        };
+    if (e.pretty_mobile_no) {
+      return e === e0 ? rd : { ...rd, ekyc_details: e };
+    }
+    const raw = String(
+      e.mobile_no || rd.pretty_mobile_no || rd.mobile_no || '',
+    );
+    return {
+      ...rd,
+      ekyc_details: {
+        ...e,
+        pretty_mobile_no: raw ? (raw.startsWith('63') ? `+${raw}` : raw) : null,
+      },
+    };
+  }
+  if (
+    !rd.first_name &&
+    !rd.last_name &&
+    !rd.mobile_no &&
+    !rd.pretty_mobile_no
+  ) {
+    return rd;
+  }
+  const mobile = rd.mobile_no ? String(rd.mobile_no) : '';
+  return {
+    ...rd,
+    ekyc_details: {
+      first_name: rd.first_name || '',
+      middle_name: rd.middle_name || '',
+      last_name: rd.last_name || '',
+      pretty_mobile_no:
+        rd.pretty_mobile_no ||
+        (mobile ? (mobile.startsWith('63') ? `+${mobile}` : mobile) : null),
+      selfie: rd.selfie || rd.selfie_pretty || rd.profile_img_pretty || null,
+    },
+  };
+};
+
 const initialState = {
   userInfo: null,
   hasShownLoginSuccess: false,
@@ -15,6 +71,9 @@ const initialState = {
   isBooked: false,
   isConfirmed: false,
   inquireBookingResponse: null,
+  acknowledgedScheduledIds: [],
+  // Completed bookings the passenger already rated or skipped (no re-prompt).
+  ratedBookingIds: [],
 };
 
 const userSlice = createSlice({
@@ -22,10 +81,18 @@ const userSlice = createSlice({
   initialState,
   reducers: {
     setUserInfo: (state, action) => {
+      // a different account (or a re-created one after a DB reset) must not
+      // inherit remembered booking ids
+      if (state.userInfo?.id !== action.payload?.id) {
+        state.ratedBookingIds = [];
+        state.acknowledgedScheduledIds = [];
+      }
       state.userInfo = action.payload;
     },
     clearUserInfo: state => {
       state.userInfo = null;
+      state.ratedBookingIds = [];
+      state.acknowledgedScheduledIds = [];
     },
     setHasShownLoginSuccess: (state, action) => {
       state.hasShownLoginSuccess = action.payload;
@@ -78,7 +145,7 @@ const userSlice = createSlice({
       state.bookingStatus = action.payload;
     },
     setRiderDetails: (state, action) => {
-      state.riderDetails = action.payload;
+      state.riderDetails = normalizeRiderDetails(action.payload);
     },
     setPickupLocation: (state, action) => {
       state.pickupLocation = action.payload;
@@ -97,6 +164,30 @@ const userSlice = createSlice({
     },
     setInquireBookingResponse: (state, action) => {
       state.inquireBookingResponse = action.payload;
+    },
+    addAcknowledgedScheduledId: (state, action) => {
+      const id = action.payload;
+      if (!id) {
+        return;
+      }
+      if (!state.acknowledgedScheduledIds.includes(id)) {
+        state.acknowledgedScheduledIds.push(id);
+      }
+      if (state.acknowledgedScheduledIds.length > 50) {
+        state.acknowledgedScheduledIds =
+          state.acknowledgedScheduledIds.slice(-50);
+      }
+    },
+    addRatedBookingId: (state, action) => {
+      const id = String(action.payload ?? '');
+      if (!id) {
+        return;
+      }
+      const list = state.ratedBookingIds || [];
+      if (!list.includes(id)) {
+        list.push(id);
+      }
+      state.ratedBookingIds = list.slice(-50);
     },
     // ✅ Clear all booking state (on completion/cancellation)
     clearBookingState: state => {
@@ -125,12 +216,14 @@ export const {
   setActiveBooking,
   setBookingStatus,
   setRiderDetails,
+  addRatedBookingId,
   setPickupLocation,
   setDropoffLocation,
   setSelectedService,
   setIsBooked,
   setIsConfirmed,
   setInquireBookingResponse,
+  addAcknowledgedScheduledId,
   clearBookingState,
 } = userSlice.actions;
 
@@ -151,5 +244,9 @@ export const selectIsBooked = state => state.user.isBooked;
 export const selectIsConfirmed = state => state.user.isConfirmed;
 export const selectInquireBookingResponse = state =>
   state.user.inquireBookingResponse;
+export const selectAcknowledgedScheduledIds = state =>
+  state.user.acknowledgedScheduledIds;
 
 export default userSlice.reducer;
+
+export const selectRatedBookingIds = state => state.user.ratedBookingIds || [];

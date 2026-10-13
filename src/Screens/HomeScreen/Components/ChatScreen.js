@@ -104,7 +104,8 @@ const ChatScreen = () => {
               `${riderDetails.first_name || ''} ${
                 riderDetails.last_name || ''
               }`.trim() || 'Rider',
-            avatar: riderDetails.selfie || null,
+            avatar:
+              riderDetails.ekyc_details?.selfie || riderDetails.selfie || null,
           });
         }
 

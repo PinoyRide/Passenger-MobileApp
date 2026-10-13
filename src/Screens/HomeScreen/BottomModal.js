@@ -40,6 +40,9 @@ const BottomModal = ({
   inquireBookingResponse,
   isLoading,
   isOnline = true,
+  showAdvanceBooking = false,
+  onAdvanceBooking,
+  advanceCashOnlyNote = false,
 }) => {
   const { colors } = useTheme();
   const styles = getStyles({ colors });
@@ -81,8 +84,8 @@ const BottomModal = ({
       visible: isBooked && !isConfirmed,
       title: isOnline ? 'Confirm' : 'No Internet',
       onPress: onCreateBooking,
-      color: isOnline ? colors.primary : colors.grey5,
-      disabled: isLoading || !isOnline,
+      color: isOnline && inquireBookingResponse ? colors.primary : colors.grey5,
+      disabled: isLoading || !isOnline || !inquireBookingResponse,
     },
     {
       visible: isConfirmed,
@@ -117,16 +120,31 @@ const BottomModal = ({
       return null;
     }
 
+    const blue = colors.blue ?? '#084CF7';
+
     return (
-      <AppButton
-        title={btn.title}
-        onPress={btn.onPress}
-        isBold
-        mode={btn.outlined ? 'outlined' : 'contained'}
-        buttonColor={btn.color}
-        textColor={btn.textColor}
-        disabled={btn.disabled}
-      />
+      <>
+        {showAdvanceBooking && !isBooked && (
+          <AppButton
+            title="Advance Booking"
+            onPress={onAdvanceBooking}
+            isBold
+            buttonColor={blue}
+            disabled={!isOnline || isLoading}
+            noSpacing
+            featureStyle={{ marginTop: 20, marginBottom: 13 }}
+          />
+        )}
+        <AppButton
+          title={btn.title}
+          onPress={btn.onPress}
+          isBold
+          mode={btn.outlined ? 'outlined' : 'contained'}
+          buttonColor={btn.color}
+          textColor={btn.textColor}
+          disabled={btn.disabled}
+        />
+      </>
     );
   };
 
@@ -223,14 +241,16 @@ const BottomModal = ({
                   {inquireBookingResponse?.pretty_total_amount_wo_promo}
                 </Text>
               </View>
-              {selectedPromo && inquireBookingResponse?.promo_discount > 0 && (
-                <View style={styles.fareRow}>
-                  <Text style={styles.feeText}>Promo Discount</Text>
-                  <Text style={styles.promoAppliedText}>
-                    -₱{Number(inquireBookingResponse.promo_discount).toFixed(2)}
-                  </Text>
-                </View>
-              )}
+              {!!selectedPromo &&
+                inquireBookingResponse?.promo_discount > 0 && (
+                  <View style={styles.fareRow}>
+                    <Text style={styles.feeText}>Promo Discount</Text>
+                    <Text style={styles.promoAppliedText}>
+                      -₱
+                      {Number(inquireBookingResponse.promo_discount).toFixed(2)}
+                    </Text>
+                  </View>
+                )}
               <View style={styles.fareRow}>
                 <Text style={styles.feeText}>Total Fare w/ Discount</Text>
                 <Text style={styles.feeText}>
@@ -241,7 +261,7 @@ const BottomModal = ({
                 <Text style={styles.feeText}>Payment Method</Text>
                 <Text>{selectedPayment}</Text>
               </View>
-              {selectedPromo && (
+              {!!selectedPromo && (
                 <View style={styles.fareRow}>
                   <Text style={styles.feeText}>Promo Applied</Text>
                   <Text style={styles.promoAppliedText}>
@@ -249,7 +269,7 @@ const BottomModal = ({
                   </Text>
                 </View>
               )}
-              {noteToRider && (
+              {!!noteToRider && (
                 <View style={styles.fareRow}>
                   <Text style={styles.feeText}>Note to Rider</Text>
                   <Text style={styles.noteText} numberOfLines={1}>

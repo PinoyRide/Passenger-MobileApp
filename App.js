@@ -1,6 +1,9 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useFonts } from 'expo-font';
+import { en, registerTranslation } from 'react-native-paper-dates';
+
+registerTranslation('en', en);
 import { Provider } from 'react-redux';
 import { PersistGate } from 'redux-persist/integration/react';
 

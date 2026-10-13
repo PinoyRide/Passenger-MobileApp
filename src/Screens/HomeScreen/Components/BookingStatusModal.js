@@ -16,6 +16,8 @@ import { useSelector } from 'react-redux';
 import { selectUserInfo } from '@/Redux/Slices/userSlice';
 import { Constants } from '@/Utils';
 import usePostRequest from '@/Services/Api';
+import { getBookingVehicle } from '@/Hooks/bookingVehicle';
+import { getRiderPhoto } from '@/Hooks/bookingTransform';
 
 const UNREAD_POLL_INTERVAL_MS = 5000;
 
@@ -29,6 +31,7 @@ const BookingStatusModal = ({
   dropoff,
   selectedService,
   onChangeService,
+  vehicle,
 }) => {
   const { colors } = useTheme();
   const styles = getStyles({ colors });
@@ -97,6 +100,9 @@ const BookingStatusModal = ({
   }, [bookingDetails?.id, riderDetails]);
   // ─────────────────────────────────────────────────────────────────────
 
+  const resolvedVehicle =
+    vehicle ?? getBookingVehicle(bookingDetails, riderDetails);
+
   const handleCall = () => {
     const phoneNumber = riderDetails?.ekyc_details?.pretty_mobile_no;
     if (!phoneNumber) {
@@ -134,11 +140,10 @@ const BookingStatusModal = ({
     const riderName = riderDetails?.ekyc_details
       ? `${riderDetails.ekyc_details.first_name} ${riderDetails.ekyc_details.last_name}`
       : 'Unknown Rider';
-    const plateNumber =
-      riderDetails?.vehicle_details?.[0]?.plate_number || 'N/A';
-    const vehicle = riderDetails?.vehicle_details?.[0]
-      ? `${riderDetails.vehicle_details[0].brand} ${riderDetails.vehicle_details[0].model}`
-      : 'N/A';
+    const shareVehicle =
+      resolvedVehicle ?? getBookingVehicle(bookingDetails, riderDetails);
+    const plateNumber = shareVehicle?.plateNumber || 'N/A';
+    const vehicleLine = shareVehicle?.label || 'N/A';
     const fare = paymentDetails?.total_amount || 0;
 
     const message =
@@ -146,7 +151,7 @@ const BookingStatusModal = ({
       `📍 Pickup: ${pickupAddress}\n` +
       `🏁 Dropoff: ${dropoffAddress}\n\n` +
       `🧑 Rider: ${riderName}\n` +
-      `🏍️ Vehicle: ${vehicle}\n` +
+      `🏍️ Vehicle: ${vehicleLine}\n` +
       `🔖 Plate: ${plateNumber}\n` +
       `💰 Fare: ₱${fare}\n\n`;
 
@@ -259,7 +264,9 @@ const BookingStatusModal = ({
         <View style={styles.riderRow}>
           <Image
             source={
-              riderDetails?.vehicle_details?.[0]?.motorcyle_img
+              getRiderPhoto(riderDetails)
+                ? { uri: getRiderPhoto(riderDetails) }
+                : riderDetails?.vehicle_details?.[0]?.motorcyle_img
                 ? { uri: riderDetails.vehicle_details[0].motorcyle_img }
                 : {
                     uri:
@@ -279,11 +286,10 @@ const BookingStatusModal = ({
               {ekycDetails?.first_name} {ekycDetails?.last_name}
             </Text>
             <Text style={styles.plate}>
-              {riderDetails.vehicle_details?.[0]?.plate_number}
+              {resolvedVehicle?.plateNumber || 'N/A'}
             </Text>
             <Text style={styles.vehicle}>
-              {riderDetails.vehicle_details?.[0]?.brand}{' '}
-              {riderDetails.vehicle_details?.[0]?.model}
+              {resolvedVehicle?.label || 'N/A'}
             </Text>
           </View>
 

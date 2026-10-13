@@ -33,6 +33,9 @@ const BASE_DEV = {
     UPDATE_BOOKING_STATUS: 'booking/update_status_for_customer/',
     GET_BOOKING_HISTORY: 'booking/get_history/',
     GET_BOOKING_DETAILS: 'booking/get_details/',
+    GET_BOOKING_CONFIG: 'booking/get_config/',
+    GET_UPCOMING_BOOKINGS: 'booking/get_upcoming/',
+    GET_ACTIVE_BOOKING: 'booking/get_customer_active/',
     REPORT_AN_ISSUE: 'booking/report_issue/',
     RATE_BOOKING: 'booking/rate/',
     GET_PROMO_LIST: 'booking/get_promo_list/',
@@ -40,6 +43,9 @@ const BASE_DEV = {
     GET_RIDER_LOCATION: 'customers/get_rider_location',
 
     ADD_TIP: 'booking/add_tip/',
+    RETRY_BOOKING: 'booking/retry/',
+    CANCEL_ADVANCE: 'booking/cancel_advance/',
+    GET_ETA: 'booking/get_eta/',
     //EKYC
     GET_EKYC_URL: 'ekyc/get-ekyc-url/',
     EKYC_CHECK_STATUS: 'ekyc/check_status/',
@@ -54,7 +60,9 @@ const BASE_DEV = {
     GET_UNREAD_MESSAGE_COUNT: 'messages/unread-count/',
   },
 
-  FEATURE_STATUS: {},
+  FEATURE_STATUS: {
+    BOOK_LATER: false,
+  },
 
   MODULES_IDENTIFIERS: {},
 };

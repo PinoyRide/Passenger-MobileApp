@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useDispatch } from 'react-redux';
 import BookingCard from './Components/BookingCard';
 import usePostRequest from '@/Services/Api';
@@ -27,6 +27,35 @@ import {
   transformBooking,
 } from '@/Hooks/bookingTransform';
 
+// Pending advance bookings (status 5, 1 or 2) always go on top: accepted ones
+// (rider assigned, or status 1/2) first, then unaccepted, each by pickup time.
+// Everything else keeps the backend's order. Works on raw (untransformed) rows.
+const isPendingAdvance = b =>
+  b?.is_advance && [5, 1, 2].includes(Number(b.status));
+const isAcceptedAdvance = b =>
+  Number(b.status) !== 5 ||
+  !!b.rider_assigned ||
+  !!(b.rider_details && Object.keys(b.rider_details).length);
+const pickupMs = b => {
+  const t = new Date(b?.scheduled_pickup_at).getTime();
+  return Number.isNaN(t) ? Infinity : t;
+};
+export const sortPendingAdvanceFirst = (history = [], upcoming = []) => {
+  const seen = new Set(history.map(b => b.id));
+  const all = [
+    ...history,
+    ...upcoming.filter(b => isPendingAdvance(b) && !seen.has(b.id)),
+  ];
+  const pending = all.filter(isPendingAdvance);
+  const rest = history.filter(b => !isPendingAdvance(b));
+  const byPickup = (a, b) => pickupMs(a) - pickupMs(b);
+  return [
+    ...pending.filter(isAcceptedAdvance).sort(byPickup),
+    ...pending.filter(b => !isAcceptedAdvance(b)).sort(byPickup),
+    ...rest,
+  ];
+};
+
 const BookingHistoryScreen = () => {
   const { colors } = useTheme();
   const styles = getStyles({ colors });
@@ -39,13 +68,23 @@ const BookingHistoryScreen = () => {
   const [bookingData, setBookingData] = useState([]);
 
   const getBookingHistory = usePostRequest();
+  // History is paginated (10 per page, newest-updated first) and the screen only
+  // loads page 1, so pending advance bookings are also pulled from get_upcoming.
+  const getUpcoming = usePostRequest();
 
-  useEffect(() => {
-    triggerGetBookingHistory();
-  }, []);
+  // Refetch every time the screen gains focus (first open and on return from
+  // Booking Details, e.g. after a cancel). Pinned ordering is applied on reply.
+  useFocusEffect(
+    React.useCallback(() => {
+      triggerGetBookingHistory();
+    }, [userInfo?.id]),
+  );
 
   const triggerGetBookingHistory = () => {
     getBookingHistory.makePostRequest(Constants.ENDPOINT.GET_BOOKING_HISTORY, {
+      customer_id: userInfo.id,
+    });
+    getUpcoming.makePostRequest(Constants.ENDPOINT.GET_UPCOMING_BOOKINGS, {
       customer_id: userInfo.id,
     });
   };
@@ -64,7 +103,12 @@ const BookingHistoryScreen = () => {
     const result = getBookingHistory?.response;
 
     if (result?.code === 200 && result?.data?.bookings) {
-      const transformedBookings = result.data.bookings.map(transformBooking);
+      const transformedBookings = sortPendingAdvanceFirst(
+        result.data.bookings,
+        getUpcoming.response?.code === 200
+          ? getUpcoming.response?.data?.bookings || []
+          : [],
+      ).map(transformBooking);
 
       setBookingData(transformedBookings);
       AppUtil.debugDeep(transformedBookings);
@@ -73,7 +117,11 @@ const BookingHistoryScreen = () => {
 
   useEffect(() => {
     handleBookingHistory();
-  }, [getBookingHistory.response, getBookingHistory.error]);
+  }, [
+    getBookingHistory.response,
+    getBookingHistory.error,
+    getUpcoming.response,
+  ]);
 
   const handleRebook = item => {
     dispatch(
@@ -116,6 +164,7 @@ const BookingHistoryScreen = () => {
         destination={item.destination}
         date={item.date}
         price={item.price}
+        penaltyAmount={item.penalty_amount}
         onRebook={() => handleRebook(item)}
       />
     </TouchableOpacity>

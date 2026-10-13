@@ -3,6 +3,7 @@ import {
   Alert,
   Dimensions,
   Image,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -12,15 +13,18 @@ import { useTheme } from 'react-native-paper';
 import { openSettings } from 'react-native-permissions';
 import BottomModal from './BottomModal';
 import {
+  AdvanceBookingAcceptedModal,
   AlertBox,
   AppMap,
   RiderFoundAlertBox,
   SuccessAlertBox,
 } from '@/Components';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import {
+  addAcknowledgedScheduledId,
   clearBookingState,
+  selectAcknowledgedScheduledIds,
   selectActiveBooking,
   selectBookingStatus,
   selectDropoffLocation,
@@ -29,6 +33,7 @@ import {
   selectIsBooked,
   selectIsConfirmed,
   selectPickupLocation,
+  selectRatedBookingIds,
   selectRiderDetails,
   selectSelectedService,
   selectUserInfo,
@@ -54,10 +59,37 @@ import { ensureLocationPermission } from '@/Utils/Permissions';
 import { useLocationWatch } from '@/Hooks/useLocation';
 import useNetworkStatus from '@/Hooks/useNetworkStatus';
 import { checkIsOnline } from '@/Utils/Network';
+import { getBookingVehicle } from '@/Hooks/bookingVehicle';
+import { getRiderEtaText } from '@/Hooks/riderEta';
+import useBookLaterConfig from '@/Hooks/useBookLaterConfig';
+import {
+  formatScheduledDateLabel,
+  formatScheduledTimeLabel,
+  shortenAddress,
+} from '@/Hooks/bookLaterFormat';
+import PickDateModal from './Components/PickDateModal';
+import ChoosePickupPanel from './Components/ChoosePickupPanel';
+import NoRidersAvailableModal from '@/Components/AlertBox/NoRidersAvailableModal';
+import CancelPenaltyModal from '@/Components/AlertBox/CancelPenaltyModal';
+import SafetyGuideModal from '@/Components/SafetyGuide/SafetyGuideModal';
+import EmergencyButton from '@/Components/EmergencyButton';
+import { bookingKey } from '@/Hooks/bookingTransform';
+import { services as SERVICE_OPTIONS } from './Components/ServiceModal';
+import useNoRidersTimer from '@/Hooks/useNoRidersTimer';
+import useRiderEtaPoll from '@/Hooks/useRiderEtaPoll';
+import useAdvanceBookingDiscovery from '@/Hooks/useAdvanceBookingDiscovery';
 
 const OFFLINE_ALERT_TITLE = 'No Internet Connection';
 const OFFLINE_ALERT_MESSAGE =
   'This action needs an internet connection. Please reconnect and try again.';
+
+const FARE_UNAVAILABLE_MESSAGE = 'Unable to compute fare. Please try again.';
+
+// A rider holds the booking: rider_assigned, or a non-empty rider object
+// (the backend sends rider_details: {} when there is no rider).
+const hasRider = (booking, rd) =>
+  booking?.rider_assigned === true ||
+  Boolean(rd && typeof rd === 'object' && (rd.id || Object.keys(rd).length));
 
 const HomeScreen = () => {
   const { colors } = useTheme();
@@ -69,6 +101,7 @@ const HomeScreen = () => {
   const userInfo = useSelector(selectUserInfo);
   const hasShownLoginSuccess = useSelector(selectHasShownLoginSuccess);
   const activeBooking = useSelector(selectActiveBooking);
+  const ratedBookingIds = useSelector(selectRatedBookingIds);
   const bookingStatus = useSelector(selectBookingStatus);
   const riderDetails = useSelector(selectRiderDetails);
   const pickupLocation = useSelector(selectPickupLocation);
@@ -77,6 +110,9 @@ const HomeScreen = () => {
   const isBooked = useSelector(selectIsBooked);
   const isConfirmed = useSelector(selectIsConfirmed);
   const inquireBookingResponse = useSelector(selectInquireBookingResponse);
+  const acknowledgedScheduledIds = useSelector(selectAcknowledgedScheduledIds);
+
+  const bookLater = useBookLaterConfig();
 
   const [alertMessage, setAlertMessage] = useState('');
   const [showAlert, setShowAlert] = useState(false);
@@ -124,6 +160,20 @@ const HomeScreen = () => {
 
   // 🆕 Rider real-time location state (transient, not persisted in Redux)
   const [riderLocation, setRiderLocation] = useState(null);
+  const [bookingVehicle, setBookingVehicle] = useState(null);
+  const [riderEta, setRiderEta] = useState(null);
+  const [riderEtaReceivedAt, setRiderEtaReceivedAt] = useState(0);
+  const [etaStaleTick, setEtaStaleTick] = useState(0);
+
+  const [scheduledAt, setScheduledAt] = useState(null);
+  const [autoBookAfterSchedule, setAutoBookAfterSchedule] = useState(false);
+  const [showPickDate, setShowPickDate] = useState(false);
+  const [advanceBookingFlow, setAdvanceBookingFlow] = useState(false);
+  // Advance: a pickup was (re)chosen and still needs "Choose this pick up",
+  // even when the date is already set (date-first order).
+  const [pickupConfirmPending, setPickupConfirmPending] = useState(false);
+  const [showAdvanceAccepted, setShowAdvanceAccepted] = useState(false);
+  const paymentBeforeScheduleRef = useRef(null);
 
   // 🔍 Diagnostic: confirms whether riderLocation state is actually updating.
   // If this never logs a non-null value while status is 1 or 2, the map
@@ -148,18 +198,104 @@ const HomeScreen = () => {
 
   const riderFoundTimeout = useRef(null);
   const [showWaitingBanner, setShowWaitingBanner] = useState(false);
+  const [riderArrivedAt, setRiderArrivedAt] = useState(null);
+  const [showSafetyGuide, setShowSafetyGuide] = useState(false);
+  const [penaltyPreview, setPenaltyPreview] = useState(null);
+  const [penaltyLoading, setPenaltyLoading] = useState(false);
+  const [retryLoading, setRetryLoading] = useState(false);
+  const [noRidersError, setNoRidersError] = useState('');
 
   // ✅ Ref to distinguish between "Cancel to go back to confirm" vs "Full cancel"
   // When true, handleUpdateBookingStatus will only clear the booking ID,
   // keeping all other details (locations, fare, service, etc.) intact
   const isCancellingToConfirmRef = useRef(false);
 
+  const applyBookingVehicle = (booking, rider_details) => {
+    const next = getBookingVehicle(booking, rider_details);
+    const plate = next?.plateNumber || '';
+    const label = next?.label || '';
+    setBookingVehicle(prev => {
+      if (prev?.plateNumber === plate && prev?.label === label) {
+        return prev;
+      }
+      return next;
+    });
+  };
+
+  const clearTransientBookingUi = () => {
+    setBookingVehicle(null);
+    setRiderEta(null);
+    setRiderEtaReceivedAt(0);
+    setScheduledAt(null);
+    setAdvanceBookingFlow(false);
+    setPickupConfirmPending(false);
+    setShowAdvanceAccepted(false);
+    paymentBeforeScheduleRef.current = null;
+  };
+
+  // After a reload the persisted trip fields can be empty; rebuild them from
+  // the server booking so the sheet shows the trip and its Cancel button.
+  const restoreTripFields = booking => {
+    if (!pickupLocation && booking?.pickup_location) {
+      dispatch(
+        setPickupLocation({
+          address: booking.pickup_location,
+          description: booking.pickup_location,
+          lat: booking.pickup_lat,
+          long: booking.pickup_long,
+        }),
+      );
+    }
+    if (!dropoffLocation && booking?.dropoff_location) {
+      dispatch(
+        setDropoffLocation({
+          address: booking.dropoff_location,
+          description: booking.dropoff_location,
+          lat: booking.dropoff_lat,
+          long: booking.dropoff_long,
+        }),
+      );
+    }
+    if (!selectedService) {
+      const svc = SERVICE_OPTIONS.find(
+        s => String(s.id) === String(booking?.booking_type),
+      );
+      if (svc) {
+        dispatch(setSelectedService(svc));
+      }
+    }
+  };
+
+  const maybeShowAdvanceAcceptedModal = (booking, rider_details) => {
+    if (!bookLater.enabled || Number(booking?.status) !== 5) {
+      return;
+    }
+    if (!booking?.id || acknowledgedScheduledIds.includes(booking.id)) {
+      return;
+    }
+    // status 5 without a rider is just "scheduled", not accepted
+    // (the backend sends rider_details: {} when no rider holds it)
+    if (!hasRider(booking, rider_details)) {
+      return;
+    }
+    if (hasRider(null, rider_details)) {
+      dispatch(setRiderDetails(rider_details));
+      applyBookingVehicle(booking, rider_details);
+    }
+    setShowAdvanceAccepted(true);
+  };
+
   const checkActiveBooking = usePostRequest();
+  // Bookings the restore check rejected as stale/not ours; discovery skips them
+  // so a mismatch can't loop.
+  const staleBookingIdsRef = useRef(new Set());
   const [isRestoringBooking, setIsRestoringBooking] = useState(false);
 
   const inquireBooking = usePostRequest();
   const createBooking = usePostRequest();
   const updateBookingStatus = usePostRequest();
+  const retryBooking = usePostRequest();
+  const cancelAdvance = usePostRequest();
   const getBookingDetails = usePostRequest();
   const getPromoList = usePostRequest();
   // 🆕 Any request that represents a user-initiated state transition
@@ -258,19 +394,6 @@ const HomeScreen = () => {
 
     triggerGetPromoList();
 
-    if (activeBooking?.id) {
-      console.log('🔄 Found active booking in Redux:', activeBooking.id);
-      setIsRestoringBooking(true);
-
-      const postdata = {
-        booking_id: activeBooking.id,
-      };
-      checkActiveBooking.makePostRequest(
-        Constants.ENDPOINT.GET_BOOKING_DETAILS,
-        postdata,
-      );
-    }
-
     return () => {
       if (riderFoundTimeout.current) {
         clearTimeout(riderFoundTimeout.current);
@@ -278,6 +401,21 @@ const HomeScreen = () => {
       stopWatching();
     };
   }, []);
+
+  // Verify a saved (persisted) booking against the server whenever Home mounts
+  // or the logged-in customer changes, so a stale booking can't stick.
+  useEffect(() => {
+    if (!activeBooking?.id) {
+      return;
+    }
+    console.log('🔄 Found saved booking in Redux:', activeBooking.id);
+    setIsRestoringBooking(true);
+    checkActiveBooking.makePostRequest(Constants.ENDPOINT.GET_BOOKING_DETAILS, {
+      booking_id: activeBooking.id,
+      customer_id: userInfo?.id,
+      include_rider_eta: '1',
+    });
+  }, [userInfo?.id]);
 
   // Show location error if any
   useEffect(() => {
@@ -304,7 +442,11 @@ const HomeScreen = () => {
         '❌ Error fetching active booking:',
         checkActiveBooking.error,
       );
-      dispatch(clearBookingState()); // Clear invalid booking
+      // An error is "unknown", not "status 0": keep the saved booking and its
+      // status. Only a definite not-found drops it.
+      if (/not found|does not exist/i.test(String(checkActiveBooking.error))) {
+        dispatch(clearBookingState());
+      }
       setIsRestoringBooking(false);
       return;
     }
@@ -318,11 +460,39 @@ const HomeScreen = () => {
     if (results?.code === 200 && results?.data) {
       const booking = results?.data;
       AppUtil.debugDeep(booking);
+      const restoredNum = Number(booking.status);
+      const ownerId = booking.customer?.id ?? booking.customer_id;
+      const notMine =
+        ownerId != null &&
+        userInfo?.id != null &&
+        String(ownerId) !== String(userInfo.id);
+      // Only 0 (searching), 1, 2 and 5 (scheduled) are live. Anything else, or a
+      // booking that isn't this customer's, is stale: drop it.
+      if (notMine || ![0, 1, 2, 3, 5].includes(restoredNum)) {
+        console.log('🧹 Clearing stale saved booking', booking.id, restoredNum);
+        staleBookingIdsRef.current.add(bookingKey(booking));
+        dispatch(clearBookingState());
+        clearTransientBookingUi();
+        setIsRestoringBooking(false);
+        return;
+      }
+      // Completed and already rated (server rating, or rated/skipped locally):
+      // just clear, no Rating screen.
+      if (
+        restoredNum === 3 &&
+        (booking.booking_ratings?.rate ||
+          ratedBookingIds.includes(bookingKey(booking)))
+      ) {
+        dispatch(clearBookingState());
+        clearTransientBookingUi();
+        setIsRestoringBooking(false);
+        return;
+      }
 
       // Check if booking is still active
-      if (booking.status === 3) {
+      if (restoredNum === 3) {
         console.log('✅ Booking completed, navigating to rating');
-        dispatch(clearBookingState());
+        clearTransientBookingUi();
         setIsRestoringBooking(false);
 
         navigation.reset({
@@ -337,15 +507,34 @@ const HomeScreen = () => {
         return;
       }
 
-      if (booking.status === 4) {
+      if (restoredNum === 4) {
         console.log('✅ Booking cancelled');
         dispatch(clearBookingState());
+        clearTransientBookingUi();
+        setIsRestoringBooking(false);
+        return;
+      }
+
+      if (Number(booking.status) === 5) {
+        restoreTripFields(booking);
+        dispatch(setActiveBooking(booking));
+        dispatch(setBookingStatus(5));
+        dispatch(setIsConfirmed(true));
+        dispatch(setIsBooked(true));
+        setShowWaitingBanner(true);
+        if (booking.scheduled_pickup_at || booking.scheduled_at) {
+          setScheduledAt(
+            new Date(booking.scheduled_pickup_at || booking.scheduled_at),
+          );
+        }
+        maybeShowAdvanceAcceptedModal(booking, booking.rider_details);
         setIsRestoringBooking(false);
         return;
       }
 
       // ✅ Update Redux with latest booking data
       console.log('✅ Restoring active booking state');
+      restoreTripFields(booking);
       dispatch(setActiveBooking(booking));
       dispatch(setBookingStatus(booking.status));
       dispatch(setIsConfirmed(true));
@@ -353,8 +542,15 @@ const HomeScreen = () => {
       setShowWaitingBanner(true);
 
       // Restore rider details if available
+      if (booking.scheduled_pickup_at || booking.scheduled_at) {
+        setScheduledAt(
+          new Date(booking.scheduled_pickup_at || booking.scheduled_at),
+        );
+      }
+
       if (booking.rider_details) {
         dispatch(setRiderDetails(booking.rider_details));
+        applyBookingVehicle(booking, booking.rider_details);
 
         // 🆕 Seed the live map marker immediately from the restored data so
         // the rider shows up right away instead of waiting for the next poll
@@ -377,9 +573,16 @@ const HomeScreen = () => {
           riderAlertShownRef.current = true;
         }
       }
+
+      const restoredStatus = Number(booking.status);
+      if (restoredStatus === 1 && booking.rider_eta) {
+        setRiderEta(booking.rider_eta);
+        setRiderEtaReceivedAt(Date.now());
+      }
     } else {
-      // No active booking found or error
-      dispatch(clearBookingState());
+      // data:null / unexpected reply = unknown: keep the previous status and
+      // let the normal poll pick things up.
+      console.warn('⚠️ get_details returned no data; keeping saved booking');
     }
 
     setIsRestoringBooking(false);
@@ -473,10 +676,14 @@ const HomeScreen = () => {
     const results = inquireBooking?.response;
     AppUtil.debugDeep(results?.data);
 
-    if (results?.code === 200) {
+    if (results?.code === 200 && results?.data) {
       // save to Redux instead of local state
       dispatch(setInquireBookingResponse(results.data));
       dispatch(setIsBooked(true));
+    } else if (results?.code === 200) {
+      // BUG-1: a 200 with no fare data must not open the summary
+      setAlertMessage(FARE_UNAVAILABLE_MESSAGE);
+      setShowAlert(true);
     }
   };
 
@@ -487,6 +694,13 @@ const HomeScreen = () => {
   //CREATE BOOKING
   const triggerCreateBooking = async () => {
     if (createBooking.loading) {
+      return;
+    }
+
+    // BUG-1: never build payment_details from an empty fare
+    if (!inquireBookingResponse) {
+      setAlertMessage(FARE_UNAVAILABLE_MESSAGE);
+      setShowAlert(true);
       return;
     }
 
@@ -511,17 +725,17 @@ const HomeScreen = () => {
 
     const payment_details = {
       type: selectedPayment.toLowerCase(),
-      distance_km_round: inquireBookingResponse.distance_km_round,
-      minimum_fare: inquireBookingResponse.minimum_fare,
-      pesos_per_km: inquireBookingResponse.pesos_per_km,
-      booking_fee: inquireBookingResponse.booking_fee,
-      base_amount: inquireBookingResponse.base_amount,
-      commission: inquireBookingResponse.commission,
-      rider_net_amount: inquireBookingResponse.rider_net_amount,
-      promo_discount: inquireBookingResponse.promo_discount,
+      distance_km_round: inquireBookingResponse?.distance_km_round,
+      minimum_fare: inquireBookingResponse?.minimum_fare,
+      pesos_per_km: inquireBookingResponse?.pesos_per_km,
+      booking_fee: inquireBookingResponse?.booking_fee,
+      base_amount: inquireBookingResponse?.base_amount,
+      commission: inquireBookingResponse?.commission,
+      rider_net_amount: inquireBookingResponse?.rider_net_amount,
+      promo_discount: inquireBookingResponse?.promo_discount,
       tip: 0,
-      total_amount_wo_promo: inquireBookingResponse.total_amount_wo_promo,
-      total_amount: inquireBookingResponse.total_amount,
+      total_amount_wo_promo: inquireBookingResponse?.total_amount_wo_promo,
+      total_amount: inquireBookingResponse?.total_amount,
     };
 
     const all_payment_details = inquireBookingResponse;
@@ -541,6 +755,12 @@ const HomeScreen = () => {
       promo_code: selectedPromo?.code || '',
       promo_id: selectedPromo?.id || '',
     };
+    if (scheduledAt) {
+      postdata.scheduled_at = scheduledAt.toISOString();
+      // backend 0102 contract
+      postdata.is_advance = '1';
+      postdata.scheduled_pickup_at = scheduledAt.toISOString();
+    }
     createBooking.makePostRequest(Constants.ENDPOINT.CREATE_BOOKING, postdata);
   };
 
@@ -582,6 +802,8 @@ const HomeScreen = () => {
 
     const postdata = {
       booking_id: activeBooking?.id,
+      // stop asking for ETA once the rider has arrived at pickup
+      include_rider_eta: riderArrived ? '0' : '1',
     };
     getBookingDetails.makePostRequest(
       Constants.ENDPOINT.GET_BOOKING_DETAILS,
@@ -610,7 +832,7 @@ const HomeScreen = () => {
 
     const { code, data } = response;
 
-    if (code === 200 && data) {
+    if (code === 200 && data && data.status != null && data.status !== '') {
       const { status, rider_details } = data;
       const statusNum = Number(status);
 
@@ -618,12 +840,39 @@ const HomeScreen = () => {
       dispatch(setBookingStatus(status));
       AppUtil.debugDeep(rider_details);
 
-      if (statusNum === 1) {
+      setRiderArrivedAt(
+        statusNum === 1 && (data.arrived || data.rider_arrived_at)
+          ? data.rider_arrived_at || true
+          : null,
+      );
+
+      if (statusNum === 5) {
         dispatch(setRiderDetails(rider_details));
+        applyBookingVehicle(data, rider_details);
+        maybeShowAdvanceAcceptedModal(data, rider_details);
+        setRiderLocation(null);
+        setRiderEta(null);
+        setRiderEtaReceivedAt(0);
+      } else if (statusNum === 1) {
+        dispatch(setRiderDetails(rider_details));
+        applyBookingVehicle(data, rider_details);
+        if (data.rider_eta) {
+          setRiderEta(data.rider_eta);
+          setRiderEtaReceivedAt(Date.now());
+        }
         if (!riderAlertShownRef.current) {
           setShowRiderFound(true);
           riderAlertShownRef.current = true;
         }
+      } else {
+        setRiderEta(null);
+        setRiderEtaReceivedAt(0);
+      }
+
+      if (statusNum === 1 || statusNum === 2) {
+        applyBookingVehicle(data, rider_details);
+      } else if (statusNum !== 5) {
+        setBookingVehicle(null);
       }
 
       // The booking-details response already carries the rider's live GPS
@@ -647,8 +896,9 @@ const HomeScreen = () => {
       }
 
       if (statusNum === 3) {
-        // clear Redux state when completed
-        dispatch(clearBookingState());
+        // Keep the completed booking saved until the Rating screen submits or
+        // skips, so a reload before rating still brings the rating back.
+        clearTransientBookingUi();
         setRiderLocation(null);
 
         navigation.reset({
@@ -679,6 +929,7 @@ const HomeScreen = () => {
 
     intervalId = setInterval(() => {
       triggerGetBookingDetails();
+      setEtaStaleTick(t => t + 1);
     }, intervalTime);
 
     return () => {
@@ -726,6 +977,76 @@ const HomeScreen = () => {
     );
   };
 
+  const finishFullCancel = () => {
+    dispatch(clearBookingState());
+    riderAlertShownRef.current = false;
+    setShowWaitingBanner(false);
+    // Reset selections
+    setSelectedPromo(null);
+    setNoteToRider('');
+    setRiderLocation(null);
+    clearTransientBookingUi();
+  };
+
+  // Full cancel entry point. Advance bookings ask the backend for a penalty
+  // preview first (Figma "Cancel Booking with Penalty?"); instant bookings and
+  // penalty-free advance bookings cancel the way they always have.
+  const requestFullCancel = async () => {
+    const isAdvance = Boolean(
+      activeBooking?.is_advance ||
+        scheduledAt ||
+        activeBooking?.scheduled_pickup_at ||
+        activeBooking?.scheduled_at,
+    );
+    if (!isAdvance || !activeBooking?.id) {
+      triggerUpdateBookingStatus();
+      setShowWaitingBanner(false);
+      return;
+    }
+    const { response, error } = await cancelAdvance.makePostRequest(
+      Constants.ENDPOINT.CANCEL_ADVANCE,
+      {
+        booking_id: activeBooking.id,
+        customer_id: userInfo?.id,
+        preview: true,
+      },
+    );
+    if (error) {
+      // Backend without migration 0102 yet: keep the old cancel working.
+      if (/404/.test(String(error))) {
+        triggerUpdateBookingStatus();
+        setShowWaitingBanner(false);
+        return;
+      }
+      setAlertMessage(error);
+      setShowAlert(true);
+      return;
+    }
+    const preview = response?.data || response || {};
+    if (preview.penalty_applies) {
+      setPenaltyPreview(preview);
+      return;
+    }
+    // free cancel: still go through cancel_advance so cancelled_by is recorded
+    confirmPenaltyCancel();
+  };
+
+  const confirmPenaltyCancel = async () => {
+    setPenaltyLoading(true);
+    const { error } = await cancelAdvance.makePostRequest(
+      Constants.ENDPOINT.CANCEL_ADVANCE,
+      { booking_id: activeBooking?.id, customer_id: userInfo?.id },
+    );
+    setPenaltyLoading(false);
+    setPenaltyPreview(null);
+    if (error) {
+      setAlertMessage(error);
+      setShowAlert(true);
+      return;
+    }
+    finishFullCancel();
+  };
+
   const handleUpdateBookingStatus = () => {
     if (updateBookingStatus.error) {
       if (!updateBookingStatus.isOffline) {
@@ -754,13 +1075,7 @@ const HomeScreen = () => {
       } else {
         // Full cancel — clear everything and go back to the start
         console.log('🗑️ Full booking cancel');
-        dispatch(clearBookingState());
-        riderAlertShownRef.current = false;
-        setShowWaitingBanner(false);
-        // Reset selections
-        setSelectedPromo(null);
-        setNoteToRider('');
-        setRiderLocation(null);
+        finishFullCancel();
       }
     }
   };
@@ -774,6 +1089,311 @@ const HomeScreen = () => {
   // poll (see handleGetBookingDetails above), which already runs every 1-2s
   // while a booking is active. This mirrors your backend, which returns
   // current_lat/current_long as part of the rider object on get_details/.
+
+  const openInputLocation = (extra = {}) => {
+    navigation.navigate('InputLocation', {
+      ...extra,
+      pickup: pickupLocation,
+      dropoff: dropoffLocation,
+      onPickupSelect: location => {
+        dispatch(setPickupLocation(location));
+        if (extra.returnAfterPickup || (bookLater.enabled && scheduledAt)) {
+          setPickupConfirmPending(true);
+        }
+      },
+      onDropoffSelect: location => dispatch(setDropoffLocation(location)),
+    });
+  };
+
+  const handleAdvanceBookingPress = async () => {
+    if (!bookLater.enabled) {
+      return;
+    }
+    const online = await checkIsOnline();
+    if (!online) {
+      Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
+      return;
+    }
+    setAdvanceBookingFlow(true);
+    if (!scheduledAt) {
+      if (paymentBeforeScheduleRef.current === null) {
+        paymentBeforeScheduleRef.current = selectedPayment;
+      }
+      setSelectedPayment('cash');
+    }
+    if (!pickupLocation) {
+      openInputLocation({ returnAfterPickup: true, focusDropoff: false });
+      return;
+    }
+    if (!scheduledAt) {
+      setShowPickDate(true);
+      return;
+    }
+    if (!dropoffLocation) {
+      openInputLocation();
+    }
+  };
+
+  const handlePickDateConfirm = date => {
+    setScheduledAt(date);
+    setShowPickDate(false);
+    setSelectedPayment('cash');
+    setPickupConfirmPending(false);
+    // Figma: with both points set, confirming the date books right away.
+    if (pickupLocation && dropoffLocation) {
+      setAutoBookAfterSchedule(true);
+      return;
+    }
+    // Remember the date so it survives the trip to the location screen.
+    pendingScheduleRef.current = date;
+    openInputLocation({ returnAfterPickup: true, focusDropoff: true });
+  };
+
+  // Back from the location screen with both points: restore the chosen time
+  // and create the advance booking the same way as above.
+  const pendingScheduleRef = useRef(null);
+  useEffect(() => {
+    const pending = pendingScheduleRef.current;
+    if (!pending || !pickupLocation || !dropoffLocation || isBooked) {
+      return;
+    }
+    pendingScheduleRef.current = null;
+    setScheduledAt(pending);
+    setAdvanceBookingFlow(true);
+    setPickupConfirmPending(false);
+    setAutoBookAfterSchedule(true);
+  }, [pickupLocation, dropoffLocation]);
+
+  // Advance booking: date confirmed with both points set, so fetch the fare
+  // and create the booking straight away (no Book tap, no fare confirm).
+  const autoCreateAfterInquireRef = useRef(false);
+  useEffect(() => {
+    if (autoBookAfterSchedule && scheduledAt) {
+      setAutoBookAfterSchedule(false);
+      autoCreateAfterInquireRef.current = true;
+      triggerInquireBooking();
+    }
+  }, [autoBookAfterSchedule, scheduledAt]);
+
+  useEffect(() => {
+    if (autoCreateAfterInquireRef.current && inquireBookingResponse) {
+      autoCreateAfterInquireRef.current = false;
+      triggerCreateBooking();
+    }
+  }, [inquireBookingResponse]);
+
+  useEffect(() => {
+    if (inquireBooking.error) {
+      autoCreateAfterInquireRef.current = false;
+    }
+  }, [inquireBooking.error]);
+
+  const handleChoosePickup = () => {
+    if (scheduledAt) {
+      // date-first order: date is set, go on to drop-off
+      setPickupConfirmPending(false);
+      openInputLocation({ returnAfterPickup: true, focusDropoff: true });
+      return;
+    }
+    setShowPickDate(true);
+  };
+
+  // Figma frame 91: map + "Choose this pick up" panel while the date is unset
+  const showChoosePickupPanel =
+    advanceBookingFlow &&
+    bookLater.enabled &&
+    Boolean(pickupLocation) &&
+    (!scheduledAt || pickupConfirmPending) &&
+    !isBooked &&
+    // 4 = last booking cancelled; Home is idle again (same as BottomModal)
+    (bookingStatus === 0 || bookingStatus === 4);
+
+  const pickDatePromptedRef = useRef(false);
+  useEffect(() => {
+    if (!advanceBookingFlow || !bookLater.enabled || scheduledAt) {
+      if (scheduledAt) {
+        pickDatePromptedRef.current = false;
+      }
+      return;
+    }
+    if (pickupLocation && !pickDatePromptedRef.current) {
+      pickDatePromptedRef.current = true;
+      setShowPickDate(true);
+    }
+  }, [advanceBookingFlow, bookLater.enabled, pickupLocation, scheduledAt]);
+
+  useEffect(() => {
+    if (scheduledAt) {
+      if (paymentBeforeScheduleRef.current === null) {
+        paymentBeforeScheduleRef.current = selectedPayment;
+      }
+      setSelectedPayment('cash');
+    } else if (paymentBeforeScheduleRef.current !== null) {
+      setSelectedPayment(paymentBeforeScheduleRef.current);
+      paymentBeforeScheduleRef.current = null;
+    }
+  }, [scheduledAt]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (bookLater.enabled) {
+        bookLater.refetch();
+      }
+    }, [bookLater.enabled]),
+  );
+
+  const handleAdvanceAcceptedClose = () => {
+    if (activeBooking?.id) {
+      dispatch(addAcknowledgedScheduledId(activeBooking.id));
+    }
+    setShowAdvanceAccepted(false);
+  };
+
+  const scheduledForModal =
+    scheduledAt ||
+    activeBooking?.scheduled_pickup_at ||
+    activeBooking?.scheduled_at;
+  const scheduledDateObj = scheduledForModal
+    ? new Date(scheduledForModal)
+    : null;
+
+  const statusNum = Number(bookingStatus);
+  const riderArrived =
+    statusNum === 1 &&
+    (Boolean(riderArrivedAt) || riderEta?.state === 'arrived');
+  const etaBannerText = riderArrived
+    ? 'Your Rider has arrived'
+    : statusNum === 1
+    ? getRiderEtaText(riderEta, riderEtaReceivedAt) ?? statusMessages[1]
+    : statusNum === 5
+    ? hasRider(activeBooking, riderDetails) && scheduledDateObj
+      ? `Your Rider will pick you up at ${formatScheduledTimeLabel(
+          scheduledDateObj,
+        )}`
+      : statusMessages[0]
+    : statusMessages[bookingStatus] || '';
+  if (statusNum === 1) {
+    void etaStaleTick;
+  }
+
+  // Pick up advance bookings a rider accepted while nothing is tracked here,
+  // then reuse the normal restore path (get_details → accepted modal / ETA).
+  useAdvanceBookingDiscovery({
+    customerId: userInfo?.id,
+    // Runs even with a saved booking: the server's under-way trip (1/2) wins
+    // over a different saved one; otherwise only adopt when nothing is tracked.
+    enabled: bookLater.enabled && !checkActiveBooking.loading,
+    onFound: booking => {
+      if (
+        String(booking.id) === String(activeBooking?.id) ||
+        staleBookingIdsRef.current.has(bookingKey(booking))
+      ) {
+        return;
+      }
+      const underWay = [1, 2].includes(Number(booking.status));
+      if (activeBooking?.id || isBooked) {
+        if (!underWay) {
+          return;
+        }
+        console.log(
+          '🔁 Replacing saved booking',
+          activeBooking?.id,
+          'with',
+          booking.id,
+        );
+        dispatch(clearBookingState());
+        clearTransientBookingUi();
+        riderAlertShownRef.current = false;
+      }
+      dispatch(
+        setPickupLocation({
+          address: booking.pickup_location,
+          description: booking.pickup_location,
+          lat: booking.pickup_lat,
+          long: booking.pickup_long,
+        }),
+      );
+      dispatch(
+        setDropoffLocation({
+          address: booking.dropoff_location,
+          description: booking.dropoff_location,
+          lat: booking.dropoff_lat,
+          long: booking.dropoff_long,
+        }),
+      );
+      setIsRestoringBooking(true);
+      checkActiveBooking.makePostRequest(
+        Constants.ENDPOINT.GET_BOOKING_DETAILS,
+        {
+          booking_id: booking.id,
+          customer_id: userInfo?.id,
+        },
+      );
+    },
+  });
+
+  useRiderEtaPoll({
+    bookingId: activeBooking?.id,
+    customerId: userInfo?.id,
+    enabled: statusNum === 1 && !riderArrived && isOnline,
+    onEta: eta => {
+      setRiderEta(eta);
+      setRiderEtaReceivedAt(Date.now());
+    },
+  });
+
+  // Once a booking has been accepted (status 1-4, or a rider assigned) it can
+  // never be "unaccepted" again, even if a late/stale response or a transient
+  // Redux reset briefly reports status 0. Latch it per booking id.
+  const acceptedBookingIdsRef = useRef(new Set());
+  const hasRiderNow =
+    Boolean(activeBooking?.rider_assigned) ||
+    Boolean(riderDetails && Object.keys(riderDetails).length);
+  if (
+    activeBooking?.id &&
+    ([1, 2, 3, 4].includes(statusNum) ||
+      Boolean(activeBooking?.rider_assigned) ||
+      (statusNum === 5 && hasRiderNow))
+  ) {
+    acceptedBookingIdsRef.current.add(bookingKey(activeBooking));
+  }
+  const bookingEverAccepted =
+    Boolean(activeBooking?.id) &&
+    acceptedBookingIdsRef.current.has(bookingKey(activeBooking));
+  const stillUnaccepted =
+    Boolean(activeBooking?.id) &&
+    !bookingEverAccepted &&
+    (statusNum === 0 || (statusNum === 5 && !hasRiderNow));
+
+  const noRiders = useNoRidersTimer({
+    booking: activeBooking,
+    waiting: stillUnaccepted,
+    serverOffsetMs: bookLater.serverOffsetMs,
+  });
+
+  const handleNoRidersTryAgain = async () => {
+    if (!stillUnaccepted) {
+      return;
+    }
+    setRetryLoading(true);
+    setNoRidersError('');
+    const { response, error } = await retryBooking.makePostRequest(
+      Constants.ENDPOINT.RETRY_BOOKING,
+      { booking_id: activeBooking?.id, customer_id: userInfo?.id },
+    );
+    setRetryLoading(false);
+    if (error) {
+      setNoRidersError(
+        /404/.test(String(error))
+          ? 'Try Again is not available yet. Please try later.'
+          : error,
+      );
+      return;
+    }
+    setShowWaitingBanner(true);
+    // retry resets pooled_at on the server and returns it
+    noRiders.restart(response?.data?.pooled_at);
+  };
 
   const handlePromoSelect = promo => {
     setSelectedPromo(promo);
@@ -841,12 +1461,8 @@ const HomeScreen = () => {
               ? `${riderDetails.ekyc_details?.first_name} ${riderDetails.ekyc_details?.last_name}`
               : ''
           }
-          plateNumber={riderDetails?.vehicle_details?.[0]?.plate_number || ''}
-          vehicle={
-            riderDetails?.vehicle_details?.[0]
-              ? `${riderDetails.vehicle_details[0].brand} ${riderDetails.vehicle_details[0].model}`
-              : ''
-          }
+          plateNumber={bookingVehicle?.plateNumber || ''}
+          vehicle={bookingVehicle?.label || ''}
           imageSource={
             riderDetails?.ekyc_details?.selfie
               ? { uri: riderDetails.ekyc_details.selfie }
@@ -876,57 +1492,186 @@ const HomeScreen = () => {
 
         {showWaitingBanner && (
           <View style={[styles.banner, { bottom: modalHeight + 15 }]}>
-            <Text style={styles.bannerText}>
-              {statusMessages[bookingStatus] || ''}
-            </Text>
+            <Text style={styles.bannerText}>{etaBannerText}</Text>
           </View>
         )}
 
-        {(bookingStatus === 0 || bookingStatus === 4) && (
-          <BottomModal
+        {(statusNum === 1 || statusNum === 2) && (
+          <TouchableOpacity
+            testID="safety-guide-chip"
+            style={[
+              styles.safetyChip,
+              { bottom: modalHeight + 15 + (showWaitingBanner ? 59 : 0) },
+            ]}
+            onPress={() => setShowSafetyGuide(true)}>
+            <Text style={styles.safetyChipText}>Safety Guide</Text>
+          </TouchableOpacity>
+        )}
+        {statusNum === 2 && <EmergencyButton style={styles.emergencyButton} />}
+        <SafetyGuideModal
+          visible={showSafetyGuide}
+          onClose={() => setShowSafetyGuide(false)}
+        />
+        <NoRidersAvailableModal
+          visible={noRiders.expired && stillUnaccepted && !penaltyPreview}
+          loading={retryLoading}
+          errorText={noRidersError}
+          onTryAgain={handleNoRidersTryAgain}
+          onCancelBooking={() => {
+            setNoRidersError('');
+            if (!stillUnaccepted) {
+              return;
+            }
+            requestFullCancel();
+          }}
+        />
+        <CancelPenaltyModal
+          visible={Boolean(penaltyPreview)}
+          penaltyAmount={penaltyPreview?.penalty_amount}
+          prettyPenaltyAmount={penaltyPreview?.pretty_penalty_amount}
+          loading={penaltyLoading}
+          onYes={confirmPenaltyCancel}
+          onNo={() => setPenaltyPreview(null)}
+        />
+
+        <PickDateModal
+          visible={showPickDate}
+          onClose={() => setShowPickDate(false)}
+          onConfirm={handlePickDateConfirm}
+          minLeadMinutes={bookLater.minLeadMinutes}
+          maxWindowDays={bookLater.maxWindowDays}
+          serverOffsetMs={bookLater.serverOffsetMs}
+          leadTimeSubtitleHours={bookLater.leadTimeSubtitleHours}
+        />
+
+        <AdvanceBookingAcceptedModal
+          visible={showAdvanceAccepted}
+          onClose={handleAdvanceAcceptedClose}
+          riderName={
+            riderDetails
+              ? `${riderDetails.ekyc_details?.first_name || ''} ${
+                  riderDetails.ekyc_details?.last_name || ''
+                }`.trim()
+              : ''
+          }
+          plateNumber={bookingVehicle?.plateNumber || ''}
+          vehicleLabel={bookingVehicle?.label || ''}
+          imageSource={
+            riderDetails?.ekyc_details?.selfie
+              ? { uri: riderDetails.ekyc_details.selfie }
+              : require('@/Assets/Common/Default_Profile.png')
+          }
+          dateText={
+            scheduledDateObj
+              ? formatScheduledDateLabel(scheduledDateObj)
+              : 'Today'
+          }
+          timeText={
+            scheduledDateObj ? formatScheduledTimeLabel(scheduledDateObj) : ''
+          }
+          pickup={shortenAddress(
+            pickupLocation?.address ||
+              pickupLocation?.description ||
+              activeBooking?.pickup_location,
+          )}
+          dropoff={shortenAddress(
+            dropoffLocation?.address ||
+              dropoffLocation?.description ||
+              activeBooking?.dropoff_location,
+          )}
+          noticeText={bookLater.noticeText}
+        />
+
+        {showChoosePickupPanel && (
+          <ChoosePickupPanel
             onLayout={e => setModalHeight(e.nativeEvent.layout.height)}
-            selectedService={selectedService}
-            onBookPressed={onBookPressed}
-            pickup={pickupLocation}
-            dropoff={dropoffLocation}
-            onPickupChange={location => dispatch(setPickupLocation(location))}
-            onDropoffChange={location => dispatch(setDropoffLocation(location))}
-            onChangeService={() => setShowServiceModal(true)}
-            onInquireBooking={triggerInquireBooking}
-            onCreateBooking={triggerCreateBooking}
-            onCancelBooking={() => {
-              // Full cancel — clears everything
-              triggerUpdateBookingStatus();
-              setShowWaitingBanner(false);
-            }}
-            onBackToConfirm={() => {
-              isCancellingToConfirmRef.current = true;
-              triggerUpdateBookingStatus();
-            }}
-            onBackToEdit={() => {
-              dispatch(setIsBooked(false));
-              dispatch(setInquireBookingResponse(null));
-              setShowWaitingBanner(false);
-            }}
-            isBooked={isBooked}
-            isConfirmed={isConfirmed}
-            showPaymentModal={showPaymentModal}
-            setShowPaymentModal={setShowPaymentModal}
-            setShowPromoModal={setShowPromoModal}
-            setShowNoteModal={setShowNoteModal}
-            selectedPayment={selectedPayment}
-            selectedPromo={selectedPromo}
-            noteToRider={noteToRider}
-            inquireBookingResponse={inquireBookingResponse}
-            isLoading={isLoading}
-            permissionStatus={permissionStatus}
-            // lets the modal disable Book/Confirm buttons while offline
-            // too (defense-in-depth on top of the checks in the triggers)
-            isOnline={isOnline}
+            address={pickupLocation?.address || pickupLocation?.description}
+            onAddressPress={() =>
+              openInputLocation({
+                returnAfterPickup: true,
+                focusDropoff: false,
+              })
+            }
+            onChoose={handleChoosePickup}
           />
         )}
 
-        {bookingStatus !== 0 && bookingStatus !== 4 && (
+        {!showChoosePickupPanel &&
+          (bookingStatus === 0 ||
+            bookingStatus === 4 ||
+            bookingStatus === 5) && (
+            <BottomModal
+              onLayout={e => setModalHeight(e.nativeEvent.layout.height)}
+              selectedService={selectedService}
+              onBookPressed={onBookPressed}
+              pickup={pickupLocation}
+              dropoff={dropoffLocation}
+              onPickupChange={location => {
+                dispatch(setPickupLocation(location));
+                // Advance Booking: a pickup changed from the Home summary while
+                // a date is set must also be confirmed ("Choose this pick up").
+                if (bookLater.enabled && scheduledAt && !isBooked) {
+                  setAdvanceBookingFlow(true);
+                  setPickupConfirmPending(true);
+                }
+              }}
+              onDropoffChange={location =>
+                dispatch(setDropoffLocation(location))
+              }
+              onChangeService={() => setShowServiceModal(true)}
+              onInquireBooking={triggerInquireBooking}
+              onCreateBooking={triggerCreateBooking}
+              onCancelBooking={requestFullCancel}
+              // Cancel while waiting: confirm, then a full cancel back to a clean
+              // Home (it used to drop back to the fare/confirm screen).
+              onBackToConfirm={() => {
+                const msg = 'Are you sure you want to cancel this booking?';
+                if (Platform.OS === 'web') {
+                  if (window.confirm(msg)) {
+                    requestFullCancel();
+                  }
+                  return;
+                }
+                Alert.alert('Cancel Booking', msg, [
+                  { text: 'No', style: 'cancel' },
+                  {
+                    text: 'Yes',
+                    style: 'destructive',
+                    onPress: requestFullCancel,
+                  },
+                ]);
+              }}
+              onBackToEdit={() => {
+                dispatch(setIsBooked(false));
+                dispatch(setInquireBookingResponse(null));
+                setShowWaitingBanner(false);
+              }}
+              isBooked={isBooked}
+              isConfirmed={isConfirmed}
+              showPaymentModal={showPaymentModal}
+              setShowPaymentModal={setShowPaymentModal}
+              setShowPromoModal={setShowPromoModal}
+              setShowNoteModal={setShowNoteModal}
+              selectedPayment={selectedPayment}
+              selectedPromo={selectedPromo}
+              noteToRider={noteToRider}
+              inquireBookingResponse={inquireBookingResponse}
+              isLoading={isLoading}
+              permissionStatus={permissionStatus}
+              // lets the modal disable Book/Confirm buttons while offline
+              // too (defense-in-depth on top of the checks in the triggers)
+              isOnline={isOnline}
+              showAdvanceBooking={
+                bookLater.enabled && !scheduledAt && !isBooked && !isConfirmed
+              }
+              onAdvanceBooking={handleAdvanceBookingPress}
+              advanceCashOnlyNote={Boolean(scheduledAt) && !isBooked}
+            />
+          )}
+
+        {(bookingStatus === 1 ||
+          bookingStatus === 2 ||
+          bookingStatus === 3) && (
           <BookingStatusModal
             onLayout={e => setModalHeight(e.nativeEvent.layout.height)}
             visible={bookingStatus !== 0}
@@ -937,6 +1682,7 @@ const HomeScreen = () => {
             dropoff={dropoffLocation}
             selectedService={selectedService}
             onChangeService={() => setShowServiceModal(true)}
+            vehicle={bookingVehicle}
           />
         )}
 
@@ -993,6 +1739,27 @@ const getStyles = ({ colors }) =>
       width,
       height,
     },
+    safetyChip: {
+      position: 'absolute',
+      left: 30,
+      height: 26,
+      paddingHorizontal: 10,
+      borderRadius: 4,
+      backgroundColor: '#084CF7',
+      justifyContent: 'center',
+      zIndex: 10,
+    },
+    safetyChipText: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 11,
+      color: '#FFFFFF',
+    },
+    emergencyButton: {
+      position: 'absolute',
+      top: 70,
+      right: 92,
+      zIndex: 15,
+    },
     profileButton: {
       position: 'absolute',
       top: 60,
@@ -1004,20 +1771,26 @@ const getStyles = ({ colors }) =>
       height: 51,
       resizeMode: 'contain',
     },
+    // Figma frame 93: 370x51, 30pt side inset, radius 10, #FEC107
     banner: {
       position: 'absolute',
-      left: 20,
-      right: 20,
-      padding: 12,
-      borderRadius: 8,
+      left: 30,
+      right: 30,
+      height: 51,
+      paddingHorizontal: 12,
+      borderRadius: 10,
       backgroundColor: colors.primary,
       alignItems: 'center',
+      justifyContent: 'center',
       zIndex: 10,
       elevation: 999,
     },
     bannerText: {
-      fontWeight: '600',
+      fontFamily: 'Poppins Medium',
+      fontWeight: '500',
+      fontSize: 16,
       color: colors.onPrimary,
+      textAlign: 'center',
     },
     offlineBanner: {
       position: 'absolute',

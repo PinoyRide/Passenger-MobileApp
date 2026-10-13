@@ -140,7 +140,7 @@ const WalletScreen = () => {
               />
               <View>
                 <Text style={styles.activationTitle}>
-                  Active your PinoyRide Wallet
+                  Activate your PinoyRide Wallet
                 </Text>
                 <Text style={styles.activationSubtitle}>
                   Go cashless and earn RideRewards

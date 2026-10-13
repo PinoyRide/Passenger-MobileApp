@@ -9,6 +9,7 @@ const BookingCard = ({
   destination,
   date,
   price,
+  penaltyAmount,
   onRebook,
 }) => {
   const { colors } = useTheme();
@@ -41,7 +42,12 @@ const BookingCard = ({
           ]}>
           <Text style={styles.statusText}>{status}</Text>
         </View>
-        <Text style={styles.price}>₱{price}</Text>
+        <Text style={styles.price}>
+          ₱
+          {/^cancel/i.test(String(status || ''))
+            ? (Number(penaltyAmount) || 0).toFixed(2)
+            : price}
+        </Text>
       </View>
     </View>
   );
