@@ -2,91 +2,105 @@ import React from 'react';
 import {
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
+  View,
 } from 'react-native';
+import { Icon } from 'react-native-paper';
+import {
+  EMERGENCY_NUMBER,
+  dialEmergency,
+} from '@/Components/EmergencyCall/emergencyCall';
 
-// PLACEHOLDER COPY: Figma has no Safety Guide content yet. Replace these tips
-// with the approved text from Mark / the client before release.
-export const SAFETY_TIPS_PLACEHOLDER = [
-  'Check that the rider name, photo and plate number match the app before you get on.',
-  'Always wear the helmet the rider gives you, and keep it fastened for the whole trip.',
-  'Share your trip details with a friend or family member.',
-  'Keep your phone away while in transit and hold on securely.',
-  'If you feel unsafe, ask the rider to stop in a well-lit public place.',
-  'In an emergency, tap the red Emergency button to call 911.',
-];
+// Figma: Safety Guide chip opens the emergency call dialog (frame w/ 911 + Call).
+const SafetyGuideModal = ({ visible, onClose }) => {
+  const handleCall = () => {
+    dialEmergency();
+    onClose();
+  };
 
-const SafetyGuideModal = ({ visible, onClose }) => (
-  <Modal
-    transparent
-    visible={visible}
-    animationType="slide"
-    onRequestClose={onClose}>
-    <Pressable style={styles.overlay} onPress={onClose}>
-      <Pressable
-        style={styles.sheet}
-        onPress={e => e.stopPropagation()}
-        testID="safety-guide-sheet">
-        <Text style={styles.title}>Safety Guide</Text>
-        <ScrollView style={styles.list}>
-          {SAFETY_TIPS_PLACEHOLDER.map((tip, i) => (
-            <Text key={i} style={styles.tip}>
-              {i + 1}. {tip}
-            </Text>
-          ))}
-        </ScrollView>
-        <TouchableOpacity style={styles.button} onPress={onClose}>
-          <Text style={styles.buttonText}>Got it</Text>
-        </TouchableOpacity>
+  return (
+    <Modal
+      transparent
+      visible={visible}
+      animationType="fade"
+      onRequestClose={onClose}>
+      <Pressable style={styles.overlay} onPress={onClose}>
+        <Pressable
+          style={styles.card}
+          onPress={e => e.stopPropagation()}
+          testID="safety-guide-emergency-dialog">
+          <View style={styles.iconCircle}>
+            <Icon source="phone" size={20} color="#FFFFFF" />
+          </View>
+          <Text style={styles.number}>{EMERGENCY_NUMBER}</Text>
+          <TouchableOpacity
+            style={styles.callButton}
+            onPress={handleCall}
+            accessibilityRole="button"
+            accessibilityLabel={`Call ${EMERGENCY_NUMBER}`}
+            testID="safety-guide-call-button">
+            <Text style={styles.callButtonText}>Call</Text>
+          </TouchableOpacity>
+        </Pressable>
       </Pressable>
-    </Pressable>
-  </Modal>
-);
+    </Modal>
+  );
+};
 
 export default SafetyGuideModal;
 
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
     paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 28,
-    maxHeight: '75%',
+  },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     width: '100%',
-    maxWidth: 600,
-    alignSelf: 'center',
+    maxWidth: 340,
+    gap: 12,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
   },
-  title: {
-    fontFamily: 'Poppins SemiBold',
-    fontWeight: '600',
-    fontSize: 18,
-    color: '#084CF7',
-    marginBottom: 12,
-  },
-  list: { marginBottom: 16 },
-  tip: {
-    fontFamily: 'Poppins Regular',
-    fontSize: 14,
-    lineHeight: 21,
-    color: '#333333',
-    marginBottom: 10,
-  },
-  button: {
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#FFC107',
+  iconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FEC107',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  buttonText: { fontFamily: 'Poppins Medium', fontSize: 15, color: '#FFFFFF' },
+  number: {
+    flex: 1,
+    fontFamily: 'Poppins SemiBold',
+    fontSize: 22,
+    color: '#000000',
+    letterSpacing: 0.5,
+  },
+  callButton: {
+    backgroundColor: '#FEC107',
+    borderRadius: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    minWidth: 72,
+    alignItems: 'center',
+  },
+  callButtonText: {
+    fontFamily: 'Poppins SemiBold',
+    fontSize: 15,
+    color: '#FFFFFF',
+  },
 });

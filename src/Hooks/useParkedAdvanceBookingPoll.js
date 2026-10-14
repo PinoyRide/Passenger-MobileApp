@@ -15,12 +15,18 @@ const POLL_MS = 5000;
  * Keeps minimized advance bookings in sync with the server while the customer
  * books another ride on Home.
  */
-const useParkedAdvanceBookingPoll = ({ customerId, enabled }) => {
+const useParkedAdvanceBookingPoll = ({
+  customerId,
+  enabled,
+  onBookingSynced,
+}) => {
   const dispatch = useDispatch();
   const parked = useSelector(selectParkedAdvanceBookings);
   const api = usePostRequest();
   const parkedRef = useRef(parked);
   parkedRef.current = parked;
+  const onSyncedRef = useRef(onBookingSynced);
+  onSyncedRef.current = onBookingSynced;
 
   useEffect(() => {
     if (!enabled || !customerId || !parked.length) {
@@ -58,6 +64,7 @@ const useParkedAdvanceBookingPoll = ({ customerId, enabled }) => {
           },
         }),
       );
+      onSyncedRef.current?.(data);
     };
 
     const tick = () => {

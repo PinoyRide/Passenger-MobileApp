@@ -1,42 +1,38 @@
 import React from 'react';
 import {
   Alert,
-  Linking,
   Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
 } from 'react-native';
 import { Icon } from 'react-native-paper';
+import {
+  EMERGENCY_NUMBER,
+  dialEmergency,
+} from '@/Components/EmergencyCall/emergencyCall';
 
-export const EMERGENCY_NUMBER = '911'; // Philippines national emergency hotline
+export { EMERGENCY_NUMBER };
 
 const CONFIRM_TITLE = 'Call Emergency?';
 const CONFIRM_MESSAGE = `This will call ${EMERGENCY_NUMBER} (Philippine emergency hotline).`;
-
-const dial = () => {
-  Linking.openURL(`tel:${EMERGENCY_NUMBER}`).catch(() => {
-    if (Platform.OS !== 'web') {
-      Alert.alert(
-        'Unable to call',
-        `Please dial ${EMERGENCY_NUMBER} manually.`,
-      );
-    }
-  });
-};
 
 // Figma frame 51: red pill, top-right over the map, while in transit.
 const EmergencyButton = ({ style }) => {
   const onPress = () => {
     if (Platform.OS === 'web') {
       if (window.confirm(`${CONFIRM_TITLE}\n${CONFIRM_MESSAGE}`)) {
-        dial();
+        dialEmergency();
       }
       return;
     }
     Alert.alert(CONFIRM_TITLE, CONFIRM_MESSAGE, [
       { text: 'Cancel', style: 'cancel' },
-      { text: `Call ${EMERGENCY_NUMBER}`, style: 'destructive', onPress: dial },
+      {
+        text: `Call ${EMERGENCY_NUMBER}`,
+        style: 'destructive',
+        onPress: dialEmergency,
+      },
     ]);
   };
 

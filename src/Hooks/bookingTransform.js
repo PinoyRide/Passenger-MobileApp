@@ -43,7 +43,44 @@ export const isAcceptedAdvanceBooking = booking => {
   return status !== 5 || hasAssignedRider(booking);
 };
 
+// Live map + trip sheet only after the rider taps "Go to Pick up Location" (start_advance → status 1/2).
+export const isAdvanceOnLiveTripMap = booking =>
+  Boolean(booking?.is_advance) && [1, 2].includes(getRawStatus(booking));
+
+// Advance bookings already show the accepted-rider modal at status 5; skip "We found you a Rider!" at status 1.
+export const shouldShowRiderFoundAlert = booking => !booking?.is_advance;
+
+export const isReturnedToPool = booking =>
+  Boolean(booking?.returned_to_pool_at) &&
+  getRawStatus(booking) === 5 &&
+  !hasAssignedRider(booking);
+
+export const getAssignedRiderId = (booking, riderDetails) =>
+  riderDetails?.id ?? booking?.rider_id ?? booking?.rider_details?.id ?? null;
+
+/** One acknowledgment per rider assignment (re-show modal after pool reassignment). */
+export const advanceAcceptedAckKey = (bookingId, riderId) => {
+  if (bookingId == null || riderId == null) {
+    return null;
+  }
+  return `${bookingId}:${riderId}`;
+};
+
+export const isAdvanceAcceptedAcknowledged = (ackIds, bookingId, riderId) => {
+  if (!bookingId || !riderId || !Array.isArray(ackIds)) {
+    return false;
+  }
+  const key = advanceAcceptedAckKey(bookingId, riderId);
+  const idStr = String(bookingId);
+  return (
+    ackIds.includes(key) || ackIds.includes(bookingId) || ackIds.includes(idStr)
+  );
+};
+
 export const getDisplayStatus = booking => {
+  if (isReturnedToPool(booking)) {
+    return 'Returned to pool';
+  }
   if (isAcceptedAdvanceBooking(booking)) {
     return 'Advance Booking';
   }
@@ -64,6 +101,9 @@ export const getHistoryBadgeColor = (status, colors) => {
     s === 'On the way' ||
     s === 'Trip Started'
   ) {
+    return colors.blue;
+  }
+  if (s === 'Returned to pool' || /^returned/i.test(s)) {
     return colors.blue;
   }
   if (s === 'Scheduled' || s === 'Pending') {

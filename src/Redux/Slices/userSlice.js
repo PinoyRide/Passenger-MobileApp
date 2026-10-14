@@ -189,6 +189,16 @@ const userSlice = createSlice({
           state.acknowledgedScheduledIds.slice(-50);
       }
     },
+    clearAcknowledgedScheduledForBooking: (state, action) => {
+      const bookingId = String(action.payload ?? '');
+      if (!bookingId) {
+        return;
+      }
+      state.acknowledgedScheduledIds = state.acknowledgedScheduledIds.filter(
+        id =>
+          String(id) !== bookingId && !String(id).startsWith(`${bookingId}:`),
+      );
+    },
     addMinimizedAdvanceBookingId: (state, action) => {
       const id = String(action.payload ?? '');
       if (!id) {
@@ -287,6 +297,7 @@ export const {
   setIsConfirmed,
   setInquireBookingResponse,
   addAcknowledgedScheduledId,
+  clearAcknowledgedScheduledForBooking,
   addMinimizedAdvanceBookingId,
   removeMinimizedAdvanceBookingId,
   parkAdvanceBooking,

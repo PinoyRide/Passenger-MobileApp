@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Image,
   Linking,
+  PanResponder,
   Share,
   StyleSheet,
   Text,
@@ -21,6 +22,39 @@ import { getRiderPhoto } from '@/Hooks/bookingTransform';
 
 const UNREAD_POLL_INTERVAL_MS = 5000;
 
+const PAYMENT_METHOD_CONFIG = {
+  cash: {
+    label: 'Cash',
+    icon: require('@/Assets/Common/HomeScreen/PaymentMethodModal/Cash.png'),
+  },
+  wallet: {
+    label: 'Wallet',
+    icon: require('@/Assets/Common/HomeScreen/PaymentMethodModal/Wallet.png'),
+  },
+};
+
+const parseJsonField = value => {
+  if (!value) {
+    return {};
+  }
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return {};
+    }
+  }
+  return value;
+};
+
+const formatPeso = amount => {
+  const n = Number(amount);
+  if (Number.isNaN(n)) {
+    return '₱0.00';
+  }
+  return `₱${n.toFixed(2)}`;
+};
+
 const BookingStatusModal = ({
   onLayout,
   riderDetails,
@@ -32,23 +66,57 @@ const BookingStatusModal = ({
   selectedService,
   onChangeService,
   vehicle,
+  statusBannerText = '',
+  showSafetyGuide = false,
+  onSafetyGuidePress,
+  confirmedBookingView = false,
 }) => {
   const { colors } = useTheme();
   const styles = getStyles({ colors });
   const navigation = useNavigation();
   const userInfo = useSelector(selectUserInfo);
+  const [expanded, setExpanded] = useState(true);
 
-  // ✅ payment_details may be a JSON string if echoed back from API
-  const paymentDetails =
-    typeof bookingDetails?.payment_details === 'string'
-      ? (() => {
-          try {
-            return JSON.parse(bookingDetails.payment_details);
-          } catch {
-            return {};
-          }
-        })()
-      : bookingDetails?.payment_details ?? {};
+  const swipeResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gesture) =>
+        Math.abs(gesture.dy) > Math.abs(gesture.dx) && Math.abs(gesture.dy) > 6,
+      onPanResponderRelease: (_, gesture) => {
+        if (gesture.dy > 16) {
+          setExpanded(false);
+        } else if (gesture.dy < -16) {
+          setExpanded(true);
+        }
+      },
+    }),
+  ).current;
+
+  const paymentDetails = parseJsonField(bookingDetails?.payment_details);
+  const allPaymentDetails = parseJsonField(paymentDetails?.all_payment_details);
+  const paymentType = (
+    paymentDetails?.type ||
+    bookingDetails?.payment_type ||
+    'cash'
+  ).toLowerCase();
+  const paymentConfig =
+    PAYMENT_METHOD_CONFIG[paymentType] || PAYMENT_METHOD_CONFIG.cash;
+  const finalFareDisplay =
+    allPaymentDetails?.pretty_total_amount_wo_promo ||
+    formatPeso(
+      paymentDetails?.total_amount_wo_promo ??
+        paymentDetails?.total_amount ??
+        bookingDetails?.total_amount,
+    );
+  const totalFareDisplay =
+    allPaymentDetails?.pretty_total_amount ||
+    formatPeso(
+      paymentDetails?.total_amount ?? bookingDetails?.total_amount ?? 0,
+    );
+  const headerFareDisplay =
+    allPaymentDetails?.pretty_total_amount ||
+    formatPeso(
+      paymentDetails?.total_amount ?? bookingDetails?.total_amount ?? 0,
+    );
 
   // ── Unread message badge ────────────────────────────────────────────
   const getUnreadCount = usePostRequest();
@@ -177,9 +245,42 @@ const BookingStatusModal = ({
 
   const ekycDetails = riderDetails?.ekyc_details;
 
+  const toggleExpanded = () => setExpanded(prev => !prev);
+  const showTripDetails = confirmedBookingView && expanded;
+
   return (
     <View style={styles.overlay} onLayout={onLayout}>
       <View style={styles.container}>
+        {confirmedBookingView ? (
+          <View
+            style={styles.swipeHandleHit}
+            {...swipeResponder.panHandlers}
+            accessibilityRole="adjustable"
+            accessibilityLabel="Trip details sheet">
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={toggleExpanded}
+              style={styles.swipeHandleTouch}>
+              <View style={styles.swipeMarker} />
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {confirmedBookingView && showSafetyGuide ? (
+          <TouchableOpacity
+            testID="safety-guide-chip"
+            style={styles.safetyChip}
+            onPress={onSafetyGuidePress}>
+            <Text style={styles.safetyChipText}>Safety Guide</Text>
+          </TouchableOpacity>
+        ) : null}
+
+        {confirmedBookingView && statusBannerText ? (
+          <View style={styles.statusBanner}>
+            <Text style={styles.statusBannerText}>{statusBannerText}</Text>
+          </View>
+        ) : null}
+
         {/* Fare + Vehicle */}
         <TouchableOpacity
           style={styles.rowBetween}
@@ -193,15 +294,11 @@ const BookingStatusModal = ({
               <Text style={styles.changeText}>Tap to change</Text>
             )}
           </View>
-          {/* ✅ Show total_amount from payment_details */}
-          <Text style={styles.price}>
-            ₱{paymentDetails?.total_amount || bookingDetails?.total_amount || 0}
-          </Text>
+          <Text style={styles.price}>{headerFareDisplay}</Text>
         </TouchableOpacity>
 
-        {(bookingStatus === 2 || bookingStatus === 3) && (
+        {showTripDetails ? (
           <>
-            {/* Pickup & Dropoff */}
             <View style={styles.locationColumn}>
               <View style={styles.locationGroup}>
                 <View style={styles.locationButton}>
@@ -232,7 +329,6 @@ const BookingStatusModal = ({
               </View>
             </View>
 
-            {/* Fare Breakdown */}
             <View style={styles.fareBreakdown}>
               <View style={styles.fareRow}>
                 <Text
@@ -241,22 +337,26 @@ const BookingStatusModal = ({
                 </Text>
                 <Text
                   style={[styles.feeText, { fontFamily: 'Poppins SemiBold' }]}>
-                  ₱{paymentDetails?.total_amount}
+                  {finalFareDisplay}
                 </Text>
               </View>
-              {/* <View style={styles.fareRow}>
-                <Text style={styles.feeText}>Booking Fee</Text>
-                <Text style={styles.feeText}>
-                  ₱{paymentDetails?.booking_fee}
-                </Text>
-              </View> */}
+              <View style={styles.fareRow}>
+                <Text style={styles.feeText}>Total Fare w/ Discount</Text>
+                <Text style={styles.feeText}>{totalFareDisplay}</Text>
+              </View>
               <View style={styles.fareRow}>
                 <Text style={styles.feeText}>Payment Method</Text>
-                <Text style={styles.feeText}>{paymentDetails?.type}</Text>
+                <View style={styles.paymentMethodRow}>
+                  <Image
+                    source={paymentConfig.icon}
+                    style={styles.paymentMethodIcon}
+                  />
+                  <Text style={styles.feeText}>{paymentConfig.label}</Text>
+                </View>
               </View>
             </View>
           </>
-        )}
+        ) : null}
 
         <View style={styles.separator} />
 
@@ -311,16 +411,17 @@ const BookingStatusModal = ({
           </View>
         </View>
 
-        {/* Share Trip */}
-        <AppButton
-          title="Share Your Trip Details"
-          onPress={handleShareTrip}
-          mode="outlined"
-          buttonColor={colors.primary}
-          textColor={colors.primary}
-          isBold
-          noSpacing
-        />
+        {(!confirmedBookingView || expanded) && (
+          <AppButton
+            title="Share Your Trip Details"
+            onPress={handleShareTrip}
+            mode="outlined"
+            buttonColor={colors.primary}
+            textColor={colors.primary}
+            isBold
+            noSpacing
+          />
+        )}
       </View>
     </View>
   );
@@ -339,9 +440,57 @@ const getStyles = ({ colors }) =>
     },
     container: {
       backgroundColor: colors.onPrimary,
-      padding: 20,
-      elevation: 10,
+      paddingHorizontal: 20,
       paddingBottom: 50,
+      paddingTop: 8,
+      borderTopLeftRadius: 16,
+      borderTopRightRadius: 16,
+      elevation: 10,
+    },
+    swipeHandleHit: {
+      paddingVertical: 8,
+      alignItems: 'center',
+    },
+    swipeHandleTouch: {
+      paddingVertical: 4,
+      paddingHorizontal: 40,
+    },
+    swipeMarker: {
+      width: 48,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: '#084CF7',
+    },
+    safetyChip: {
+      alignSelf: 'flex-start',
+      height: 26,
+      paddingHorizontal: 10,
+      borderRadius: 4,
+      backgroundColor: '#084CF7',
+      justifyContent: 'center',
+      marginBottom: 10,
+    },
+    safetyChipText: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 11,
+      color: '#FFFFFF',
+    },
+    statusBanner: {
+      minHeight: 51,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 10,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 14,
+    },
+    statusBannerText: {
+      fontFamily: 'Poppins Medium',
+      fontWeight: '500',
+      fontSize: 16,
+      color: colors.onPrimary,
+      textAlign: 'center',
     },
     loadingRow: {
       flexDirection: 'row',
@@ -479,5 +628,15 @@ const getStyles = ({ colors }) =>
       fontFamily: 'Poppins Regular',
       fontSize: 16,
       color: colors.shadow,
+    },
+    paymentMethodRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    paymentMethodIcon: {
+      width: 18,
+      height: 18,
+      resizeMode: 'contain',
     },
   });

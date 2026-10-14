@@ -28,6 +28,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import {
   addAcknowledgedScheduledId,
   addMinimizedAdvanceBookingId,
+  clearAcknowledgedScheduledForBooking,
   clearBookingState,
   parkAdvanceBooking,
   removeMinimizedAdvanceBookingId,
@@ -83,7 +84,14 @@ import NoRidersAvailableModal from '@/Components/AlertBox/NoRidersAvailableModal
 import CancelPenaltyModal from '@/Components/AlertBox/CancelPenaltyModal';
 import SafetyGuideModal from '@/Components/SafetyGuide/SafetyGuideModal';
 import EmergencyButton from '@/Components/EmergencyButton';
-import { bookingKey } from '@/Hooks/bookingTransform';
+import {
+  advanceAcceptedAckKey,
+  bookingKey,
+  getAssignedRiderId,
+  isAdvanceAcceptedAcknowledged,
+  isReturnedToPool,
+  shouldShowRiderFoundAlert,
+} from '@/Hooks/bookingTransform';
 import { services as SERVICE_OPTIONS } from './Components/ServiceModal';
 import useNoRidersTimer from '@/Hooks/useNoRidersTimer';
 import useRiderEtaPoll from '@/Hooks/useRiderEtaPoll';
@@ -131,11 +139,6 @@ const HomeScreen = () => {
   const parkedAdvanceBookings = useSelector(selectParkedAdvanceBookings);
 
   const bookLater = useBookLaterConfig();
-
-  useParkedAdvanceBookingPoll({
-    customerId: userInfo?.id,
-    enabled: bookLater.enabled && parkedAdvanceBookings.length > 0,
-  });
 
   const [alertMessage, setAlertMessage] = useState('');
   const [showAlert, setShowAlert] = useState(false);
@@ -293,7 +296,16 @@ const HomeScreen = () => {
     if (!bookLater.enabled || Number(booking?.status) !== 5) {
       return;
     }
-    if (!booking?.id || acknowledgedScheduledIds.includes(booking.id)) {
+    const riderId = getAssignedRiderId(booking, rider_details);
+    if (
+      !booking?.id ||
+      !riderId ||
+      isAdvanceAcceptedAcknowledged(
+        acknowledgedScheduledIds,
+        booking.id,
+        riderId,
+      )
+    ) {
       return;
     }
     // status 5 without a rider is just "scheduled", not accepted
@@ -307,6 +319,16 @@ const HomeScreen = () => {
     }
     setShowAdvanceAccepted(true);
   };
+
+  useParkedAdvanceBookingPoll({
+    customerId: userInfo?.id,
+    enabled: bookLater.enabled && parkedAdvanceBookings.length > 0,
+    onBookingSynced: data => {
+      if (isReturnedToPool(data)) {
+        dispatch(clearAcknowledgedScheduledForBooking(data.id));
+      }
+    },
+  });
 
   const checkActiveBooking = usePostRequest();
   // Bookings the restore check rejected as stale/not ours; discovery skips them
@@ -353,6 +375,10 @@ const HomeScreen = () => {
       setSelectedPayment(snapshot.selectedPayment);
     }
     setShowWaitingBanner(true);
+    maybeShowAdvanceAcceptedModal(
+      booking,
+      snapshot.riderDetails ?? booking.rider_details,
+    );
   };
 
   const expandAdvanceTracking = useCallback(
@@ -407,7 +433,14 @@ const HomeScreen = () => {
       }),
     );
     dispatch(addMinimizedAdvanceBookingId(activeBooking.id));
-    dispatch(addAcknowledgedScheduledId(activeBooking.id));
+    const minimizeRiderId = getAssignedRiderId(activeBooking, riderDetails);
+    const minimizeAck = advanceAcceptedAckKey(
+      activeBooking.id,
+      minimizeRiderId,
+    );
+    if (minimizeAck) {
+      dispatch(addAcknowledgedScheduledId(minimizeAck));
+    }
     setShowWaitingBanner(false);
     setShowAdvanceAccepted(false);
     riderAlertShownRef.current = false;
@@ -429,7 +462,6 @@ const HomeScreen = () => {
 
   const inquireBooking = usePostRequest();
   const advanceLimitCheck = usePostRequest();
-  const autoCreatedAdvanceRef = useRef(false);
   const createBooking = usePostRequest();
   const updateBookingStatus = usePostRequest();
   const retryBooking = usePostRequest();
@@ -691,7 +723,14 @@ const HomeScreen = () => {
             new Date(booking.scheduled_pickup_at || booking.scheduled_at),
           );
         }
-        maybeShowAdvanceAcceptedModal(booking, booking.rider_details);
+        if (
+          isReturnedToPool(booking) ||
+          !hasRider(booking, booking.rider_details)
+        ) {
+          dispatch(clearAcknowledgedScheduledForBooking(booking.id));
+        } else {
+          maybeShowAdvanceAcceptedModal(booking, booking.rider_details);
+        }
         setIsRestoringBooking(false);
         return;
       }
@@ -730,10 +769,11 @@ const HomeScreen = () => {
           });
         }
 
-        // Show rider found alert if status is 1
         if (booking.status === 1 && !riderAlertShownRef.current) {
           AppUtil.debugDeep(riderDetails);
-          setShowRiderFound(true);
+          if (shouldShowRiderFoundAlert(booking)) {
+            setShowRiderFound(true);
+          }
           riderAlertShownRef.current = true;
         }
       }
@@ -929,15 +969,6 @@ const HomeScreen = () => {
   };
 
   const handleCreateBookingRequest = () => {
-    if (createBooking.error && autoCreatedAdvanceRef.current) {
-      // Advance booking failed after Confirm Date and Time: stay on Home.
-      autoCreatedAdvanceRef.current = false;
-      dispatch(setIsBooked(false));
-      dispatch(setInquireBookingResponse(null));
-      setScheduledAt(null);
-      setAdvanceBookingFlow(false);
-      setPickupConfirmPending(false);
-    }
     if (createBooking.error) {
       setAlertMessage(createBooking.error);
       setShowAlert(true);
@@ -951,7 +982,6 @@ const HomeScreen = () => {
     const results = createBooking?.response;
     AppUtil.debugDeep(results);
 
-    autoCreatedAdvanceRef.current = false;
     if (results?.code === 200) {
       // save to Redux (automatically persisted)
       dispatch(setIsConfirmed(true));
@@ -1021,9 +1051,16 @@ const HomeScreen = () => {
       );
 
       if (statusNum === 5) {
-        dispatch(setRiderDetails(rider_details));
-        applyBookingVehicle(data, rider_details);
-        maybeShowAdvanceAcceptedModal(data, rider_details);
+        if (isReturnedToPool(data) || !hasRider(data, rider_details)) {
+          dispatch(clearAcknowledgedScheduledForBooking(data.id));
+          dispatch(setRiderDetails({}));
+          setBookingVehicle(null);
+          setShowAdvanceAccepted(false);
+        } else {
+          dispatch(setRiderDetails(rider_details));
+          applyBookingVehicle(data, rider_details);
+          maybeShowAdvanceAcceptedModal(data, rider_details);
+        }
         setRiderLocation(null);
         setRiderEta(null);
         setRiderEtaReceivedAt(0);
@@ -1035,7 +1072,9 @@ const HomeScreen = () => {
           setRiderEtaReceivedAt(Date.now());
         }
         if (!riderAlertShownRef.current) {
-          setShowRiderFound(true);
+          if (shouldShowRiderFoundAlert(data)) {
+            setShowRiderFound(true);
+          }
           riderAlertShownRef.current = true;
         }
       } else {
@@ -1354,7 +1393,7 @@ const HomeScreen = () => {
     setShowPickDate(false);
     setSelectedPayment('cash');
     setPickupConfirmPending(false);
-    // Figma: with both points set, confirming the date books right away.
+    // Both points set: fetch fare and show confirm step (same as instant Book).
     if (pickupLocation && dropoffLocation) {
       setAutoBookAfterSchedule(true);
       return;
@@ -1365,7 +1404,7 @@ const HomeScreen = () => {
   };
 
   // Back from the location screen with both points: restore the chosen time
-  // and create the advance booking the same way as above.
+  // and fetch fare for the confirm step.
   const pendingScheduleRef = useRef(null);
   useEffect(() => {
     const pending = pendingScheduleRef.current;
@@ -1379,30 +1418,14 @@ const HomeScreen = () => {
     setAutoBookAfterSchedule(true);
   }, [pickupLocation, dropoffLocation]);
 
-  // Advance booking: date confirmed with both points set, so fetch the fare
-  // and create the booking straight away (no Book tap, no fare confirm).
-  const autoCreateAfterInquireRef = useRef(false);
+  // Advance booking: date confirmed with both points set → inquire fare, then
+  // BottomModal shows breakdown + Confirm (user taps Confirm to create).
   useEffect(() => {
     if (autoBookAfterSchedule && scheduledAt) {
       setAutoBookAfterSchedule(false);
-      autoCreateAfterInquireRef.current = true;
       triggerInquireBooking();
     }
   }, [autoBookAfterSchedule, scheduledAt]);
-
-  useEffect(() => {
-    if (autoCreateAfterInquireRef.current && inquireBookingResponse) {
-      autoCreateAfterInquireRef.current = false;
-      autoCreatedAdvanceRef.current = true;
-      triggerCreateBooking();
-    }
-  }, [inquireBookingResponse]);
-
-  useEffect(() => {
-    if (inquireBooking.error) {
-      autoCreateAfterInquireRef.current = false;
-    }
-  }, [inquireBooking.error]);
 
   const handleChoosePickup = () => {
     if (!dropoffLocation) {
@@ -1469,8 +1492,10 @@ const HomeScreen = () => {
   );
 
   const handleAdvanceAcceptedClose = () => {
-    if (activeBooking?.id) {
-      dispatch(addAcknowledgedScheduledId(activeBooking.id));
+    const riderId = getAssignedRiderId(activeBooking, riderDetails);
+    const ackKey = advanceAcceptedAckKey(activeBooking?.id, riderId);
+    if (ackKey) {
+      dispatch(addAcknowledgedScheduledId(ackKey));
     }
     setShowAdvanceAccepted(false);
   };
@@ -1487,6 +1512,9 @@ const HomeScreen = () => {
   const riderArrived =
     statusNum === 1 &&
     (Boolean(riderArrivedAt) || riderEta?.state === 'arrived');
+  const confirmedBookingView =
+    riderArrived || statusNum === 2 || statusNum === 3;
+
   const etaBannerText = riderArrived
     ? 'Your Rider has arrived'
     : statusNum === 1
@@ -1724,13 +1752,13 @@ const HomeScreen = () => {
           </View>
         )}
 
-        {showWaitingBanner && (
+        {showWaitingBanner && !confirmedBookingView && (
           <View style={[styles.banner, { bottom: modalHeight + 15 }]}>
             <Text style={styles.bannerText}>{etaBannerText}</Text>
           </View>
         )}
 
-        {(statusNum === 1 || statusNum === 2) && (
+        {(statusNum === 1 || statusNum === 2) && !confirmedBookingView && (
           <TouchableOpacity
             testID="safety-guide-chip"
             style={[
@@ -1919,6 +1947,16 @@ const HomeScreen = () => {
             selectedService={selectedService}
             onChangeService={() => setShowServiceModal(true)}
             vehicle={bookingVehicle}
+            confirmedBookingView={confirmedBookingView}
+            statusBannerText={
+              confirmedBookingView && showWaitingBanner && etaBannerText
+                ? etaBannerText
+                : ''
+            }
+            showSafetyGuide={
+              confirmedBookingView && (statusNum === 1 || statusNum === 2)
+            }
+            onSafetyGuidePress={() => setShowSafetyGuide(true)}
           />
         )}
 

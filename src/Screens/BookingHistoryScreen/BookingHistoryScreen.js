@@ -25,7 +25,7 @@ import {
 import {
   canRebookHistory,
   getBookingTypeLabel,
-  isAcceptedAdvanceBooking,
+  isAdvanceOnLiveTripMap,
   transformBooking,
 } from '@/Hooks/bookingTransform';
 
@@ -154,7 +154,7 @@ const BookingHistoryScreen = () => {
   };
 
   const handleCardPress = item => {
-    if (isAcceptedAdvanceBooking(item)) {
+    if (isAdvanceOnLiveTripMap(item)) {
       navigation.navigate('HomeScreen', {
         expandAdvanceBookingId: item.id,
       });

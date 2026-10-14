@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   FlatList,
   Image,
+  Linking,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -26,33 +27,9 @@ import ReportIssueModal from './Components/ReportIssueModal';
 import {
   canCancelAdvanceBooking,
   getHistoryBadgeColor,
+  getRawStatus,
   getRiderPhoto,
 } from '@/Hooks/bookingTransform';
-
-// pretty_mobile_no (always filled by the backend now), else the raw number;
-// shown as Figma's "+63 999 999 9999".
-const getRiderContact = rd => {
-  const src = String(
-    rd?.ekyc_details?.pretty_mobile_no ||
-      rd?.pretty_mobile_no ||
-      rd?.ekyc_details?.mobile_no ||
-      rd?.mobile_no ||
-      '',
-  ).trim();
-  if (!src) {
-    return 'Not available';
-  }
-  let d = src.replace(/\D/g, '');
-  if (d.startsWith('0')) {
-    d = `63${d.slice(1)}`;
-  } else if (d.length === 10 && d.startsWith('9')) {
-    d = `63${d}`;
-  }
-  if (d.length === 12 && d.startsWith('63')) {
-    return `+63 ${d.slice(2, 5)} ${d.slice(5, 8)} ${d.slice(8)}`;
-  }
-  return src;
-};
 
 const BookingDetailsScreen = () => {
   const { colors } = useTheme();
@@ -64,6 +41,49 @@ const BookingDetailsScreen = () => {
   const { bookingDetails: initialDetails } = route.params;
   const userInfo = useSelector(selectUserInfo);
   const [bookingDetails, setBookingDetails] = useState(initialDetails);
+  const contactRequest = usePostRequest();
+  const [riderContact, setRiderContact] = useState(null);
+
+  useEffect(() => {
+    const status = getRawStatus(bookingDetails);
+    const hasRider = bookingDetails.riderName !== 'No rider assigned';
+    if (status !== 3 || !bookingDetails?.id || !hasRider || !userInfo?.id) {
+      setRiderContact(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setRiderContact('loading');
+      const { response, error } = await contactRequest.makePostRequest(
+        Constants.ENDPOINT.GET_BOOKING_CONTACT,
+        {
+          booking_id: bookingDetails.id,
+          user_type: 'customer',
+          customer_id: userInfo.id,
+        },
+      );
+      if (cancelled) {
+        return;
+      }
+      const payload = response?.data;
+      if (payload?.proxy_contact_number) {
+        setRiderContact({
+          number: payload.proxy_contact_number,
+          dialUri: payload.dial_uri,
+        });
+        return;
+      }
+      const msg = String(error || response?.message || '').toLowerCase();
+      if (msg.includes('expired')) {
+        setRiderContact('expired');
+      } else {
+        setRiderContact('unavailable');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [bookingDetails?.id, bookingDetails?.raw_status, userInfo?.id]);
 
   // Advance booking cancel (Figma 296-3522): preview → dialog → cancel.
   const [cancelPreview, setCancelPreview] = useState(null);
@@ -402,12 +422,31 @@ const BookingDetailsScreen = () => {
             </View>
           </View>
           <View style={styles.divider} />
-          <View style={styles.paymentRow}>
-            <Text style={styles.paymentLabel}>Rider Contact Number :</Text>
-            <Text style={styles.paymentMethodText}>
-              {getRiderContact(bookingDetails.rider_details)}
-            </Text>
-          </View>
+          {getRawStatus(bookingDetails) === 3 ? (
+            <View style={styles.paymentRow}>
+              <Text style={styles.paymentLabel}>Rider Contact Number :</Text>
+              {riderContact === 'loading' ? (
+                <Text style={styles.paymentMethodText}>Loading…</Text>
+              ) : riderContact === 'expired' ? (
+                <Text style={styles.contactExpiredText}>
+                  Contact access expired.
+                </Text>
+              ) : riderContact?.number ? (
+                <TouchableOpacity
+                  onPress={() =>
+                    Linking.openURL(
+                      riderContact.dialUri || `tel:${riderContact.number}`,
+                    )
+                  }>
+                  <Text style={styles.paymentMethodText}>
+                    {riderContact.number}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <Text style={styles.paymentMethodText}>Not available</Text>
+              )}
+            </View>
+          ) : null}
           <View style={styles.divider} />
         </>
       )}
@@ -789,6 +828,12 @@ const getStyles = ({ colors, insets }) =>
       fontFamily: 'Poppins Light',
       fontSize: 12,
       color: colors.shadow,
+    },
+    contactExpiredText: {
+      fontFamily: 'Poppins Light',
+      fontSize: 12,
+      color: colors.grey4,
+      fontStyle: 'italic',
     },
     riderRow: {
       flexDirection: 'row',
