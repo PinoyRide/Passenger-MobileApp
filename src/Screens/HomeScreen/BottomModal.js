@@ -104,6 +104,9 @@ const BottomModal = ({
       dropoff,
       onPickupSelect: item => onPickupChange?.(item),
       onDropoffSelect: item => onDropoffChange?.(item),
+      // X buttons on the location screen clear the saved points too.
+      onPickupClear: () => onPickupChange?.(null),
+      onDropoffClear: () => onDropoffChange?.(null),
     });
   };
 

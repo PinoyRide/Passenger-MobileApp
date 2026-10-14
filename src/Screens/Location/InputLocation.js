@@ -565,6 +565,7 @@ const InputLocation = () => {
                   onPress={() => {
                     setPickup('');
                     setPickupLocation(null);
+                    route.params?.onPickupClear?.();
                   }}>
                   <Image
                     source={require('@/Assets/Common/Close.png')}
@@ -605,6 +606,7 @@ const InputLocation = () => {
                   onPress={() => {
                     setDropoff('');
                     setDropoffLocation(null);
+                    route.params?.onDropoffClear?.();
                   }}>
                   <Image
                     source={require('@/Assets/Common/Close.png')}

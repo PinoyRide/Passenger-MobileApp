@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Dimensions,
@@ -79,6 +79,8 @@ import useNoRidersTimer from '@/Hooks/useNoRidersTimer';
 import useRiderEtaPoll from '@/Hooks/useRiderEtaPoll';
 import useAdvanceBookingDiscovery from '@/Hooks/useAdvanceBookingDiscovery';
 
+// Matches backend ADVANCE_MAX_OPEN_PER_CUSTOMER.
+const ADVANCE_MAX_OPEN = 3;
 const OFFLINE_ALERT_TITLE = 'No Internet Connection';
 const OFFLINE_ALERT_MESSAGE =
   'This action needs an internet connection. Please reconnect and try again.';
@@ -292,6 +294,8 @@ const HomeScreen = () => {
   const [isRestoringBooking, setIsRestoringBooking] = useState(false);
 
   const inquireBooking = usePostRequest();
+  const advanceLimitCheck = usePostRequest();
+  const autoCreatedAdvanceRef = useRef(false);
   const createBooking = usePostRequest();
   const updateBookingStatus = usePostRequest();
   const retryBooking = usePostRequest();
@@ -417,6 +421,29 @@ const HomeScreen = () => {
     });
   }, [userInfo?.id]);
 
+  // Re-check the saved booking whenever Home regains focus, so a booking
+  // cancelled elsewhere (e.g. from Booking History) doesn't leave a stale card.
+  const homeFocusedOnceRef = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (!homeFocusedOnceRef.current) {
+        homeFocusedOnceRef.current = true;
+        return;
+      }
+      if (!activeBooking?.id || checkActiveBooking.loading) {
+        return;
+      }
+      checkActiveBooking.makePostRequest(
+        Constants.ENDPOINT.GET_BOOKING_DETAILS,
+        {
+          booking_id: activeBooking.id,
+          customer_id: userInfo?.id,
+          include_rider_eta: '1',
+        },
+      );
+    }, [activeBooking?.id, userInfo?.id]),
+  );
+
   // Show location error if any
   useEffect(() => {
     if (locationError && permissionStatus === 'granted') {
@@ -473,6 +500,7 @@ const HomeScreen = () => {
         staleBookingIdsRef.current.add(bookingKey(booking));
         dispatch(clearBookingState());
         clearTransientBookingUi();
+        setShowWaitingBanner(false);
         setIsRestoringBooking(false);
         return;
       }
@@ -765,6 +793,15 @@ const HomeScreen = () => {
   };
 
   const handleCreateBookingRequest = () => {
+    if (createBooking.error && autoCreatedAdvanceRef.current) {
+      // Advance booking failed after Confirm Date and Time: stay on Home.
+      autoCreatedAdvanceRef.current = false;
+      dispatch(setIsBooked(false));
+      dispatch(setInquireBookingResponse(null));
+      setScheduledAt(null);
+      setAdvanceBookingFlow(false);
+      setPickupConfirmPending(false);
+    }
     if (createBooking.error) {
       setAlertMessage(createBooking.error);
       setShowAlert(true);
@@ -778,6 +815,7 @@ const HomeScreen = () => {
     const results = createBooking?.response;
     AppUtil.debugDeep(results);
 
+    autoCreatedAdvanceRef.current = false;
     if (results?.code === 200) {
       // save to Redux (automatically persisted)
       dispatch(setIsConfirmed(true));
@@ -1011,6 +1049,10 @@ const HomeScreen = () => {
         preview: true,
       },
     );
+    if (error && /no longer be cancelled/i.test(String(error))) {
+      finishFullCancel();
+      return;
+    }
     if (error) {
       // Backend without migration 0102 yet: keep the old cancel working.
       if (/404/.test(String(error))) {
@@ -1039,6 +1081,11 @@ const HomeScreen = () => {
     );
     setPenaltyLoading(false);
     setPenaltyPreview(null);
+    if (error && /no longer be cancelled/i.test(String(error))) {
+      // Already cancelled or finished elsewhere: just clear the stale card.
+      finishFullCancel();
+      return;
+    }
     if (error) {
       setAlertMessage(error);
       setShowAlert(true);
@@ -1102,6 +1149,9 @@ const HomeScreen = () => {
         }
       },
       onDropoffSelect: location => dispatch(setDropoffLocation(location)),
+      // X buttons on the location screen clear the saved points too.
+      onPickupClear: () => dispatch(setPickupLocation(null)),
+      onDropoffClear: () => dispatch(setDropoffLocation(null)),
     });
   };
 
@@ -1114,6 +1164,38 @@ const HomeScreen = () => {
       Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
       return;
     }
+    // Check the open advance booking limit before any location/date steps.
+    if (!scheduledAt && userInfo?.id) {
+      const { response } = await advanceLimitCheck.makePostRequest(
+        Constants.ENDPOINT.GET_UPCOMING_BOOKINGS,
+        { customer_id: userInfo.id, page: 1 },
+      );
+      const list = response?.data?.bookings;
+      if (Array.isArray(list)) {
+        const now = Date.now();
+        const openCount = list.filter(b => {
+          if (!b?.is_advance) {
+            return false;
+          }
+          const status = Number(b.status);
+          if (status !== 5 && status !== 1) {
+            return false;
+          }
+          const hasRider =
+            b.rider_assigned === true ||
+            Boolean(b.rider_details && b.rider_details.id);
+          const pickupMs = new Date(b.scheduled_pickup_at).getTime();
+          return hasRider || !(pickupMs < now);
+        }).length;
+        if (openCount >= ADVANCE_MAX_OPEN) {
+          setAlertMessage(
+            `You can have at most ${ADVANCE_MAX_OPEN} open advance bookings`,
+          );
+          setShowAlert(true);
+          return;
+        }
+      }
+    }
     setAdvanceBookingFlow(true);
     if (!scheduledAt) {
       if (paymentBeforeScheduleRef.current === null) {
@@ -1121,16 +1203,13 @@ const HomeScreen = () => {
       }
       setSelectedPayment('cash');
     }
-    if (!pickupLocation) {
-      openInputLocation({ returnAfterPickup: true, focusDropoff: false });
+    // Flow: pick up and drop off first, then the date and time.
+    if (!pickupLocation || !dropoffLocation) {
+      openInputLocation({ focusDropoff: Boolean(pickupLocation) });
       return;
     }
     if (!scheduledAt) {
       setShowPickDate(true);
-      return;
-    }
-    if (!dropoffLocation) {
-      openInputLocation();
     }
   };
 
@@ -1178,6 +1257,7 @@ const HomeScreen = () => {
   useEffect(() => {
     if (autoCreateAfterInquireRef.current && inquireBookingResponse) {
       autoCreateAfterInquireRef.current = false;
+      autoCreatedAdvanceRef.current = true;
       triggerCreateBooking();
     }
   }, [inquireBookingResponse]);
@@ -1189,6 +1269,10 @@ const HomeScreen = () => {
   }, [inquireBooking.error]);
 
   const handleChoosePickup = () => {
+    if (!dropoffLocation) {
+      openInputLocation({ focusDropoff: true });
+      return;
+    }
     if (scheduledAt) {
       // date-first order: date is set, go on to drop-off
       setPickupConfirmPending(false);
@@ -1216,11 +1300,17 @@ const HomeScreen = () => {
       }
       return;
     }
-    if (pickupLocation && !pickDatePromptedRef.current) {
+    if (pickupLocation && dropoffLocation && !pickDatePromptedRef.current) {
       pickDatePromptedRef.current = true;
       setShowPickDate(true);
     }
-  }, [advanceBookingFlow, bookLater.enabled, pickupLocation, scheduledAt]);
+  }, [
+    advanceBookingFlow,
+    bookLater.enabled,
+    pickupLocation,
+    dropoffLocation,
+    scheduledAt,
+  ]);
 
   useEffect(() => {
     if (scheduledAt) {
