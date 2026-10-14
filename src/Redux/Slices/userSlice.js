@@ -1,5 +1,8 @@
 import { createSlice } from '@reduxjs/toolkit';
 
+// Matches ADVANCE_MAX_OPEN_PER_CUSTOMER on the backend.
+const ADVANCE_PARK_LIMIT = 3;
+
 // get_details returns the rider flat (first_name, mobile_no, ...) with no
 // ekyc_details; the UI reads ekyc_details.*, so mirror the flat fields there.
 const normalizeRiderDetails = rd => {
@@ -72,6 +75,10 @@ const initialState = {
   isConfirmed: false,
   inquireBookingResponse: null,
   acknowledgedScheduledIds: [],
+  // Accepted advance bookings minimized from Home; discovery must not re-open them.
+  minimizedAdvanceBookingIds: [],
+  // Snapshots for minimized advance bookings (still polled in the background).
+  parkedAdvanceBookings: [],
   // Completed bookings the passenger already rated or skipped (no re-prompt).
   ratedBookingIds: [],
 };
@@ -86,6 +93,8 @@ const userSlice = createSlice({
       if (state.userInfo?.id !== action.payload?.id) {
         state.ratedBookingIds = [];
         state.acknowledgedScheduledIds = [];
+        state.minimizedAdvanceBookingIds = [];
+        state.parkedAdvanceBookings = [];
       }
       state.userInfo = action.payload;
     },
@@ -93,6 +102,8 @@ const userSlice = createSlice({
       state.userInfo = null;
       state.ratedBookingIds = [];
       state.acknowledgedScheduledIds = [];
+      state.minimizedAdvanceBookingIds = [];
+      state.parkedAdvanceBookings = [];
     },
     setHasShownLoginSuccess: (state, action) => {
       state.hasShownLoginSuccess = action.payload;
@@ -178,6 +189,58 @@ const userSlice = createSlice({
           state.acknowledgedScheduledIds.slice(-50);
       }
     },
+    addMinimizedAdvanceBookingId: (state, action) => {
+      const id = String(action.payload ?? '');
+      if (!id) {
+        return;
+      }
+      const list = state.minimizedAdvanceBookingIds || [];
+      if (!list.includes(id)) {
+        list.push(id);
+      }
+      state.minimizedAdvanceBookingIds = list.slice(-50);
+    },
+    removeMinimizedAdvanceBookingId: (state, action) => {
+      const id = String(action.payload ?? '');
+      state.minimizedAdvanceBookingIds = (
+        state.minimizedAdvanceBookingIds || []
+      ).filter(x => x !== id);
+    },
+    parkAdvanceBooking: (state, action) => {
+      const snapshot = action.payload;
+      const bookingId = String(snapshot?.booking?.id ?? '');
+      if (!bookingId) {
+        return;
+      }
+      const list = (state.parkedAdvanceBookings || []).filter(
+        p => String(p.booking?.id) !== bookingId,
+      );
+      list.push(snapshot);
+      state.parkedAdvanceBookings = list.slice(-ADVANCE_PARK_LIMIT);
+    },
+    updateParkedAdvanceBooking: (state, action) => {
+      const { bookingId, patch } = action.payload || {};
+      const id = String(bookingId ?? '');
+      if (!id || !patch) {
+        return;
+      }
+      const idx = (state.parkedAdvanceBookings || []).findIndex(
+        p => String(p.booking?.id) === id,
+      );
+      if (idx === -1) {
+        return;
+      }
+      state.parkedAdvanceBookings[idx] = {
+        ...state.parkedAdvanceBookings[idx],
+        ...patch,
+      };
+    },
+    removeParkedAdvanceBooking: (state, action) => {
+      const id = String(action.payload ?? '');
+      state.parkedAdvanceBookings = (state.parkedAdvanceBookings || []).filter(
+        p => String(p.booking?.id) !== id,
+      );
+    },
     addRatedBookingId: (state, action) => {
       const id = String(action.payload ?? '');
       if (!id) {
@@ -224,6 +287,11 @@ export const {
   setIsConfirmed,
   setInquireBookingResponse,
   addAcknowledgedScheduledId,
+  addMinimizedAdvanceBookingId,
+  removeMinimizedAdvanceBookingId,
+  parkAdvanceBooking,
+  updateParkedAdvanceBooking,
+  removeParkedAdvanceBooking,
   clearBookingState,
 } = userSlice.actions;
 
@@ -246,6 +314,10 @@ export const selectInquireBookingResponse = state =>
   state.user.inquireBookingResponse;
 export const selectAcknowledgedScheduledIds = state =>
   state.user.acknowledgedScheduledIds;
+export const selectMinimizedAdvanceBookingIds = state =>
+  state.user.minimizedAdvanceBookingIds || [];
+export const selectParkedAdvanceBookings = state =>
+  state.user.parkedAdvanceBookings || [];
 
 export default userSlice.reducer;
 

@@ -13,7 +13,8 @@ import { useDispatch, useSelector } from 'react-redux';
 import { selectUserInfo } from '@/Redux/Slices/userSlice';
 import CancelPenaltyModal from '@/Components/AlertBox/CancelPenaltyModal';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { AlertBox } from '@/Components';
+import { AlertBox, AppButton } from '@/Components';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppUtil, Constants } from '@/Utils';
 import usePostRequest from '@/Services/Api';
 import {
@@ -22,7 +23,11 @@ import {
   setSelectedService,
 } from '@/Redux/Slices/userSlice';
 import ReportIssueModal from './Components/ReportIssueModal';
-import { getRiderPhoto } from '@/Hooks/bookingTransform';
+import {
+  canCancelAdvanceBooking,
+  getHistoryBadgeColor,
+  getRiderPhoto,
+} from '@/Hooks/bookingTransform';
 
 // pretty_mobile_no (always filled by the backend now), else the raw number;
 // shown as Figma's "+63 999 999 9999".
@@ -51,7 +56,8 @@ const getRiderContact = rd => {
 
 const BookingDetailsScreen = () => {
   const { colors } = useTheme();
-  const styles = getStyles({ colors });
+  const insets = useSafeAreaInsets();
+  const styles = getStyles({ colors, insets });
   const navigation = useNavigation();
   const route = useRoute();
   const dispatch = useDispatch();
@@ -64,9 +70,7 @@ const BookingDetailsScreen = () => {
   const [cancelLoading, setCancelLoading] = useState(false);
   const cancelAdvance = usePostRequest();
   const isCancelled = /^cancel/i.test(String(bookingDetails.status || ''));
-  const canCancelAdvance =
-    Boolean(bookingDetails.is_advance) &&
-    /^(scheduled|accepted)/i.test(String(bookingDetails.status || ''));
+  const canCancelAdvance = canCancelAdvanceBooking(bookingDetails);
   const fmtAmount = v => (Number(v) || 0).toFixed(2);
   const displayAmount = isCancelled
     ? fmtAmount(bookingDetails.penalty_amount)
@@ -111,6 +115,7 @@ const BookingDetailsScreen = () => {
     const result = response?.data || {};
     setBookingDetails(prev => ({
       ...prev,
+      raw_status: 4,
       status: 'Cancelled',
       pretty_status: 'Cancelled',
       penalty_amount: result.penalty_amount ?? 0,
@@ -213,17 +218,6 @@ const BookingDetailsScreen = () => {
         ))}
       </View>
     );
-  };
-
-  const getStatusColor = status => {
-    const statusColors = {
-      Completed: colors.completed || '#4CAF50',
-      Cancelled: colors.cancelled || '#F44336',
-      Pending: '#FFA726',
-      Accepted: '#42A5F5',
-      'On the way': '#66BB6A',
-    };
-    return statusColors[status] || '#9E9E9E';
   };
 
   // --- Fare breakdown helpers -------------------------------------------
@@ -468,6 +462,9 @@ const BookingDetailsScreen = () => {
           <Text style={styles.headerTitle}>Booking Details</Text>
           <View style={styles.spacing} />
         </View>
+        {bookingDetails.is_advance && bookingDetails.detailsDate ? (
+          <Text style={styles.headerDate}>{bookingDetails.detailsDate}</Text>
+        ) : null}
       </View>
 
       {/* Content */}
@@ -480,7 +477,10 @@ const BookingDetailsScreen = () => {
                 style={[
                   styles.statusBadge,
                   {
-                    backgroundColor: getStatusColor(bookingDetails.status),
+                    backgroundColor: getHistoryBadgeColor(
+                      bookingDetails.status,
+                      colors,
+                    ),
                   },
                 ]}>
                 <Text style={styles.statusText}>{bookingDetails.status}</Text>
@@ -523,36 +523,44 @@ const BookingDetailsScreen = () => {
                 <Text style={styles.rebookText}>Rebook</Text>
               </TouchableOpacity>
             )}
-
-            {canCancelAdvance && (
-              <TouchableOpacity
-                style={styles.cancelAdvanceBtn}
-                disabled={cancelLoading}
-                onPress={handleCancelAdvance}
-                testID="cancel-advance-button">
-                <Text style={styles.cancelAdvanceText}>
-                  {cancelLoading ? 'Please wait...' : 'Cancel Booking'}
-                </Text>
-              </TouchableOpacity>
-            )}
           </View>
         }
         data={data}
         renderItem={renderItem}
         keyExtractor={item => item.key}
+        style={styles.list}
         contentContainerStyle={styles.scrollViewContent}
       />
+
+      {canCancelAdvance ? (
+        <View style={styles.footer}>
+          <AppButton
+            title={cancelLoading ? 'Please wait...' : 'Cancel Booking'}
+            onPress={handleCancelAdvance}
+            disabled={cancelLoading}
+            buttonColor={colors.primary}
+            textColor={colors.shadow}
+            noSpacing
+            isBold
+            featureStyle={styles.cancelAdvanceBtn}
+            labelStyle={styles.cancelAdvanceText}
+          />
+        </View>
+      ) : null}
     </View>
   );
 };
 
 export default BookingDetailsScreen;
 
-const getStyles = ({ colors }) =>
+const getStyles = ({ colors, insets }) =>
   StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: colors.onPrimary,
+    },
+    list: {
+      flex: 1,
     },
     headerContainer: {
       backgroundColor: colors.primary,
@@ -582,6 +590,14 @@ const getStyles = ({ colors }) =>
       color: colors.onPrimary,
       textAlign: 'center',
       flex: 1,
+    },
+    headerDate: {
+      fontFamily: 'Poppins Regular',
+      fontSize: 12,
+      fontWeight: '400',
+      color: colors.onPrimary,
+      textAlign: 'center',
+      marginTop: 8,
     },
     scrollViewContent: {
       paddingVertical: 10,
@@ -655,19 +671,19 @@ const getStyles = ({ colors }) =>
       paddingVertical: 5,
       borderRadius: 8,
     },
+    footer: {
+      paddingHorizontal: 16,
+      paddingTop: 8,
+      paddingBottom: Math.max(insets.bottom, 16),
+      backgroundColor: colors.onPrimary,
+    },
     cancelAdvanceBtn: {
-      marginTop: 16,
-      height: 44,
-      borderRadius: 22,
-      borderWidth: 1,
-      borderColor: '#E4423F',
-      alignItems: 'center',
-      justifyContent: 'center',
+      height: 50,
+      marginVertical: 0,
     },
     cancelAdvanceText: {
       fontFamily: 'Poppins Medium',
-      fontSize: 15,
-      color: '#E4423F',
+      fontSize: 16,
     },
     rebookText: {
       fontWeight: '400',

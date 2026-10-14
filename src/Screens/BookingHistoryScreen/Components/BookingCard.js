@@ -1,6 +1,7 @@
 import React from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
+import { getHistoryBadgeColor } from '@/Hooks/bookingTransform';
 
 const BookingCard = ({
   image,
@@ -14,7 +15,7 @@ const BookingCard = ({
 }) => {
   const { colors } = useTheme();
   const styles = getStyles({ colors });
-  const isCompleted = status === 'Completed';
+  const showRebook = typeof onRebook === 'function';
 
   return (
     <View style={styles.card}>
@@ -23,22 +24,20 @@ const BookingCard = ({
       <View style={{ flex: 1 }}>
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.subtitle}>To {destination}</Text>
-        <Text style={styles.date}>{date}</Text>
+        {date ? <Text style={styles.date}>{date}</Text> : null}
 
-        <TouchableOpacity style={styles.rebookBtn} onPress={onRebook}>
-          <Text style={styles.rebookText}>Rebook</Text>
-        </TouchableOpacity>
+        {showRebook ? (
+          <TouchableOpacity style={styles.rebookBtn} onPress={onRebook}>
+            <Text style={styles.rebookText}>Rebook</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <View style={{ alignItems: 'flex-end' }}>
         <View
           style={[
             styles.statusBadge,
-            {
-              backgroundColor: isCompleted
-                ? colors.completed
-                : colors.cancelled,
-            },
+            { backgroundColor: getHistoryBadgeColor(status, colors) },
           ]}>
           <Text style={styles.statusText}>{status}</Text>
         </View>

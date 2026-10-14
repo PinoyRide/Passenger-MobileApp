@@ -23,7 +23,9 @@ import {
   setSelectedService,
 } from '@/Redux/Slices/userSlice';
 import {
+  canRebookHistory,
   getBookingTypeLabel,
+  isAcceptedAdvanceBooking,
   transformBooking,
 } from '@/Hooks/bookingTransform';
 
@@ -152,6 +154,12 @@ const BookingHistoryScreen = () => {
   };
 
   const handleCardPress = item => {
+    if (isAcceptedAdvanceBooking(item)) {
+      navigation.navigate('HomeScreen', {
+        expandAdvanceBookingId: item.id,
+      });
+      return;
+    }
     navigation.navigate('BookingDetailsScreen', { bookingDetails: item });
   };
 
@@ -165,7 +173,9 @@ const BookingHistoryScreen = () => {
         date={item.date}
         price={item.price}
         penaltyAmount={item.penalty_amount}
-        onRebook={() => handleRebook(item)}
+        onRebook={
+          canRebookHistory(item.status) ? () => handleRebook(item) : undefined
+        }
       />
     </TouchableOpacity>
   );

@@ -1,8 +1,10 @@
 const IS_DEV = true;
 
 const PROD_URL = '';
-const DEV_URL = 'https://riderapp.escarez.com/api/';
-// const DEV_URL = 'https://pinoy-ride-api.onrender.com/api/';
+// PR CHECK: revert DEV_URL to remote before opening a PR — do not commit localhost/LAN URLs.
+// const DEV_URL = 'https://riderapp.escarez.com/api/';
+// Local only — iOS Simulator: 127.0.0.1 | Android Emulator: 10.0.2.2 | Physical device: Mac LAN IP
+const DEV_URL = 'http://127.0.0.1:8001/api/';
 
 const BASE_DEV = {
   API_OK: 1,
@@ -61,7 +63,7 @@ const BASE_DEV = {
   },
 
   FEATURE_STATUS: {
-    BOOK_LATER: false,
+    BOOK_LATER: true,
   },
 
   MODULES_IDENTIFIERS: {},

@@ -19,8 +19,93 @@ export const getStatusLabel = status => {
     2: 'On the way',
     3: 'Completed',
     4: 'Cancelled',
+    5: 'Scheduled',
   };
   return statuses[status] || 'Unknown';
+};
+
+export const getRawStatus = booking =>
+  Number(booking?.raw_status ?? booking?.status);
+
+export const hasAssignedRider = booking =>
+  Boolean(booking?.rider_assigned) ||
+  Boolean(booking?.rider_details && Object.keys(booking.rider_details).length);
+
+// Accepted (or started) Book Later rows show Figma's "Advance Booking" chip.
+export const isAcceptedAdvanceBooking = booking => {
+  if (!booking?.is_advance) {
+    return false;
+  }
+  const status = getRawStatus(booking);
+  if (![1, 2, 5].includes(status)) {
+    return false;
+  }
+  return status !== 5 || hasAssignedRider(booking);
+};
+
+export const getDisplayStatus = booking => {
+  if (isAcceptedAdvanceBooking(booking)) {
+    return 'Advance Booking';
+  }
+  return booking.pretty_status || getStatusLabel(getRawStatus(booking));
+};
+
+export const getHistoryBadgeColor = (status, colors) => {
+  const s = String(status || '');
+  if (s === 'Completed') {
+    return colors.completed;
+  }
+  if (/^cancel/i.test(s)) {
+    return colors.cancelled;
+  }
+  if (
+    s === 'Advance Booking' ||
+    s === 'Accepted' ||
+    s === 'On the way' ||
+    s === 'Trip Started'
+  ) {
+    return colors.blue;
+  }
+  if (s === 'Scheduled' || s === 'Pending') {
+    return '#FFA726';
+  }
+  return colors.cancelled;
+};
+
+export const canRebookHistory = status => {
+  const s = String(status || '');
+  return s === 'Completed' || /^cancel/i.test(s);
+};
+
+export const canCancelAdvanceBooking = booking =>
+  Boolean(booking?.is_advance) && [0, 1, 2, 5].includes(getRawStatus(booking));
+
+// Figma 8:16677 header: "28 May 2025 | 01:42 PM"
+export const formatDetailsDateTime = value => {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) {
+    return String(value || '');
+  }
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  const pad = n => String(n).padStart(2, '0');
+  const h = d.getHours() % 12 || 12;
+  const ampm = d.getHours() < 12 ? 'AM' : 'PM';
+  return `${pad(d.getDate())} ${
+    months[d.getMonth()]
+  } ${d.getFullYear()} | ${pad(h)}:${pad(d.getMinutes())} ${ampm}`;
 };
 
 export const capitalizeFirst = str => {
@@ -66,33 +151,36 @@ const formatScheduledPickup = value => {
   )} - ${pad(h)}:${pad(d.getMinutes())} ${ampm}`;
 };
 
-export const transformBooking = booking => ({
-  ...booking,
-  title: getBookingTypeLabel(booking.booking_type),
-  image: getBookingTypeImage(booking.booking_type),
-  // An advance booking a rider already holds stays at status 5 until pickup;
-  // label it Accepted rather than Scheduled.
-  status:
-    booking.is_advance &&
-    Number(booking.status) === 5 &&
-    (booking.rider_assigned ||
-      (booking.rider_details && Object.keys(booking.rider_details).length))
-      ? 'Accepted'
-      : booking.pretty_status || getStatusLabel(booking.status),
-  destination: booking.dropoff_location,
-  pickup: booking.pickup_location,
-  date:
-    booking.is_advance && booking.scheduled_pickup_at
-      ? formatScheduledPickup(booking.scheduled_pickup_at)
-      : `${booking.date_created} - ${booking.time_created}`,
-  price: booking.payment_details?.total_amount?.toFixed(2) || '0.00',
-  bookingId: booking.ref_code,
-  paymentMethod: capitalizeFirst(booking.payment_type),
-  riderName: getRiderName(booking.rider_details),
-  riderRating: booking.booking_ratings?.rate
-    ? parseFloat(booking.booking_ratings.rate)
-    : null,
-});
+export const transformBooking = booking => {
+  const raw_status = Number.isFinite(Number(booking.raw_status))
+    ? Number(booking.raw_status)
+    : Number(booking.status);
+  const mapped = {
+    ...booking,
+    raw_status,
+    title: getBookingTypeLabel(booking.booking_type),
+    image: getBookingTypeImage(booking.booking_type),
+    destination: booking.dropoff_location,
+    pickup: booking.pickup_location,
+    date:
+      booking.is_advance && booking.scheduled_pickup_at
+        ? formatScheduledPickup(booking.scheduled_pickup_at)
+        : `${booking.date_created} - ${booking.time_created}`,
+    detailsDate:
+      booking.is_advance && booking.scheduled_pickup_at
+        ? formatDetailsDateTime(booking.scheduled_pickup_at)
+        : null,
+    price: booking.payment_details?.total_amount?.toFixed(2) || '0.00',
+    bookingId: booking.ref_code,
+    paymentMethod: capitalizeFirst(booking.payment_type),
+    riderName: getRiderName(booking.rider_details),
+    riderRating: booking.booking_ratings?.rate
+      ? parseFloat(booking.booking_ratings.rate)
+      : null,
+  };
+  mapped.status = getDisplayStatus(mapped);
+  return mapped;
+};
 
 // Rider photo: eKYC selfie first, then legacy top-level selfie fields.
 export const getRiderPhoto = rd =>

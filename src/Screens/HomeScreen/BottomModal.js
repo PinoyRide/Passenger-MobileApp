@@ -43,6 +43,8 @@ const BottomModal = ({
   showAdvanceBooking = false,
   onAdvanceBooking,
   advanceCashOnlyNote = false,
+  showMinimizeButton = false,
+  onMinimizePress,
 }) => {
   const { colors } = useTheme();
   const styles = getStyles({ colors });
@@ -167,13 +169,27 @@ const BottomModal = ({
             ) : (
               <TouchableOpacity
                 onPress={onChangeService}
-                disabled={isConfirmed}>
+                disabled={isConfirmed}
+                style={styles.serviceTitleBtn}>
                 <Text style={styles.modalTitle}>
                   {selectedService.title}
                   <Text style={styles.arrow}>{' >'}</Text>
                 </Text>
               </TouchableOpacity>
             )}
+            {showMinimizeButton ? (
+              <TouchableOpacity
+                testID="advance-tracking-minimize"
+                onPress={onMinimizePress}
+                style={styles.minimizeButton}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Image
+                  source={require('@/Assets/Common/Close.png')}
+                  style={styles.minimizeIcon}
+                  resizeMode="contain"
+                />
+              </TouchableOpacity>
+            ) : null}
           </View>
 
           {/* pickup and dropoff */}
@@ -333,6 +349,20 @@ const getStyles = ({ colors }) =>
       justifyContent: 'space-between',
       alignItems: 'center',
       marginBottom: 20,
+    },
+    serviceTitleBtn: {
+      flex: 1,
+      paddingRight: 8,
+    },
+    minimizeButton: {
+      width: 28,
+      height: 28,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    minimizeIcon: {
+      width: 20,
+      height: 20,
     },
     locationColumn: {
       marginBottom: 20,

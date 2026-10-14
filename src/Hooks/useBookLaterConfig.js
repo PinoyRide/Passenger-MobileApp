@@ -15,7 +15,7 @@ const useBookLaterConfig = () => {
   const getConfigRequest = usePostRequest();
   const lastFetchAt = useRef(0);
   const [config, setConfig] = useState({
-    enabled: false,
+    enabled: true,
     minLeadMinutes: DEFAULT_MIN_LEAD_MINUTES,
     maxWindowDays: DEFAULT_MAX_WINDOW_DAYS,
     serverOffsetMs: 0,
@@ -47,7 +47,7 @@ const useBookLaterConfig = () => {
     }
 
     if (getConfigRequest.error) {
-      setConfig(prev => ({ ...prev, enabled: false }));
+      setConfig(prev => ({ ...prev, enabled: true }));
       return;
     }
 

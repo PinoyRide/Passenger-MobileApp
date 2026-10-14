@@ -19,11 +19,19 @@ import {
   RiderFoundAlertBox,
   SuccessAlertBox,
 } from '@/Components';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import {
+  useFocusEffect,
+  useNavigation,
+  useRoute,
+} from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   addAcknowledgedScheduledId,
+  addMinimizedAdvanceBookingId,
   clearBookingState,
+  parkAdvanceBooking,
+  removeMinimizedAdvanceBookingId,
+  removeParkedAdvanceBooking,
   selectAcknowledgedScheduledIds,
   selectActiveBooking,
   selectBookingStatus,
@@ -32,6 +40,8 @@ import {
   selectInquireBookingResponse,
   selectIsBooked,
   selectIsConfirmed,
+  selectMinimizedAdvanceBookingIds,
+  selectParkedAdvanceBookings,
   selectPickupLocation,
   selectRatedBookingIds,
   selectRiderDetails,
@@ -78,6 +88,7 @@ import { services as SERVICE_OPTIONS } from './Components/ServiceModal';
 import useNoRidersTimer from '@/Hooks/useNoRidersTimer';
 import useRiderEtaPoll from '@/Hooks/useRiderEtaPoll';
 import useAdvanceBookingDiscovery from '@/Hooks/useAdvanceBookingDiscovery';
+import useParkedAdvanceBookingPoll from '@/Hooks/useParkedAdvanceBookingPoll';
 
 // Matches backend ADVANCE_MAX_OPEN_PER_CUSTOMER.
 const ADVANCE_MAX_OPEN = 3;
@@ -97,6 +108,7 @@ const HomeScreen = () => {
   const { colors } = useTheme();
   const styles = getStyles({ colors });
   const navigation = useNavigation();
+  const route = useRoute();
   const dispatch = useDispatch();
 
   // ✅ Use Redux selectors instead of local state
@@ -113,8 +125,17 @@ const HomeScreen = () => {
   const isConfirmed = useSelector(selectIsConfirmed);
   const inquireBookingResponse = useSelector(selectInquireBookingResponse);
   const acknowledgedScheduledIds = useSelector(selectAcknowledgedScheduledIds);
+  const minimizedAdvanceBookingIds = useSelector(
+    selectMinimizedAdvanceBookingIds,
+  );
+  const parkedAdvanceBookings = useSelector(selectParkedAdvanceBookings);
 
   const bookLater = useBookLaterConfig();
+
+  useParkedAdvanceBookingPoll({
+    customerId: userInfo?.id,
+    enabled: bookLater.enabled && parkedAdvanceBookings.length > 0,
+  });
 
   const [alertMessage, setAlertMessage] = useState('');
   const [showAlert, setShowAlert] = useState(false);
@@ -292,6 +313,119 @@ const HomeScreen = () => {
   // so a mismatch can't loop.
   const staleBookingIdsRef = useRef(new Set());
   const [isRestoringBooking, setIsRestoringBooking] = useState(false);
+
+  const restoreParkedAdvanceSnapshot = snapshot => {
+    const booking = snapshot?.booking;
+    if (!booking?.id) {
+      return;
+    }
+    dispatch(removeMinimizedAdvanceBookingId(booking.id));
+    dispatch(removeParkedAdvanceBooking(booking.id));
+    restoreTripFields(booking);
+    dispatch(setActiveBooking(booking));
+    dispatch(setBookingStatus(Number(booking.status)));
+    dispatch(setIsBooked(true));
+    dispatch(setIsConfirmed(true));
+    if (snapshot.riderDetails) {
+      dispatch(setRiderDetails(snapshot.riderDetails));
+      applyBookingVehicle(booking, snapshot.riderDetails);
+    }
+    if (snapshot.pickupLocation) {
+      dispatch(setPickupLocation(snapshot.pickupLocation));
+    }
+    if (snapshot.dropoffLocation) {
+      dispatch(setDropoffLocation(snapshot.dropoffLocation));
+    }
+    if (snapshot.selectedService) {
+      dispatch(setSelectedService(snapshot.selectedService));
+    }
+    if (snapshot.inquireBookingResponse) {
+      dispatch(setInquireBookingResponse(snapshot.inquireBookingResponse));
+    }
+    const scheduledIso =
+      snapshot.scheduledPickupAt ||
+      booking.scheduled_pickup_at ||
+      booking.scheduled_at;
+    if (scheduledIso) {
+      setScheduledAt(new Date(scheduledIso));
+    }
+    if (snapshot.selectedPayment) {
+      setSelectedPayment(snapshot.selectedPayment);
+    }
+    setShowWaitingBanner(true);
+  };
+
+  const expandAdvanceTracking = useCallback(
+    bookingId => {
+      const id = String(bookingId ?? '');
+      if (!id) {
+        return;
+      }
+      const parked = parkedAdvanceBookings.find(
+        p => String(p.booking?.id) === id,
+      );
+      if (parked) {
+        restoreParkedAdvanceSnapshot(parked);
+        return;
+      }
+      if (activeBooking?.id && String(activeBooking.id) === id) {
+        dispatch(removeMinimizedAdvanceBookingId(id));
+        setShowWaitingBanner(true);
+        return;
+      }
+      setIsRestoringBooking(true);
+      checkActiveBooking.makePostRequest(
+        Constants.ENDPOINT.GET_BOOKING_DETAILS,
+        {
+          booking_id: bookingId,
+          customer_id: userInfo?.id,
+          include_rider_eta: '1',
+        },
+      );
+    },
+    [parkedAdvanceBookings, activeBooking?.id, userInfo?.id, dispatch],
+  );
+
+  const handleMinimizeAcceptedAdvance = () => {
+    if (!activeBooking?.id) {
+      return;
+    }
+    const scheduled =
+      scheduledAt ||
+      activeBooking.scheduled_pickup_at ||
+      activeBooking.scheduled_at;
+    dispatch(
+      parkAdvanceBooking({
+        booking: activeBooking,
+        riderDetails,
+        pickupLocation,
+        dropoffLocation,
+        selectedService,
+        inquireBookingResponse,
+        scheduledPickupAt: scheduled ? new Date(scheduled).toISOString() : null,
+        selectedPayment,
+      }),
+    );
+    dispatch(addMinimizedAdvanceBookingId(activeBooking.id));
+    dispatch(addAcknowledgedScheduledId(activeBooking.id));
+    setShowWaitingBanner(false);
+    setShowAdvanceAccepted(false);
+    riderAlertShownRef.current = false;
+    dispatch(clearBookingState());
+    clearTransientBookingUi();
+    setSelectedPromo(null);
+    setNoteToRider('');
+    setRiderLocation(null);
+  };
+
+  useEffect(() => {
+    const expandId = route.params?.expandAdvanceBookingId;
+    if (!expandId) {
+      return;
+    }
+    expandAdvanceTracking(expandId);
+    navigation.setParams({ expandAdvanceBookingId: undefined });
+  }, [route.params?.expandAdvanceBookingId, expandAdvanceTracking, navigation]);
 
   const inquireBooking = usePostRequest();
   const advanceLimitCheck = usePostRequest();
@@ -544,6 +678,8 @@ const HomeScreen = () => {
       }
 
       if (Number(booking.status) === 5) {
+        dispatch(removeMinimizedAdvanceBookingId(booking.id));
+        dispatch(removeParkedAdvanceBooking(booking.id));
         restoreTripFields(booking);
         dispatch(setActiveBooking(booking));
         dispatch(setBookingStatus(5));
@@ -1375,6 +1511,7 @@ const HomeScreen = () => {
     enabled: bookLater.enabled && !checkActiveBooking.loading,
     onFound: booking => {
       if (
+        minimizedAdvanceBookingIds.includes(String(booking.id)) ||
         String(booking.id) === String(activeBooking?.id) ||
         staleBookingIdsRef.current.has(bookingKey(booking))
       ) {
@@ -1454,6 +1591,13 @@ const HomeScreen = () => {
     Boolean(activeBooking?.id) &&
     !bookingEverAccepted &&
     (statusNum === 0 || (statusNum === 5 && !hasRiderNow));
+
+  const showAcceptedAdvanceTracking =
+    bookLater.enabled &&
+    statusNum === 5 &&
+    hasRiderNow &&
+    Boolean(activeBooking?.is_advance) &&
+    isConfirmed;
 
   const noRiders = useNoRidersTimer({
     booking: activeBooking,
@@ -1756,6 +1900,8 @@ const HomeScreen = () => {
               }
               onAdvanceBooking={handleAdvanceBookingPress}
               advanceCashOnlyNote={Boolean(scheduledAt) && !isBooked}
+              showMinimizeButton={showAcceptedAdvanceTracking}
+              onMinimizePress={handleMinimizeAcceptedAdvance}
             />
           )}
 
