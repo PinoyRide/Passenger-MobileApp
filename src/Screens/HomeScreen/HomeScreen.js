@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  DeviceEventEmitter,
   Dimensions,
   Image,
   Platform,
@@ -12,6 +13,7 @@ import {
 import { useTheme } from 'react-native-paper';
 import { openSettings } from 'react-native-permissions';
 import BottomModal from './BottomModal';
+import { PUSH_BOOKING_UPDATE_EVENT } from '@/Services/Push/pushEvents';
 import {
   AdvanceBookingAcceptedModal,
   AlertBox,
@@ -1149,6 +1151,21 @@ const HomeScreen = () => {
       clearInterval(intervalId);
     };
   }, [bookingStatus, activeBooking?.id, isOnline]);
+
+  // push notification received (foreground) or tapped: fetch the latest
+  // status now instead of waiting for the next poll tick.
+  const pushRefreshRef = useRef(null);
+  pushRefreshRef.current = () => {
+    if (activeBooking?.id) {
+      triggerGetBookingDetails();
+    }
+  };
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(PUSH_BOOKING_UPDATE_EVENT, () =>
+      pushRefreshRef.current?.(),
+    );
+    return () => sub.remove();
+  }, []);
 
   // reconnect resync: the moment connectivity comes back while a booking
   // is active, immediately fetch the latest status instead of waiting up to

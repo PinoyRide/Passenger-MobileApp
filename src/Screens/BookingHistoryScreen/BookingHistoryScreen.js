@@ -9,7 +9,11 @@ import {
   View,
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import {
+  useFocusEffect,
+  useNavigation,
+  useRoute,
+} from '@react-navigation/native';
 import { useDispatch } from 'react-redux';
 import BookingCard from './Components/BookingCard';
 import usePostRequest from '@/Services/Api';
@@ -62,6 +66,7 @@ const BookingHistoryScreen = () => {
   const { colors } = useTheme();
   const styles = getStyles({ colors });
   const navigation = useNavigation();
+  const route = useRoute();
   const dispatch = useDispatch();
   const userInfo = useSelector(selectUserInfo);
 
@@ -114,6 +119,18 @@ const BookingHistoryScreen = () => {
 
       setBookingData(transformedBookings);
       AppUtil.debugDeep(transformedBookings);
+
+      // opened from a push notification tap: go straight to that booking
+      const openId = route.params?.openBookingId;
+      if (openId) {
+        navigation.setParams({ openBookingId: undefined });
+        const target = transformedBookings.find(
+          b => String(b.id) === String(openId),
+        );
+        if (target) {
+          handleCardPress(target);
+        }
+      }
     }
   };
 

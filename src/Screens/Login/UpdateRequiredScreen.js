@@ -1,4 +1,5 @@
 import React, { useCallback, useState } from 'react';
+import { deletePushToken } from '@/Services/Push/pushPlatform';
 import {
   ActivityIndicator,
   BackHandler,
@@ -65,6 +66,7 @@ const UpdateRequiredScreen = ({ route }) => {
     } catch (err) {
       console.warn('Logout before force-update threw (continuing):', err);
     } finally {
+      await deletePushToken();
       dispatch(clearUserInfo());
       dispatch(clearBookingState());
       dispatch(clearSavedPlaces());

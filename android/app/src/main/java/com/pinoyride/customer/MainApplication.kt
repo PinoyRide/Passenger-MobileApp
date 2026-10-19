@@ -1,7 +1,10 @@
 package com.pinoyride.customer
 
 import android.app.Application
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.res.Configuration
+import android.os.Build
 
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
@@ -46,6 +49,7 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
+    createNotificationChannels()
 
     SoLoader.init(this, OpenSourceMergedSoMapping)
 
@@ -63,5 +67,21 @@ class MainApplication : Application(), ReactApplication {
   override fun onConfigurationChanged(newConfig: Configuration) {
     super.onConfigurationChanged(newConfig)
     ApplicationLifecycleDispatcher.onConfigurationChanged(this, newConfig)
+  }
+
+  private fun createNotificationChannels() {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+      return
+    }
+    val channel = NotificationChannel(
+      "bookings",
+      "Bookings",
+      NotificationManager.IMPORTANCE_HIGH,
+    ).apply {
+      description = "Ride updates and booking notifications"
+      enableVibration(true)
+    }
+    val manager = getSystemService(NotificationManager::class.java)
+    manager?.createNotificationChannel(channel)
   }
 }

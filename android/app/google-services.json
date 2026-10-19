@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "290161750334",
+    "project_id": "pinoy-ride-6a93a",
+    "storage_bucket": "pinoy-ride-6a93a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:290161750334:android:dfc7eeb863abeb97783c6f",
+        "android_client_info": {
+          "package_name": "com.pinoyride.customer"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAQVCiFGHhC2aSpE6bBRFcPSRURVk3MJPA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

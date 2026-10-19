@@ -9,6 +9,7 @@ import { PersistGate } from 'redux-persist/integration/react';
 
 import ApplicationNavigator from '@/Navigators/Application';
 import { AuthProvider } from '@/Services/AuthProvider';
+import PushNotificationManager from '@/Services/Push/PushNotificationManager';
 import { persistor, store } from '@/Redux/store';
 
 const App = () => {
@@ -32,6 +33,7 @@ const App = () => {
         <AuthProvider>
           <View style={styles.container}>
             <ApplicationNavigator />
+            <PushNotificationManager />
           </View>
         </AuthProvider>
       </PersistGate>

@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { deletePushToken } from '@/Services/Push/pushPlatform';
 import {
   Alert,
   BackHandler,
@@ -116,6 +117,8 @@ const SettingsScreen = () => {
       console.warn('Logout API refused; logging out locally:', error);
     }
 
+    // stop pushes to this phone (backend also clears the saved token)
+    await deletePushToken();
     dispatch(clearUserInfo());
     dispatch(clearBookingState());
     dispatch(clearSavedPlaces());

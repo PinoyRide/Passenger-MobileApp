@@ -3,11 +3,13 @@
 #import <React/RCTBundleURLProvider.h>
 #import <React/RCTLinkingManager.h>
 #import <GoogleMaps/GoogleMaps.h>
+#import <FirebaseCore/FirebaseCore.h>
 
 @implementation AppDelegate
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
+  [FIRApp configure];
     [GMSServices provideAPIKey:@"AIzaSyDH5_5MOexjcOzOqpA3c86Jj79rEVoPWos"];
   // GMSServices.provideAPIKey("AIzaSyD8AjX-V2EAk4ddyNPFzUGfqjxIu4ZkIZA")
   self.moduleName = @"main";
