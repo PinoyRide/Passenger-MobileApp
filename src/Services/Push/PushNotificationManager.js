@@ -34,6 +34,10 @@ import {
 } from './pushPlatform';
 
 const PROMPT_SHOWN_KEY = 'push_permission_prompt_shown_v1';
+// Message ids of taps already routed. Persisted so a JS reload (where RNFB
+// hands back the same tap via getInitialNotification) doesn't route it again.
+const HANDLED_IDS_KEY = 'push_handled_message_ids_v1';
+const HANDLED_IDS_MAX = 30;
 const BANNER_MS = 5000;
 // Routes where a logged-in user may be sent from a notification tap.
 const NOT_READY_ROUTES = ['Splash', 'OnboardingScreen', 'LandingScreen'];
@@ -64,6 +68,10 @@ const PushNotificationManager = () => {
   const bannerTimer = useRef(null);
   const pendingRoute = useRef(null);
   const lastSent = useRef(null);
+  const customerIdRef = useRef(customerId);
+  customerIdRef.current = customerId;
+  const handledIds = useRef(null); // string[] once loaded
+  const handledLoad = useRef(null);
 
   // ---- track the current route (navigationRef lives outside this tree)
   useEffect(() => {
@@ -217,36 +225,90 @@ const PushNotificationManager = () => {
   };
 
   // ---- tap routing
-  const routeTo = useCallback(
-    msg => {
-      const target = getPushRoute(parsePushData(msg?.data));
-      if (!target) {
-        return;
+  // Every tap (closed, background, system banner while open, in-app banner)
+  // goes through handleTap -> routeTo. routeTo reads the customer id from a
+  // ref so it stays stable and the initial-notification check runs once.
+  const routeTo = useCallback(msg => {
+    const target = getPushRoute(parsePushData(msg?.data));
+    if (!target) {
+      return;
+    }
+    const name = currentRouteName();
+    if (!customerIdRef.current) {
+      pendingRoute.current = null; // logged out: just open the app (PN-48)
+      return;
+    }
+    if (!name || NOT_READY_ROUTES.includes(name)) {
+      pendingRoute.current = target; // wait for Splash -> Home
+      return;
+    }
+    navigationRef.navigate(target.name, target.params);
+  }, []);
+
+  const loadHandledIds = useCallback(() => {
+    if (!handledLoad.current) {
+      handledLoad.current = AsyncStorage.getItem(HANDLED_IDS_KEY)
+        .then(raw => {
+          const list = raw ? JSON.parse(raw) : [];
+          handledIds.current = Array.isArray(list) ? list : [];
+        })
+        .catch(() => {
+          handledIds.current = [];
+        });
+    }
+    return handledLoad.current;
+  }, []);
+
+  // true the first time a message id is seen; false for a repeat
+  const claimMessage = useCallback(
+    async msg => {
+      const id = msg?.messageId;
+      if (!id) {
+        return true; // nothing to dedupe on
       }
-      const name = currentRouteName();
-      if (!customerId) {
-        pendingRoute.current = null; // logged out: just open the app
-        return;
+      await loadHandledIds();
+      const list = handledIds.current || [];
+      if (list.includes(id)) {
+        console.info('[push] tap already handled, skipping', id);
+        return false;
       }
-      if (!name || NOT_READY_ROUTES.includes(name)) {
-        pendingRoute.current = target; // wait for Splash -> Home
-        return;
-      }
-      navigationRef.navigate(target.name, target.params);
+      handledIds.current = [...list, id].slice(-HANDLED_IDS_MAX);
+      AsyncStorage.setItem(
+        HANDLED_IDS_KEY,
+        JSON.stringify(handledIds.current),
+      ).catch(() => {});
+      return true;
     },
-    [customerId],
+    [loadHandledIds],
+  );
+
+  const handleTap = useCallback(
+    async (msg, { refresh = false } = {}) => {
+      if (!msg) {
+        return;
+      }
+      // the same push may be on screen as the in-app banner too
+      setBanner(b =>
+        b && msg.messageId && b.messageId === msg.messageId ? null : b,
+      );
+      if (!(await claimMessage(msg))) {
+        return;
+      }
+      if (refresh) {
+        emitBookingUpdate(parsePushData(msg.data));
+      }
+      routeTo(msg);
+    },
+    [claimMessage, routeTo],
   );
 
   useEffect(() => {
     if (!isPushSupported) {
       return undefined;
     }
-    getInitialPush().then(msg => msg && routeTo(msg));
-    return onPushOpened(msg => {
-      emitBookingUpdate(parsePushData(msg?.data));
-      routeTo(msg);
-    });
-  }, [routeTo]);
+    getInitialPush().then(msg => msg && handleTap(msg));
+    return onPushOpened(msg => handleTap(msg, { refresh: true }));
+  }, [handleTap]);
 
   useEffect(() => {
     const target = pendingRoute.current;
@@ -301,7 +363,7 @@ const PushNotificationManager = () => {
           style={[styles.banner, { top: topInset + 8 }]}
           onPress={() => {
             setBanner(null);
-            routeTo(banner);
+            handleTap(banner);
           }}>
           {banner.title ? (
             <Text style={styles.bannerTitle} numberOfLines={1}>

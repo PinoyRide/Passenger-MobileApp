@@ -69,29 +69,55 @@ export function emitBookingUpdate(parsed) {
 }
 
 // Where a tapped notification should land. Returns null for unknown types.
+// The payload is only a hint: the target screen always reloads the booking by
+// id (get_details) and decides from its current status (see HomeScreen's
+// push-target handling and BookingHistoryScreen's openBookingId).
 export function getPushRoute(parsed) {
   if (!parsed?.type) {
     return null;
   }
+  const id = parsed.bookingId;
+  if (!id) {
+    // no booking to open: safe fallback
+    return { name: 'HomeScreen', params: {} };
+  }
   switch (parsed.type) {
-    case PUSH_TYPES.TRIP_COMPLETED:
     case PUSH_TYPES.ADVANCE_EXPIRED:
-      // History loads the booking and opens its details (US-1.6).
+      // Booking Details (cancelled) via History, fetched by id if it isn't on
+      // page 1 (US-1.6).
       return {
         name: 'BookingHistoryScreen',
-        params: parsed.bookingId ? { openBookingId: parsed.bookingId } : {},
+        params: { openBookingId: id, fromPush: true },
       };
     case PUSH_TYPES.ADVANCE_ACCEPTED:
     case PUSH_TYPES.RIDER_CANCELLED_REASSIGNING:
+      // unchanged: Home expands that advance booking's card
       return {
         name: 'HomeScreen',
-        params:
-          parsed.isAdvance && parsed.bookingId
-            ? { expandAdvanceBookingId: parsed.bookingId }
-            : {},
+        params: parsed.isAdvance
+          ? {
+              expandAdvanceBookingId: id,
+              fromPush: true,
+              pushType: parsed.type,
+            }
+          : {},
       };
+    case PUSH_TYPES.RIDER_ACCEPTED:
+    case PUSH_TYPES.RIDER_HEADING:
+    case PUSH_TYPES.RIDER_ARRIVED:
+    case PUSH_TYPES.TRIP_STARTED:
+    case PUSH_TYPES.TRIP_COMPLETED:
     default:
-      // live trip events: Home restores the active booking on focus
-      return { name: 'HomeScreen', params: {} };
+      // Home restores that booking's live trip by id (expanding a minimized or
+      // parked advance booking). trip_completed: Rating if not rated yet,
+      // otherwise Booking Details.
+      return {
+        name: 'HomeScreen',
+        params: {
+          expandAdvanceBookingId: id,
+          fromPush: true,
+          pushType: parsed.type,
+        },
+      };
   }
 }

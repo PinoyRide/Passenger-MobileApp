@@ -13,7 +13,10 @@ import {
 import { useTheme } from 'react-native-paper';
 import { openSettings } from 'react-native-permissions';
 import BottomModal from './BottomModal';
-import { PUSH_BOOKING_UPDATE_EVENT } from '@/Services/Push/pushEvents';
+import {
+  PUSH_BOOKING_UPDATE_EVENT,
+  PUSH_TYPES,
+} from '@/Services/Push/pushEvents';
 import {
   AdvanceBookingAcceptedModal,
   AlertBox,
@@ -93,6 +96,7 @@ import {
   isAdvanceAcceptedAcknowledged,
   isReturnedToPool,
   shouldShowRiderFoundAlert,
+  transformBooking,
 } from '@/Hooks/bookingTransform';
 import { services as SERVICE_OPTIONS } from './Components/ServiceModal';
 import useNoRidersTimer from '@/Hooks/useNoRidersTimer';
@@ -145,6 +149,15 @@ const HomeScreen = () => {
   const [alertMessage, setAlertMessage] = useState('');
   const [showAlert, setShowAlert] = useState(false);
   const [modalHeight, setModalHeight] = useState(0);
+  // Push-notification tap target ({ id, type }) waiting for its get_details
+  // reply, plus the notice shown when that booking is stale/gone.
+  const pushTargetRef = useRef(null);
+  // true while that reply is still expected (request timeout is 15s)
+  const pushTargetPending = () =>
+    Boolean(pushTargetRef.current) &&
+    Date.now() - pushTargetRef.current.at < 20000;
+  const [pushNotice, setPushNotice] = useState(null);
+  const [showPushNotice, setShowPushNotice] = useState(false);
 
   // ✅ NEW: live connectivity flag used to gate actions and show a banner
   const isOnline = useNetworkStatus();
@@ -453,13 +466,65 @@ const HomeScreen = () => {
     setRiderLocation(null);
   };
 
+  const notifyPush = (message, onConfirm) => {
+    setPushNotice({ message, onConfirm });
+    setShowPushNotice(true);
+  };
+
+  // Push tap: always reload the pushed booking by id and let
+  // handleRestoredBooking decide from its current status. Never replaces a
+  // different live trip that is already on screen.
+  const openPushTarget = (bookingId, pushType) => {
+    const id = String(bookingId);
+    const liveOnScreen =
+      Boolean(activeBooking?.id) &&
+      String(activeBooking.id) !== id &&
+      ([1, 2].includes(Number(bookingStatus)) ||
+        (!activeBooking.is_advance && Number(bookingStatus) === 0));
+    if (liveOnScreen) {
+      console.log('🔔 Push for', id, 'while trip', activeBooking.id, 'is live');
+      navigation.navigate('BookingHistoryScreen', {
+        openBookingId: bookingId,
+        fromPush: true,
+        openAsDetails: true,
+      });
+      return;
+    }
+    const parked = parkedAdvanceBookings.find(
+      p => String(p.booking?.id) === id,
+    );
+    if (parked) {
+      // show the saved snapshot right away; get_details below verifies it
+      restoreParkedAdvanceSnapshot(parked);
+    } else if (activeBooking?.id && String(activeBooking.id) === id) {
+      dispatch(removeMinimizedAdvanceBookingId(id));
+    }
+    pushTargetRef.current = { id, type: pushType, at: Date.now() };
+    setIsRestoringBooking(true);
+    checkActiveBooking.makePostRequest(Constants.ENDPOINT.GET_BOOKING_DETAILS, {
+      booking_id: bookingId,
+      customer_id: userInfo?.id,
+      include_rider_eta: '1',
+    });
+  };
+
   useEffect(() => {
     const expandId = route.params?.expandAdvanceBookingId;
     if (!expandId) {
       return;
     }
+    const fromPush = Boolean(route.params?.fromPush);
+    const pushType = route.params?.pushType;
+    navigation.setParams({
+      expandAdvanceBookingId: undefined,
+      fromPush: undefined,
+      pushType: undefined,
+    });
+    if (fromPush) {
+      openPushTarget(expandId, pushType);
+      return;
+    }
     expandAdvanceTracking(expandId);
-    navigation.setParams({ expandAdvanceBookingId: undefined });
   }, [route.params?.expandAdvanceBookingId, expandAdvanceTracking, navigation]);
 
   const inquireBooking = usePostRequest();
@@ -577,7 +642,8 @@ const HomeScreen = () => {
   // Verify a saved (persisted) booking against the server whenever Home mounts
   // or the logged-in customer changes, so a stale booking can't stick.
   useEffect(() => {
-    if (!activeBooking?.id) {
+    // a push tap's own get_details is in flight (latest call wins)
+    if (!activeBooking?.id || pushTargetPending()) {
       return;
     }
     console.log('🔄 Found saved booking in Redux:', activeBooking.id);
@@ -598,7 +664,11 @@ const HomeScreen = () => {
         homeFocusedOnceRef.current = true;
         return;
       }
-      if (!activeBooking?.id || checkActiveBooking.loading) {
+      if (
+        !activeBooking?.id ||
+        checkActiveBooking.loading ||
+        pushTargetPending()
+      ) {
         return;
       }
       checkActiveBooking.makePostRequest(
@@ -627,9 +697,34 @@ const HomeScreen = () => {
       // Just stop the "restoring" spinner and let it fall through to the
       // normal poll loop, which will pick things up as soon as we're back
       // online (see the reconnect-resync effect below).
+      const pushTarget = pushTargetPending() ? pushTargetRef.current : null;
+      pushTargetRef.current = null;
       if (checkActiveBooking.isOffline) {
         console.warn('⚠️ Could not verify active booking — offline');
         setIsRestoringBooking(false);
+        if (pushTarget) {
+          notifyPush(
+            "We couldn't open that booking. Please check your connection and try again.",
+          );
+        }
+        return;
+      }
+      const notFound = /not found|does not exist/i.test(
+        String(checkActiveBooking.error),
+      );
+      if (pushTarget) {
+        // only drop the saved booking if it is the one that's gone
+        if (notFound && String(activeBooking?.id) === pushTarget.id) {
+          dispatch(clearBookingState());
+          clearTransientBookingUi();
+          setShowWaitingBanner(false);
+        }
+        setIsRestoringBooking(false);
+        notifyPush(
+          notFound
+            ? 'This booking is no longer available.'
+            : String(checkActiveBooking.error),
+        );
         return;
       }
 
@@ -661,6 +756,93 @@ const HomeScreen = () => {
         ownerId != null &&
         userInfo?.id != null &&
         String(ownerId) !== String(userInfo.id);
+
+      const pushTarget = pushTargetRef.current;
+      const isPushTarget =
+        Boolean(pushTarget) && String(booking.id) === pushTarget.id;
+      if (isPushTarget) {
+        pushTargetRef.current = null;
+        const isSaved = String(activeBooking?.id) === String(booking.id);
+        const dropIfSaved = () => {
+          if (isSaved) {
+            dispatch(clearBookingState());
+            clearTransientBookingUi();
+            setShowWaitingBanner(false);
+          }
+        };
+        const rated =
+          restoredNum === 3 &&
+          Boolean(
+            booking.booking_ratings?.rate ||
+              ratedBookingIds.includes(bookingKey(booking)),
+          );
+        if (notMine || ![0, 1, 2, 3, 5].includes(restoredNum)) {
+          staleBookingIdsRef.current.add(bookingKey(booking));
+          dropIfSaved();
+          setIsRestoringBooking(false);
+          notifyPush(
+            !notMine && restoredNum === 4
+              ? 'This booking was cancelled.'
+              : 'This booking is no longer available.',
+          );
+          return;
+        }
+        if (rated) {
+          dropIfSaved();
+          setIsRestoringBooking(false);
+          const openDetails = () =>
+            navigation.navigate('BookingDetailsScreen', {
+              bookingDetails: transformBooking(booking),
+            });
+          if (pushTarget.type === PUSH_TYPES.TRIP_COMPLETED) {
+            openDetails();
+          } else {
+            notifyPush('This trip is already completed.', openDetails);
+          }
+          return;
+        }
+        // still live (0/1/2/5) or completed-not-rated (Rating below): show
+        // the server's current state, replacing a different saved booking
+        // that isn't live (the live case was sent to History already).
+        if (activeBooking?.id && !isSaved && restoredNum !== 3) {
+          dispatch(clearBookingState());
+          clearTransientBookingUi();
+          riderAlertShownRef.current = false;
+        }
+        if (!isSaved && restoredNum !== 3) {
+          dispatch(
+            setPickupLocation({
+              address: booking.pickup_location,
+              description: booking.pickup_location,
+              lat: booking.pickup_lat,
+              long: booking.pickup_long,
+            }),
+          );
+          dispatch(
+            setDropoffLocation({
+              address: booking.dropoff_location,
+              description: booking.dropoff_location,
+              lat: booking.dropoff_lat,
+              long: booking.dropoff_long,
+            }),
+          );
+          const svc = SERVICE_OPTIONS.find(
+            s => String(s.id) === String(booking.booking_type),
+          );
+          if (svc) {
+            dispatch(setSelectedService(svc));
+          }
+        }
+        // expand a minimized / parked advance booking
+        dispatch(removeMinimizedAdvanceBookingId(booking.id));
+        dispatch(removeParkedAdvanceBooking(booking.id));
+        if (!hasRider(booking, booking.rider_details)) {
+          // e.g. reassigned since the push: no stale rider card
+          dispatch(setRiderDetails({}));
+          setRiderLocation(null);
+          setBookingVehicle(null);
+        }
+      }
       // Only 0 (searching), 1, 2 and 5 (scheduled) are live. Anything else, or a
       // booking that isn't this customer's, is stale: drop it.
       if (notMine || ![0, 1, 2, 3, 5].includes(restoredNum)) {
@@ -789,6 +971,10 @@ const HomeScreen = () => {
       // data:null / unexpected reply = unknown: keep the previous status and
       // let the normal poll pick things up.
       console.warn('⚠️ get_details returned no data; keeping saved booking');
+      if (pushTargetPending()) {
+        pushTargetRef.current = null;
+        notifyPush('This booking is no longer available.');
+      }
     }
 
     setIsRestoringBooking(false);
@@ -826,7 +1012,7 @@ const HomeScreen = () => {
   }, [getPromoList.response, getPromoList.error]);
 
   //INQUIRE BOOKING
-  const triggerInquireBooking = async () => {
+  const triggerInquireBooking = async (bookingTypeOverride = null) => {
     // guard against a double-tap firing a second request before the
     // button's disabled state has re-rendered.
     if (inquireBooking.loading) {
@@ -851,8 +1037,19 @@ const HomeScreen = () => {
       return;
     }
 
+    // Only a plain id counts as an override. A button press event used to land
+    // here and got sent as '[object Object]', which the backend priced as a motorcycle.
+    const isScalar = v => typeof v === 'string' || typeof v === 'number';
+    const bookingType = isScalar(bookingTypeOverride)
+      ? bookingTypeOverride
+      : selectedService?.id;
+    if (bookingType == null || bookingType === '') {
+      setAlertMessage('Please choose a vehicle type first.');
+      setShowAlert(true);
+      return;
+    }
     const postdata = {
-      booking_type: selectedService?.id,
+      booking_type: String(bookingType),
       pickup_location: pickupLocation?.address,
       pickup_lat: pickupLocation?.lat,
       pickup_long: pickupLocation?.long,
@@ -862,6 +1059,9 @@ const HomeScreen = () => {
       promo_code: selectedPromo?.code || '',
       promo_id: selectedPromo?.id || '',
     };
+    if (scheduledAt) {
+      postdata.scheduled_pickup_at = scheduledAt.toISOString();
+    }
     inquireBooking.makePostRequest(
       Constants.ENDPOINT.INQUIRE_BOOKING,
       postdata,
@@ -947,7 +1147,7 @@ const HomeScreen = () => {
     const all_payment_details = inquireBookingResponse;
 
     const postdata = {
-      booking_type: selectedService?.id,
+      booking_type: String(selectedService?.id ?? ''),
       pickup_location: pickupLocation?.address,
       pickup_lat: pickupLocation?.lat,
       pickup_long: pickupLocation?.long,
@@ -1707,6 +1907,16 @@ const HomeScreen = () => {
           setVisible={setShowAlert}
         />
       ) : null}
+      {pushNotice ? (
+        <AlertBox
+          title="Booking update"
+          message={pushNotice.message}
+          visible={showPushNotice}
+          setVisible={setShowPushNotice}
+          confirmText="OK"
+          onConfirm={pushNotice.onConfirm}
+        />
+      ) : null}
       <View style={styles.container}>
         <AppMap
           initialLat={currentLocation.latitude}
@@ -1898,7 +2108,7 @@ const HomeScreen = () => {
                 dispatch(setDropoffLocation(location))
               }
               onChangeService={() => setShowServiceModal(true)}
-              onInquireBooking={triggerInquireBooking}
+              onInquireBooking={() => triggerInquireBooking()}
               onCreateBooking={triggerCreateBooking}
               onCancelBooking={requestFullCancel}
               // Cancel while waiting: confirm, then a full cancel back to a clean
@@ -1924,6 +2134,12 @@ const HomeScreen = () => {
                 dispatch(setIsBooked(false));
                 dispatch(setInquireBookingResponse(null));
                 setShowWaitingBanner(false);
+                // Back from an advance booking confirm: drop the picked date so
+                // the Advance Booking button shows again (payment restores itself).
+                setScheduledAt(null);
+                setAdvanceBookingFlow(false);
+                setAutoBookAfterSchedule(false);
+                pendingScheduleRef.current = null;
               }}
               isBooked={isBooked}
               isConfirmed={isConfirmed}
@@ -1945,6 +2161,7 @@ const HomeScreen = () => {
               }
               onAdvanceBooking={handleAdvanceBookingPress}
               advanceCashOnlyNote={Boolean(scheduledAt) && !isBooked}
+              fareIsEstimate={Boolean(scheduledAt) && isBooked && !isConfirmed}
               showMinimizeButton={showAcceptedAdvanceTracking}
               onMinimizePress={handleMinimizeAcceptedAdvance}
             />
@@ -2008,6 +2225,14 @@ const HomeScreen = () => {
           onSelect={service => {
             dispatch(setSelectedService(service));
             setShowServiceModal(false);
+            if (
+              pickupLocation &&
+              dropoffLocation &&
+              service?.id != null &&
+              (isBooked || inquireBookingResponse)
+            ) {
+              triggerInquireBooking(service.id);
+            }
           }}
         />
       </View>

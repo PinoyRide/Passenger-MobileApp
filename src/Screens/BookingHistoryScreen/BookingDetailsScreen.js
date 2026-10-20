@@ -263,6 +263,10 @@ const BookingDetailsScreen = () => {
   const pesosPerKm2 = parseFloat(apd.pesos_per_km2 || 0);
   const exceedingKms = parseFloat(apd.exceeding_kms || 0);
   const exceedingKmsTotal = parseFloat(apd.exceeding_kms_total || 0);
+  const trafficSurchargeAmount = parseFloat(apd.traffic_surcharge_amount || 0);
+  const trafficSurchargePercent = parseFloat(
+    apd.traffic_surcharge_percent || 0,
+  );
 
   const data = [{ key: 'infoSection' }];
 
@@ -332,6 +336,21 @@ const BookingDetailsScreen = () => {
               </Text>
               <Text style={styles.breakdownValue}>
                 ₱{fallbackDistanceAmount.toFixed(2)}
+              </Text>
+            </View>
+          )}
+
+          {trafficSurchargeAmount > 0 && (
+            <View style={styles.breakdownRow}>
+              <Text style={styles.breakdownLabel}>
+                Traffic surcharge
+                {trafficSurchargePercent > 0
+                  ? ` (${trafficSurchargePercent}%)`
+                  : ''}
+                :
+              </Text>
+              <Text style={styles.breakdownValue}>
+                ₱{trafficSurchargeAmount.toFixed(2)}
               </Text>
             </View>
           )}

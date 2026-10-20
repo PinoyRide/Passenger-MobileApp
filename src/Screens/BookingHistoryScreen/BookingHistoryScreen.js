@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -78,6 +78,11 @@ const BookingHistoryScreen = () => {
   // History is paginated (10 per page, newest-updated first) and the screen only
   // loads page 1, so pending advance bookings are also pulled from get_upcoming.
   const getUpcoming = usePostRequest();
+  // Push tap target that isn't on page 1: fetched directly by id.
+  const getPushedBooking = usePostRequest();
+  const pushedOpenRef = useRef(null);
+  const [pushNotice, setPushNotice] = useState('');
+  const [showPushNotice, setShowPushNotice] = useState(false);
 
   // Refetch every time the screen gains focus (first open and on return from
   // Booking Details, e.g. after a cancel). Pinned ordering is applied on reply.
@@ -120,19 +125,78 @@ const BookingHistoryScreen = () => {
       setBookingData(transformedBookings);
       AppUtil.debugDeep(transformedBookings);
 
-      // opened from a push notification tap: go straight to that booking
-      const openId = route.params?.openBookingId;
-      if (openId) {
-        navigation.setParams({ openBookingId: undefined });
-        const target = transformedBookings.find(
-          b => String(b.id) === String(openId),
-        );
-        if (target) {
-          handleCardPress(target);
-        }
-      }
+      openPushedBooking(transformedBookings);
     }
   };
+
+  // Opened from a push notification tap (or Home, when another trip is live):
+  // go straight to that booking. Not on page 1 -> fetch it by id.
+  const openPushedBooking = list => {
+    const openId = route.params?.openBookingId;
+    if (!openId) {
+      return;
+    }
+    const asDetails = Boolean(route.params?.openAsDetails);
+    navigation.setParams({
+      openBookingId: undefined,
+      fromPush: undefined,
+      openAsDetails: undefined,
+    });
+    const target = list.find(b => String(b.id) === String(openId));
+    if (target) {
+      openBookingItem(target, asDetails);
+      return;
+    }
+    pushedOpenRef.current = { id: String(openId), asDetails };
+    getPushedBooking.makePostRequest(Constants.ENDPOINT.GET_BOOKING_DETAILS, {
+      booking_id: openId,
+      customer_id: userInfo?.id,
+    });
+  };
+
+  const notifyPush = message => {
+    setPushNotice(message);
+    setShowPushNotice(true);
+  };
+
+  useEffect(() => {
+    const pending = pushedOpenRef.current;
+    if (!pending || (!getPushedBooking.response && !getPushedBooking.error)) {
+      return;
+    }
+    pushedOpenRef.current = null;
+    if (getPushedBooking.error) {
+      notifyPush(
+        getPushedBooking.isOffline
+          ? "We couldn't open that booking. Please check your connection and try again."
+          : "We couldn't find that booking.",
+      );
+      return;
+    }
+    const data = getPushedBooking.response?.data;
+    const ownerId = data?.customer?.id ?? data?.customer_id;
+    const mine =
+      getPushedBooking.response?.code === 200 &&
+      data?.id != null &&
+      String(data.id) === pending.id &&
+      (ownerId == null || String(ownerId) === String(userInfo?.id));
+    if (!mine) {
+      notifyPush("We couldn't find that booking.");
+      return;
+    }
+    openBookingItem(transformBooking(data), pending.asDetails);
+  }, [getPushedBooking.response, getPushedBooking.error]);
+
+  // A new push target while History is already open: reload, then open it.
+  useEffect(() => {
+    if (
+      route.params?.openBookingId &&
+      getBookingHistory.response &&
+      !getBookingHistory.loading
+    ) {
+      triggerGetBookingHistory();
+    }
+  }, [route.params?.openBookingId]);
 
   useEffect(() => {
     handleBookingHistory();
@@ -170,6 +234,15 @@ const BookingHistoryScreen = () => {
     navigation.goBack();
   };
 
+  const openBookingItem = (item, asDetails) => {
+    if (asDetails) {
+      // another trip is live on Home: don't replace it
+      navigation.navigate('BookingDetailsScreen', { bookingDetails: item });
+      return;
+    }
+    handleCardPress(item);
+  };
+
   const handleCardPress = item => {
     if (isAdvanceOnLiveTripMap(item)) {
       navigation.navigate('HomeScreen', {
@@ -197,9 +270,20 @@ const BookingHistoryScreen = () => {
     </TouchableOpacity>
   );
 
+  const pushNoticeBox = pushNotice ? (
+    <AlertBox
+      title="Booking update"
+      message={pushNotice}
+      visible={showPushNotice}
+      setVisible={setShowPushNotice}
+      confirmText="OK"
+    />
+  ) : null;
+
   if (getBookingHistory.loading) {
     return (
       <View style={styles.container}>
+        {pushNoticeBox}
         <View style={styles.headerContainer}>
           <View style={styles.headerRow}>
             <TouchableOpacity onPress={handleBack} style={styles.iconButton}>
@@ -232,6 +316,7 @@ const BookingHistoryScreen = () => {
             setVisible={setShowAlert}
           />
         ) : null}
+        {pushNoticeBox}
         <View style={styles.container}>
           <View style={styles.headerContainer}>
             <View style={styles.headerRow}>
@@ -267,6 +352,7 @@ const BookingHistoryScreen = () => {
           setVisible={setShowAlert}
         />
       ) : null}
+      {pushNoticeBox}
       <View style={styles.container}>
         <View style={styles.headerContainer}>
           <View style={styles.headerRow}>

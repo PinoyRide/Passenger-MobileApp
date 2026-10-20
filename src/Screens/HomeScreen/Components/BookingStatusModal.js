@@ -100,6 +100,16 @@ const BookingStatusModal = ({
   ).toLowerCase();
   const paymentConfig =
     PAYMENT_METHOD_CONFIG[paymentType] || PAYMENT_METHOD_CONFIG.cash;
+  const showEstimatedFareLabels =
+    Boolean(bookingDetails?.is_advance) &&
+    (allPaymentDetails?.fare_is_estimate === true ||
+      bookingDetails?.status === 5);
+  const finalFareLabel = showEstimatedFareLabels
+    ? 'Estimated Fare'
+    : 'Final Fare';
+  const totalFareLabel = showEstimatedFareLabels
+    ? 'Estimated Fare w/ Discount'
+    : 'Total Fare w/ Discount';
   const finalFareDisplay =
     allPaymentDetails?.pretty_total_amount_wo_promo ||
     formatPeso(
@@ -333,7 +343,7 @@ const BookingStatusModal = ({
               <View style={styles.fareRow}>
                 <Text
                   style={[styles.feeText, { fontFamily: 'Poppins SemiBold' }]}>
-                  Final Fare
+                  {finalFareLabel}
                 </Text>
                 <Text
                   style={[styles.feeText, { fontFamily: 'Poppins SemiBold' }]}>
@@ -341,7 +351,7 @@ const BookingStatusModal = ({
                 </Text>
               </View>
               <View style={styles.fareRow}>
-                <Text style={styles.feeText}>Total Fare w/ Discount</Text>
+                <Text style={styles.feeText}>{totalFareLabel}</Text>
                 <Text style={styles.feeText}>{totalFareDisplay}</Text>
               </View>
               <View style={styles.fareRow}>

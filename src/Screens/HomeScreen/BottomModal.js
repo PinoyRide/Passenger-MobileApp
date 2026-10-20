@@ -43,6 +43,7 @@ const BottomModal = ({
   showAdvanceBooking = false,
   onAdvanceBooking,
   advanceCashOnlyNote = false,
+  fareIsEstimate = false,
   showMinimizeButton = false,
   onMinimizePress,
 }) => {
@@ -160,12 +161,14 @@ const BottomModal = ({
           {/* service header */}
           <View style={styles.serviceHeader}>
             {isBooked && !isConfirmed ? (
-              <TouchableOpacity onPress={onBackToEdit} disabled={isLoading}>
-                <Text style={styles.arrow}>
-                  {'< '}
-                  <Text style={styles.modalTitle}>Back</Text>
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.serviceHeaderBooked}>
+                <TouchableOpacity onPress={onBackToEdit} disabled={isLoading}>
+                  <Text style={styles.arrow}>
+                    {'< '}
+                    <Text style={styles.modalTitle}>Back</Text>
+                  </Text>
+                </TouchableOpacity>
+              </View>
             ) : (
               <TouchableOpacity
                 onPress={onChangeService}
@@ -253,7 +256,7 @@ const BottomModal = ({
               <View style={styles.fareRow}>
                 <Text
                   style={[styles.feeText, { fontFamily: 'Poppins SemiBold' }]}>
-                  Final Fare
+                  {fareIsEstimate ? 'Estimated Fare' : 'Final Fare'}
                 </Text>
                 <Text
                   style={[styles.feeText, { fontFamily: 'Poppins SemiBold' }]}>
@@ -271,7 +274,11 @@ const BottomModal = ({
                   </View>
                 )}
               <View style={styles.fareRow}>
-                <Text style={styles.feeText}>Total Fare w/ Discount</Text>
+                <Text style={styles.feeText}>
+                  {fareIsEstimate
+                    ? 'Estimated Fare w/ Discount'
+                    : 'Total Fare w/ Discount'}
+                </Text>
                 <Text style={styles.feeText}>
                   {inquireBookingResponse?.pretty_total_amount}
                 </Text>
@@ -343,6 +350,13 @@ const getStyles = ({ colors }) =>
       fontSize: 20,
       color: colors.blue,
       fontWeight: '600',
+    },
+    serviceHeaderBooked: {
+      flex: 1,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginRight: 8,
     },
     serviceHeader: {
       flexDirection: 'row',
