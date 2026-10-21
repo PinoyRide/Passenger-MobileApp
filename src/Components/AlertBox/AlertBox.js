@@ -1,6 +1,7 @@
 import React from 'react';
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const AlertBox = ({
   title,
@@ -10,6 +11,7 @@ const AlertBox = ({
   setVisible,
   confirmText = 'Confirm',
   dismissable = true,
+  icon,
 }) => {
   const { colors } = useTheme();
   const styles = getStyles({ colors });
@@ -27,10 +29,20 @@ const AlertBox = ({
       visible={visible}
       animationType="fade"
       onRequestClose={() => {
-        if (dismissable) {setVisible(false);}
+        if (dismissable) {
+          setVisible(false);
+        }
       }}>
       <View style={styles.overlay}>
         <View style={styles.container}>
+          {icon ? (
+            <Icon
+              name={icon}
+              size={56}
+              color={colors.primary}
+              style={styles.icon}
+            />
+          ) : null}
           {title ? <Text style={styles.title}>{title}</Text> : null}
           <Text style={styles.message}>{message}</Text>
           <TouchableOpacity
@@ -64,6 +76,10 @@ const getStyles = ({ colors }) =>
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.25,
       shadowRadius: 4,
+    },
+    icon: {
+      alignSelf: 'center',
+      marginBottom: 8,
     },
     title: {
       fontSize: 24,

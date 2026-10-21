@@ -84,6 +84,14 @@ export const getDisplayStatus = booking => {
   if (isAcceptedAdvanceBooking(booking)) {
     return 'Advance Booking';
   }
+  // Advance booking still searching for a rider (status 5, nobody assigned).
+  if (
+    booking?.is_advance &&
+    getRawStatus(booking) === 5 &&
+    !hasAssignedRider(booking)
+  ) {
+    return 'Pending Advance Booking';
+  }
   return booking.pretty_status || getStatusLabel(getRawStatus(booking));
 };
 
@@ -106,7 +114,7 @@ export const getHistoryBadgeColor = (status, colors) => {
   if (s === 'Returned to pool' || /^returned/i.test(s)) {
     return colors.blue;
   }
-  if (s === 'Scheduled' || s === 'Pending') {
+  if (s === 'Scheduled' || s === 'Pending' || s === 'Pending Advance Booking') {
     return '#FFA726';
   }
   return colors.cancelled;

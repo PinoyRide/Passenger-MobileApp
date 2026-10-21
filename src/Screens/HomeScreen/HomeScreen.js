@@ -1901,7 +1901,9 @@ const HomeScreen = () => {
     <>
       {alertMessage ? (
         <AlertBox
-          title="Error"
+          {...(/already have a booking|ongoing booking/i.test(alertMessage)
+            ? { icon: 'alert-outline' }
+            : { title: 'Error' })}
           message={alertMessage}
           visible={showAlert}
           setVisible={setShowAlert}
