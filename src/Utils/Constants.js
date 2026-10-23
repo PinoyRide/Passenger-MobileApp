@@ -4,7 +4,7 @@ const PROD_URL = '';
 // PR CHECK: revert DEV_URL to remote before opening a PR — do not commit localhost/LAN URLs.
 // const DEV_URL = 'https://riderapp.escarez.com/api/';
 // Local only — iOS Simulator: 127.0.0.1 | Android Emulator: 10.0.2.2 | Physical device: Mac LAN IP
-const DEV_URL = 'http://127.0.0.1:8001/api/';
+const DEV_URL = 'https://pinoyride-api.lwsdemo.com/api/';
 
 const BASE_DEV = {
   API_OK: 1,
