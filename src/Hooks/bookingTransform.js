@@ -55,6 +55,17 @@ export const isReturnedToPool = booking =>
   getRawStatus(booking) === 5 &&
   !hasAssignedRider(booking);
 
+// Old booking a rider cancelled and re-pooled under a new id (replaced_by).
+// Passenger is never charged for it.
+export const isReplacedBooking = booking =>
+  Boolean(booking?.replaced_by || booking?.is_replaced);
+
+/** New booking id to follow when a live booking was re-pooled, else null. */
+export const getReplacementId = booking =>
+  booking?.replaced_by && getRawStatus(booking) === 4
+    ? booking.replaced_by
+    : null;
+
 export const getAssignedRiderId = (booking, riderDetails) =>
   riderDetails?.id ?? booking?.rider_id ?? booking?.rider_details?.id ?? null;
 
@@ -78,6 +89,9 @@ export const isAdvanceAcceptedAcknowledged = (ackIds, bookingId, riderId) => {
 };
 
 export const getDisplayStatus = booking => {
+  if (isReplacedBooking(booking)) {
+    return 'Cancelled';
+  }
   if (isReturnedToPool(booking)) {
     return 'Returned to pool';
   }
@@ -120,13 +134,18 @@ export const getHistoryBadgeColor = (status, colors) => {
   return colors.cancelled;
 };
 
-export const canRebookHistory = status => {
+export const canRebookHistory = (status, booking) => {
+  if (isReplacedBooking(booking)) {
+    return false;
+  }
   const s = String(status || '');
   return s === 'Completed' || /^cancel/i.test(s);
 };
 
 export const canCancelAdvanceBooking = booking =>
-  Boolean(booking?.is_advance) && [0, 1, 2, 5].includes(getRawStatus(booking));
+  Boolean(booking?.is_advance) &&
+  !isReplacedBooking(booking) &&
+  [0, 1, 2, 5].includes(getRawStatus(booking));
 
 // Figma 8:16677 header: "28 May 2025 | 01:42 PM"
 export const formatDetailsDateTime = value => {

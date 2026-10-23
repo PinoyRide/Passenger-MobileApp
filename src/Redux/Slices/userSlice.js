@@ -262,6 +262,50 @@ const userSlice = createSlice({
       }
       state.ratedBookingIds = list.slice(-50);
     },
+    // A rider cancel re-pools the trip under a NEW booking id (old one is
+    // cancelled with replaced_by). Swap every saved reference to the new id.
+    replaceBookingId: (state, action) => {
+      const { oldId, newId, newRefCode } = action.payload || {};
+      const from = String(oldId ?? '');
+      const to = String(newId ?? '');
+      if (!from || !to || from === to) {
+        return;
+      }
+      if (state.activeBooking && String(state.activeBooking.id) === from) {
+        state.activeBooking = {
+          ...state.activeBooking,
+          id: Number(newId),
+          ref_code: newRefCode || state.activeBooking.ref_code,
+          status: 5,
+          replaced_by: null,
+          is_replaced: false,
+        };
+      }
+      state.parkedAdvanceBookings = (state.parkedAdvanceBookings || []).map(p =>
+        String(p.booking?.id) === from
+          ? {
+              ...p,
+              booking: {
+                ...p.booking,
+                id: Number(newId),
+                ref_code: newRefCode || p.booking.ref_code,
+                status: 5,
+                replaced_by: null,
+                is_replaced: false,
+              },
+              riderDetails: null,
+            }
+          : p,
+      );
+      state.minimizedAdvanceBookingIds = (
+        state.minimizedAdvanceBookingIds || []
+      ).map(x => (x === from ? to : x));
+      // "id:riderId" acks belong to the old rider assignment: drop them so
+      // the next rider's accepted modal shows on the new booking.
+      state.acknowledgedScheduledIds = (
+        state.acknowledgedScheduledIds || []
+      ).filter(id => String(id) !== from && !String(id).startsWith(`${from}:`));
+    },
     // ✅ Clear all booking state (on completion/cancellation)
     clearBookingState: state => {
       state.activeBooking = null;
@@ -298,6 +342,7 @@ export const {
   setInquireBookingResponse,
   addAcknowledgedScheduledId,
   clearAcknowledgedScheduledForBooking,
+  replaceBookingId,
   addMinimizedAdvanceBookingId,
   removeMinimizedAdvanceBookingId,
   parkAdvanceBooking,

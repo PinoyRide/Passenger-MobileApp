@@ -28,7 +28,10 @@ import {
   canCancelAdvanceBooking,
   getHistoryBadgeColor,
   getRawStatus,
+  getReplacementId,
   getRiderPhoto,
+  isReplacedBooking,
+  transformBooking,
 } from '@/Hooks/bookingTransform';
 
 const BookingDetailsScreen = () => {
@@ -42,6 +45,47 @@ const BookingDetailsScreen = () => {
   const userInfo = useSelector(selectUserInfo);
   const [bookingDetails, setBookingDetails] = useState(initialDetails);
   const contactRequest = usePostRequest();
+  const replacementRequest = usePostRequest();
+
+  // Opened on a booking that was still live: if a rider cancel re-pooled it
+  // under a new id, show the new booking instead (a history entry that is
+  // already "Cancelled" stays as the old booking).
+  useEffect(() => {
+    const opened = initialDetails;
+    if (
+      !opened?.id ||
+      !userInfo?.id ||
+      isReplacedBooking(opened) ||
+      ![0, 1, 2, 5].includes(getRawStatus(opened))
+    ) {
+      return;
+    }
+    let stale = false;
+    (async () => {
+      let id = opened.id;
+      for (let hop = 0; hop < 5; hop += 1) {
+        const { response } = await replacementRequest.makePostRequest(
+          Constants.ENDPOINT.GET_BOOKING_DETAILS,
+          { booking_id: id, customer_id: userInfo.id },
+        );
+        const data = response?.code === 200 ? response.data : null;
+        const nextId = getReplacementId(data);
+        if (!data || stale) {
+          return;
+        }
+        if (!nextId) {
+          if (String(id) !== String(opened.id)) {
+            setBookingDetails(transformBooking(data));
+          }
+          return;
+        }
+        id = nextId;
+      }
+    })();
+    return () => {
+      stale = true;
+    };
+  }, [initialDetails?.id, userInfo?.id]);
   const [riderContact, setRiderContact] = useState(null);
 
   useEffect(() => {
@@ -90,6 +134,8 @@ const BookingDetailsScreen = () => {
   const [cancelLoading, setCancelLoading] = useState(false);
   const cancelAdvance = usePostRequest();
   const isCancelled = /^cancel/i.test(String(bookingDetails.status || ''));
+  // Rider cancelled and re-pooled: passenger is never charged.
+  const isReplaced = isReplacedBooking(bookingDetails);
   const canCancelAdvance = canCancelAdvanceBooking(bookingDetails);
   const fmtAmount = v => (Number(v) || 0).toFixed(2);
   const displayAmount = isCancelled
@@ -394,9 +440,15 @@ const BookingDetailsScreen = () => {
       {/* Final Fare */}
       <View style={styles.finalFareRow}>
         <Text style={styles.finalFareLabel}>
-          {isCancelled ? 'Penalty Fee' : 'Final Fare'}
+          {isReplaced
+            ? 'No charge'
+            : isCancelled
+            ? 'Penalty Fee'
+            : 'Final Fare'}
         </Text>
-        <Text style={styles.finalFareValue}>₱{displayAmount}</Text>
+        {isReplaced ? null : (
+          <Text style={styles.finalFareValue}>₱{displayAmount}</Text>
+        )}
       </View>
 
       <View style={styles.divider} />
@@ -549,6 +601,11 @@ const BookingDetailsScreen = () => {
               <Text style={styles.bookingIdNumber}>
                 {bookingDetails.bookingId || bookingDetails.ref_code}
               </Text>
+              {isReplaced && bookingDetails.replaced_by_ref_code ? (
+                <Text style={styles.bookingIdText}>
+                  {` · Rebooked as ${bookingDetails.replaced_by_ref_code}`}
+                </Text>
+              ) : null}
             </View>
 
             {/* Pickup Location */}

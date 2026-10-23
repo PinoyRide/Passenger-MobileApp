@@ -29,7 +29,9 @@ import {
 import {
   canRebookHistory,
   getBookingTypeLabel,
+  getReplacementId,
   isAdvanceOnLiveTripMap,
+  isReplacedBooking,
   transformBooking,
 } from '@/Hooks/bookingTransform';
 
@@ -142,14 +144,21 @@ const BookingHistoryScreen = () => {
       fromPush: undefined,
       openAsDetails: undefined,
     });
-    const target = list.find(b => String(b.id) === String(openId));
+    let targetId = openId;
+    let target = list.find(b => String(b.id) === String(targetId));
+    // re-pooled by a rider cancel: open the new booking instead
+    const replacedBy = getReplacementId(target);
+    if (replacedBy) {
+      targetId = replacedBy;
+      target = list.find(b => String(b.id) === String(targetId));
+    }
     if (target) {
       openBookingItem(target, asDetails);
       return;
     }
-    pushedOpenRef.current = { id: String(openId), asDetails };
+    pushedOpenRef.current = { id: String(targetId), asDetails, hops: 0 };
     getPushedBooking.makePostRequest(Constants.ENDPOINT.GET_BOOKING_DETAILS, {
-      booking_id: openId,
+      booking_id: targetId,
       customer_id: userInfo?.id,
     });
   };
@@ -182,6 +191,19 @@ const BookingHistoryScreen = () => {
       (ownerId == null || String(ownerId) === String(userInfo?.id));
     if (!mine) {
       notifyPush("We couldn't find that booking.");
+      return;
+    }
+    const replacedBy = getReplacementId(data);
+    if (replacedBy && (pending.hops || 0) < 5) {
+      pushedOpenRef.current = {
+        id: String(replacedBy),
+        asDetails: pending.asDetails,
+        hops: (pending.hops || 0) + 1,
+      };
+      getPushedBooking.makePostRequest(Constants.ENDPOINT.GET_BOOKING_DETAILS, {
+        booking_id: replacedBy,
+        customer_id: userInfo?.id,
+      });
       return;
     }
     openBookingItem(transformBooking(data), pending.asDetails);
@@ -262,9 +284,12 @@ const BookingHistoryScreen = () => {
         destination={item.destination}
         date={item.date}
         price={item.price}
+        noCharge={isReplacedBooking(item)}
         penaltyAmount={item.penalty_amount}
         onRebook={
-          canRebookHistory(item.status) ? () => handleRebook(item) : undefined
+          canRebookHistory(item.status, item)
+            ? () => handleRebook(item)
+            : undefined
         }
       />
     </TouchableOpacity>

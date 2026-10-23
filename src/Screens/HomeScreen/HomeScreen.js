@@ -38,6 +38,7 @@ import {
   parkAdvanceBooking,
   removeMinimizedAdvanceBookingId,
   removeParkedAdvanceBooking,
+  replaceBookingId,
   selectAcknowledgedScheduledIds,
   selectActiveBooking,
   selectBookingStatus,
@@ -93,6 +94,7 @@ import {
   advanceAcceptedAckKey,
   bookingKey,
   getAssignedRiderId,
+  getReplacementId,
   isAdvanceAcceptedAcknowledged,
   isReturnedToPool,
   shouldShowRiderFoundAlert,
@@ -471,6 +473,74 @@ const HomeScreen = () => {
     setShowPushNotice(true);
   };
 
+  // A rider cancel re-pools the trip under a NEW booking (old one: status 4 +
+  // replaced_by). Swap every saved id to the new booking, tell the passenger
+  // the new reference, then reload it through the normal restore path.
+  const replacementHopsRef = useRef(0);
+  const followReplacement = (oldBooking, { notify = true } = {}) => {
+    const newId = getReplacementId(oldBooking);
+    if (!newId || replacementHopsRef.current >= 5) {
+      return false;
+    }
+    replacementHopsRef.current += 1;
+    dispatch(
+      replaceBookingId({
+        oldId: oldBooking.id,
+        newId,
+        newRefCode: oldBooking.replaced_by_ref_code,
+      }),
+    );
+    dispatch(setRiderDetails({}));
+    setRiderLocation(null);
+    setBookingVehicle(null);
+    setShowAdvanceAccepted(false);
+    riderAlertShownRef.current = false;
+    if (pushTargetRef.current?.id === String(oldBooking.id)) {
+      pushTargetRef.current = { ...pushTargetRef.current, id: String(newId) };
+    }
+    if (notify) {
+      notifyPush(
+        "Your rider cancelled. We're finding you a new rider." +
+          (oldBooking.replaced_by_ref_code
+            ? ` New reference: ${oldBooking.replaced_by_ref_code}`
+            : ''),
+      );
+    }
+    setIsRestoringBooking(true);
+    checkActiveBooking.makePostRequest(Constants.ENDPOINT.GET_BOOKING_DETAILS, {
+      booking_id: newId,
+      customer_id: userInfo?.id,
+      include_rider_eta: '1',
+    });
+    return true;
+  };
+
+  // Resolve the newest booking id for a (possibly re-pooled) booking.
+  const replacementLookup = usePostRequest();
+  const resolveReplacedId = async bookingId => {
+    let id = bookingId;
+    for (let hop = 0; hop < 5; hop += 1) {
+      const { response } = await replacementLookup.makePostRequest(
+        Constants.ENDPOINT.GET_BOOKING_DETAILS,
+        { booking_id: id, customer_id: userInfo?.id },
+      );
+      const data = response?.code === 200 ? response.data : null;
+      const nextId = getReplacementId(data);
+      if (!nextId) {
+        return String(id) === String(bookingId) ? null : { id, data };
+      }
+      dispatch(
+        replaceBookingId({
+          oldId: id,
+          newId: nextId,
+          newRefCode: data.replaced_by_ref_code,
+        }),
+      );
+      id = nextId;
+    }
+    return null;
+  };
+
   // Push tap: always reload the pushed booking by id and let
   // handleRestoredBooking decide from its current status. Never replaces a
   // different live trip that is already on screen.
@@ -756,6 +826,13 @@ const HomeScreen = () => {
         ownerId != null &&
         userInfo?.id != null &&
         String(ownerId) !== String(userInfo.id);
+
+      if (!notMine && followReplacement(booking)) {
+        return;
+      }
+      if (!getReplacementId(booking)) {
+        replacementHopsRef.current = 0;
+      }
 
       const pushTarget = pushTargetRef.current;
       const isPushTarget =
@@ -1238,6 +1315,15 @@ const HomeScreen = () => {
 
     const { code, data } = response;
 
+    if (
+      code === 200 &&
+      data &&
+      String(data.id) === String(activeBooking?.id) &&
+      followReplacement(data)
+    ) {
+      return;
+    }
+
     if (code === 200 && data && data.status != null && data.status !== '') {
       const { status, rider_details } = data;
       const statusNum = Number(status);
@@ -1421,7 +1507,7 @@ const HomeScreen = () => {
   // Full cancel entry point. Advance bookings ask the backend for a penalty
   // preview first (Figma "Cancel Booking with Penalty?"); instant bookings and
   // penalty-free advance bookings cancel the way they always have.
-  const requestFullCancel = async () => {
+  const requestFullCancel = async bookingIdOverride => {
     const isAdvance = Boolean(
       activeBooking?.is_advance ||
         scheduledAt ||
@@ -1436,12 +1522,20 @@ const HomeScreen = () => {
     const { response, error } = await cancelAdvance.makePostRequest(
       Constants.ENDPOINT.CANCEL_ADVANCE,
       {
-        booking_id: activeBooking.id,
+        booking_id: bookingIdOverride ?? activeBooking.id,
         customer_id: userInfo?.id,
         preview: true,
       },
     );
     if (error && /no longer be cancelled/i.test(String(error))) {
+      // re-pooled by a rider cancel: cancel the new booking instead
+      const next = bookingIdOverride
+        ? null
+        : await resolveReplacedId(activeBooking.id);
+      if (next) {
+        requestFullCancel(next.id);
+        return;
+      }
       finishFullCancel();
       return;
     }
@@ -1462,18 +1556,27 @@ const HomeScreen = () => {
       return;
     }
     // free cancel: still go through cancel_advance so cancelled_by is recorded
-    confirmPenaltyCancel();
+    confirmPenaltyCancel(preview.booking_id ?? bookingIdOverride);
   };
 
-  const confirmPenaltyCancel = async () => {
+  const confirmPenaltyCancel = async bookingIdOverride => {
     setPenaltyLoading(true);
+    const targetId =
+      bookingIdOverride ?? penaltyPreview?.booking_id ?? activeBooking?.id;
     const { error } = await cancelAdvance.makePostRequest(
       Constants.ENDPOINT.CANCEL_ADVANCE,
-      { booking_id: activeBooking?.id, customer_id: userInfo?.id },
+      { booking_id: targetId, customer_id: userInfo?.id },
     );
     setPenaltyLoading(false);
     setPenaltyPreview(null);
     if (error && /no longer be cancelled/i.test(String(error))) {
+      // re-pooled by a rider cancel: preview + cancel the new booking (its
+      // penalty can differ, so ask again rather than cancel blindly)
+      const next = await resolveReplacedId(targetId);
+      if (next) {
+        requestFullCancel(next.id);
+        return;
+      }
       // Already cancelled or finished elsewhere: just clear the stale card.
       finishFullCancel();
       return;
@@ -1743,6 +1846,11 @@ const HomeScreen = () => {
         )}`
       : statusMessages[0]
     : statusMessages[bookingStatus] || '';
+  // re-pooled booking: show its new reference on the card banner
+  const bannerText =
+    activeBooking?.replaces && activeBooking?.ref_code && etaBannerText
+      ? `${etaBannerText}\nNew reference: ${activeBooking.ref_code}`
+      : etaBannerText;
   if (statusNum === 1) {
     void etaStaleTick;
   }
@@ -1983,7 +2091,7 @@ const HomeScreen = () => {
 
         {showWaitingBanner && !confirmedBookingView && (
           <View style={[styles.banner, { bottom: modalHeight + 15 }]}>
-            <Text style={styles.bannerText}>{etaBannerText}</Text>
+            <Text style={styles.bannerText}>{bannerText}</Text>
           </View>
         )}
 
@@ -2021,7 +2129,7 @@ const HomeScreen = () => {
           penaltyAmount={penaltyPreview?.penalty_amount}
           prettyPenaltyAmount={penaltyPreview?.pretty_penalty_amount}
           loading={penaltyLoading}
-          onYes={confirmPenaltyCancel}
+          onYes={() => confirmPenaltyCancel()}
           onNo={() => setPenaltyPreview(null)}
         />
 
@@ -2112,7 +2220,7 @@ const HomeScreen = () => {
               onChangeService={() => setShowServiceModal(true)}
               onInquireBooking={() => triggerInquireBooking()}
               onCreateBooking={triggerCreateBooking}
-              onCancelBooking={requestFullCancel}
+              onCancelBooking={() => requestFullCancel()}
               // Cancel while waiting: confirm, then a full cancel back to a clean
               // Home (it used to drop back to the fare/confirm screen).
               onBackToConfirm={() => {
@@ -2128,7 +2236,7 @@ const HomeScreen = () => {
                   {
                     text: 'Yes',
                     style: 'destructive',
-                    onPress: requestFullCancel,
+                    onPress: () => requestFullCancel(),
                   },
                 ]);
               }}
@@ -2185,8 +2293,8 @@ const HomeScreen = () => {
             vehicle={bookingVehicle}
             confirmedBookingView={confirmedBookingView}
             statusBannerText={
-              confirmedBookingView && showWaitingBanner && etaBannerText
-                ? etaBannerText
+              confirmedBookingView && showWaitingBanner && bannerText
+                ? bannerText
                 : ''
             }
             showSafetyGuide={
