@@ -1,6 +1,7 @@
 import usePostRequest from '@/Services/Api';
 import { Constants } from '@/Utils';
 import React, { useEffect, useState } from 'react';
+import { ON_PRIMARY_BUTTON_TEXT } from '@/Theme';
 import {
   ActivityIndicator,
   Modal,
@@ -295,7 +296,7 @@ const getStyles = ({ colors }) =>
     checkButtonText: {
       fontSize: 16,
       fontFamily: 'Poppins SemiBold',
-      color: '#ffffffff',
+      color: ON_PRIMARY_BUTTON_TEXT,
       includeFontPadding: false,
       textAlignVertical: 'center',
     },

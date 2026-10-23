@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { ON_PRIMARY_BUTTON_TEXT } from '@/Theme';
 import {
   Modal,
   Pressable,
@@ -311,6 +312,6 @@ const getStyles = ({ colors }) =>
     confirmLabel: {
       fontFamily: 'Poppins Regular',
       fontSize: 14,
-      color: '#FFFFFF',
+      color: ON_PRIMARY_BUTTON_TEXT,
     },
   });

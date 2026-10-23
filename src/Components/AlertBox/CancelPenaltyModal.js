@@ -8,6 +8,7 @@ import {
   View,
 } from 'react-native';
 import { Icon } from 'react-native-paper';
+import { ON_PRIMARY_BUTTON_TEXT } from '@/Theme';
 
 const formatPeso = amount => {
   const n = Number(amount);
@@ -129,6 +130,10 @@ const styles = StyleSheet.create({
   },
   yes: { backgroundColor: '#FFC107' },
   no: { backgroundColor: '#FFE08A' },
-  yesText: { fontFamily: 'Poppins Medium', fontSize: 15, color: '#FFFFFF' },
+  yesText: {
+    fontFamily: 'Poppins Medium',
+    fontSize: 15,
+    color: ON_PRIMARY_BUTTON_TEXT,
+  },
   noText: { fontFamily: 'Poppins Medium', fontSize: 15, color: '#5A4A00' },
 });

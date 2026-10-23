@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { ON_PRIMARY_BUTTON_TEXT } from '@/Theme';
 import {
   Keyboard,
   KeyboardAvoidingView,
@@ -60,6 +61,7 @@ const NoteToRiderModal = ({ visible, onClose, onSave, initialNote = '' }) => {
 
             <AppButton
               title="Send"
+              textColor={ON_PRIMARY_BUTTON_TEXT}
               onPress={handleSave}
               isBold
               buttonColor={colors.primary}

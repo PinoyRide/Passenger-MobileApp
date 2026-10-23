@@ -1,4 +1,5 @@
 import React from 'react';
+import { ON_PRIMARY_BUTTON_TEXT } from '@/Theme';
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -106,6 +107,6 @@ const getStyles = ({ colors }) =>
     confirmText: {
       fontSize: 14,
       fontFamily: 'Poppins Medium',
-      color: '#fff',
+      color: ON_PRIMARY_BUTTON_TEXT,
     },
   });

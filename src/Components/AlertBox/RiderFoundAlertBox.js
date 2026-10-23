@@ -1,5 +1,6 @@
 // src/Components/RiderFoundAlertBox.js
 import React from 'react';
+import { ON_PRIMARY_BUTTON_TEXT } from '@/Theme';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { AppButton } from '@/Components';
@@ -34,6 +35,7 @@ const RiderFoundAlertBox = ({
         <Text style={styles.vehicle}>{vehicle}</Text>
         <AppButton
           title="Okay"
+          textColor={ON_PRIMARY_BUTTON_TEXT}
           onPress={onClose}
           isBold
           noSpacing

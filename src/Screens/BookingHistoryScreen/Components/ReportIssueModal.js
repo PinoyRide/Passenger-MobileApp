@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { ON_PRIMARY_BUTTON_TEXT } from '@/Theme';
 import {
   ActivityIndicator,
   Image,
@@ -29,7 +30,9 @@ const ReportIssueModal = ({ visible, onClose, onSubmit, loading }) => {
   }, [visible]);
 
   const handleSend = () => {
-    if (!message.trim()) {return;}
+    if (!message.trim()) {
+      return;
+    }
     onSubmit(message.trim());
   };
 
@@ -159,6 +162,6 @@ const getStyles = ({ colors }) =>
     sendText: {
       fontFamily: 'Poppins SemiBold',
       fontSize: 15,
-      color: colors.onPrimary,
+      color: ON_PRIMARY_BUTTON_TEXT,
     },
   });

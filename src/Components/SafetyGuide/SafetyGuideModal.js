@@ -1,4 +1,5 @@
 import React from 'react';
+import { ON_PRIMARY_BUTTON_TEXT } from '@/Theme';
 import {
   Modal,
   Pressable,
@@ -101,6 +102,6 @@ const styles = StyleSheet.create({
   callButtonText: {
     fontFamily: 'Poppins SemiBold',
     fontSize: 15,
-    color: '#FFFFFF',
+    color: ON_PRIMARY_BUTTON_TEXT,
   },
 });

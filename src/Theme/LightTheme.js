@@ -4,6 +4,9 @@ import {
   configureFonts,
 } from 'react-native-paper';
 
+// Text on yellow (primary) buttons: dark brown, per client (was white).
+export const ON_PRIMARY_BUTTON_TEXT = '#372A00';
+
 const fontConfig = {
   fontFamily: 'Avenir LT Std 65 Medium',
 };

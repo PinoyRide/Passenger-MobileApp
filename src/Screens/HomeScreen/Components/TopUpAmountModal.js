@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { ON_PRIMARY_BUTTON_TEXT } from '@/Theme';
 import {
   ActivityIndicator,
   Keyboard,
@@ -166,6 +167,7 @@ const TopUpAmountModal = ({ visible, onClose, onError, onSuccess }) => {
                     ) : (
                       <AppButton
                         title="Confirm"
+                        textColor={ON_PRIMARY_BUTTON_TEXT}
                         onPress={handleConfirm}
                         isBold
                         noSpacing

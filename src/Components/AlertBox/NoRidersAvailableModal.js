@@ -1,4 +1,5 @@
 import React from 'react';
+import { ON_PRIMARY_BUTTON_TEXT } from '@/Theme';
 import {
   ActivityIndicator,
   Modal,
@@ -103,7 +104,7 @@ const styles = StyleSheet.create({
   primaryText: {
     fontFamily: 'Poppins Medium',
     fontSize: 14,
-    color: '#FFFFFF',
+    color: ON_PRIMARY_BUTTON_TEXT,
   },
   secondaryText: {
     fontFamily: 'Poppins Medium',
