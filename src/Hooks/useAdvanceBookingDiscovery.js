@@ -27,14 +27,19 @@ export const pickTrackableUpcoming = bookings => {
   );
 };
 
-const useAdvanceBookingDiscovery = ({ customerId, enabled, onFound }) => {
+const useAdvanceBookingDiscovery = ({
+  customerId,
+  enabled,
+  isOnline = true,
+  onFound,
+}) => {
   const api = usePostRequest();
   const onFoundRef = useRef(onFound);
   onFoundRef.current = onFound;
   const focusedRef = useRef(false);
 
   const check = useCallback(async () => {
-    if (!customerId) {
+    if (!customerId || !isOnline) {
       return;
     }
     const { response } = await api.makePostRequest(
@@ -45,7 +50,7 @@ const useAdvanceBookingDiscovery = ({ customerId, enabled, onFound }) => {
     if (found) {
       onFoundRef.current?.(found);
     }
-  }, [customerId]);
+  }, [customerId, isOnline]);
 
   useFocusEffect(
     useCallback(() => {
@@ -58,7 +63,7 @@ const useAdvanceBookingDiscovery = ({ customerId, enabled, onFound }) => {
 
   useFocusEffect(
     useCallback(() => {
-      if (!enabled) {
+      if (!enabled || !isOnline) {
         return undefined;
       }
       check();
@@ -68,7 +73,7 @@ const useAdvanceBookingDiscovery = ({ customerId, enabled, onFound }) => {
         }
       }, POLL_MS);
       return () => clearInterval(id);
-    }, [enabled, check]),
+    }, [enabled, isOnline, check]),
   );
 };
 

@@ -348,10 +348,89 @@ const HomeScreen = () => {
   });
 
   const checkActiveBooking = usePostRequest();
+  const discoverActiveBooking = usePostRequest();
   // Bookings the restore check rejected as stale/not ours; discovery skips them
   // so a mismatch can't loop.
   const staleBookingIdsRef = useRef(new Set());
   const [isRestoringBooking, setIsRestoringBooking] = useState(false);
+
+  const seedPersistedActiveBookingUi = useCallback(() => {
+    if (!activeBooking?.id) {
+      return;
+    }
+    const persistedStatus = Number(activeBooking.status ?? bookingStatus ?? 0);
+    if (![0, 1, 2, 5].includes(persistedStatus)) {
+      return;
+    }
+    restoreTripFields(activeBooking);
+    dispatch(setBookingStatus(persistedStatus));
+    dispatch(setIsConfirmed(true));
+    dispatch(setIsBooked(true));
+    setShowWaitingBanner(true);
+    if (activeBooking.scheduled_pickup_at || activeBooking.scheduled_at) {
+      setScheduledAt(
+        new Date(
+          activeBooking.scheduled_pickup_at || activeBooking.scheduled_at,
+        ),
+      );
+    }
+    const rd = riderDetails || activeBooking.rider_details;
+    if (rd && Object.keys(rd).length > 0) {
+      dispatch(setRiderDetails(rd));
+      applyBookingVehicle(activeBooking, rd);
+      if (
+        (persistedStatus === 1 || persistedStatus === 2) &&
+        rd.current_lat &&
+        rd.current_long
+      ) {
+        setRiderLocation({
+          lat: rd.current_lat,
+          long: rd.current_long,
+        });
+      }
+    }
+  }, [activeBooking, bookingStatus, riderDetails, dispatch]);
+
+  const discoverOngoingBookingFromServer = useCallback(async () => {
+    if (!userInfo?.id || activeBooking?.id || checkActiveBooking.loading) {
+      return;
+    }
+    const { response } = await discoverActiveBooking.makePostRequest(
+      Constants.ENDPOINT.GET_BOOKING_HISTORY,
+      { customer_id: userInfo.id, page: 1 },
+    );
+    const bookings = response?.data?.bookings;
+    if (!Array.isArray(bookings)) {
+      return;
+    }
+    const ongoing =
+      bookings.find(b => Number(b.status) === 2) ||
+      bookings.find(b => Number(b.status) === 1) ||
+      bookings.find(
+        b =>
+          Number(b.status) === 0 &&
+          !staleBookingIdsRef.current.has(bookingKey(b)),
+      ) ||
+      bookings.find(
+        b =>
+          Number(b.status) === 5 &&
+          hasRider(b, b.rider_details) &&
+          !minimizedAdvanceBookingIds.includes(String(b.id)) &&
+          !staleBookingIdsRef.current.has(bookingKey(b)),
+      );
+    if (ongoing?.id && !staleBookingIdsRef.current.has(bookingKey(ongoing))) {
+      restoreTripFields(ongoing);
+      setIsRestoringBooking(true);
+      checkActiveBooking.makePostRequest(
+        Constants.ENDPOINT.GET_BOOKING_DETAILS,
+        {
+          booking_id: ongoing.id,
+          customer_id: userInfo.id,
+          include_rider_eta: '1',
+        },
+      );
+    }
+  }, [userInfo?.id, activeBooking?.id, minimizedAdvanceBookingIds]);
 
   const restoreParkedAdvanceSnapshot = snapshot => {
     const booking = snapshot?.booking;
@@ -613,7 +692,9 @@ const HomeScreen = () => {
   const isLoading =
     inquireBooking.loading ||
     createBooking.loading ||
-    updateBookingStatus.loading;
+    updateBookingStatus.loading ||
+    cancelAdvance.loading ||
+    retryBooking.loading;
 
   const onBookPressed = async () => {
     // "booking should not go through when there is no internet".
@@ -712,11 +793,15 @@ const HomeScreen = () => {
   // Verify a saved (persisted) booking against the server whenever Home mounts
   // or the logged-in customer changes, so a stale booking can't stick.
   useEffect(() => {
-    // a push tap's own get_details is in flight (latest call wins)
-    if (!activeBooking?.id || pushTargetPending()) {
+    if (pushTargetPending()) {
+      return;
+    }
+    if (!activeBooking?.id) {
+      discoverOngoingBookingFromServer();
       return;
     }
     console.log('🔄 Found saved booking in Redux:', activeBooking.id);
+    seedPersistedActiveBookingUi();
     setIsRestoringBooking(true);
     checkActiveBooking.makePostRequest(Constants.ENDPOINT.GET_BOOKING_DETAILS, {
       booking_id: activeBooking.id,
@@ -771,6 +856,7 @@ const HomeScreen = () => {
       pushTargetRef.current = null;
       if (checkActiveBooking.isOffline) {
         console.warn('⚠️ Could not verify active booking — offline');
+        seedPersistedActiveBookingUi();
         setIsRestoringBooking(false);
         if (pushTarget) {
           notifyPush(
@@ -1000,7 +1086,7 @@ const HomeScreen = () => {
       console.log('✅ Restoring active booking state');
       restoreTripFields(booking);
       dispatch(setActiveBooking(booking));
-      dispatch(setBookingStatus(booking.status));
+      dispatch(setBookingStatus(Number(booking.status)));
       dispatch(setIsConfirmed(true));
       dispatch(setIsBooked(true));
       setShowWaitingBanner(true);
@@ -1328,8 +1414,15 @@ const HomeScreen = () => {
       const { status, rider_details } = data;
       const statusNum = Number(status);
 
-      // ✅ Update Redux
-      dispatch(setBookingStatus(status));
+      // ✅ Update Redux (keep activeBooking, trip fields, and banner synced on poll/reconnect)
+      if ([0, 1, 2, 5].includes(statusNum)) {
+        restoreTripFields(data);
+        dispatch(setActiveBooking(data));
+        dispatch(setIsConfirmed(true));
+        dispatch(setIsBooked(true));
+        setShowWaitingBanner(true);
+      }
+      dispatch(setBookingStatus(statusNum));
       AppUtil.debugDeep(rider_details);
 
       setRiderArrivedAt(
@@ -1394,6 +1487,14 @@ const HomeScreen = () => {
         });
       } else if (statusNum !== 1 && statusNum !== 2) {
         setRiderLocation(null);
+      }
+
+      if (statusNum === 4) {
+        clearTransientBookingUi();
+        setShowWaitingBanner(false);
+        setRiderLocation(null);
+        dispatch(clearBookingState());
+        return;
       }
 
       if (statusNum === 3) {
@@ -1462,11 +1563,29 @@ const HomeScreen = () => {
     const cameBackOnline = isOnline && !wasOnlineRef.current;
     wasOnlineRef.current = isOnline;
 
-    if (cameBackOnline && activeBooking?.id) {
-      console.log('🔄 Back online — resyncing booking status immediately');
-      triggerGetBookingDetails();
+    if (!cameBackOnline) {
+      return;
     }
-  }, [isOnline, activeBooking?.id]);
+    if (activeBooking?.id) {
+      console.log('🔄 Back online — resyncing booking status immediately');
+      checkActiveBooking.makePostRequest(
+        Constants.ENDPOINT.GET_BOOKING_DETAILS,
+        {
+          booking_id: activeBooking.id,
+          customer_id: userInfo?.id,
+          include_rider_eta: '1',
+        },
+      );
+      triggerGetBookingDetails();
+    } else {
+      discoverOngoingBookingFromServer();
+    }
+  }, [
+    isOnline,
+    activeBooking?.id,
+    userInfo?.id,
+    discoverOngoingBookingFromServer,
+  ]);
 
   //UPDATE BOOKING STATUS
   const triggerUpdateBookingStatus = async () => {
@@ -1508,6 +1627,11 @@ const HomeScreen = () => {
   // preview first (Figma "Cancel Booking with Penalty?"); instant bookings and
   // penalty-free advance bookings cancel the way they always have.
   const requestFullCancel = async bookingIdOverride => {
+    const online = await checkIsOnline();
+    if (!online) {
+      Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
+      return;
+    }
     const isAdvance = Boolean(
       activeBooking?.is_advance ||
         scheduledAt ||
@@ -1516,7 +1640,6 @@ const HomeScreen = () => {
     );
     if (!isAdvance || !activeBooking?.id) {
       triggerUpdateBookingStatus();
-      setShowWaitingBanner(false);
       return;
     }
     const { response, error } = await cancelAdvance.makePostRequest(
@@ -1560,6 +1683,11 @@ const HomeScreen = () => {
   };
 
   const confirmPenaltyCancel = async bookingIdOverride => {
+    const online = await checkIsOnline();
+    if (!online) {
+      Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
+      return;
+    }
     setPenaltyLoading(true);
     const targetId =
       bookingIdOverride ?? penaltyPreview?.booking_id ?? activeBooking?.id;
@@ -1862,6 +1990,7 @@ const HomeScreen = () => {
     // Runs even with a saved booking: the server's under-way trip (1/2) wins
     // over a different saved one; otherwise only adopt when nothing is tracked.
     enabled: bookLater.enabled && !checkActiveBooking.loading,
+    isOnline,
     onFound: booking => {
       if (
         minimizedAdvanceBookingIds.includes(String(booking.id)) ||
@@ -1960,6 +2089,11 @@ const HomeScreen = () => {
 
   const handleNoRidersTryAgain = async () => {
     if (!stillUnaccepted) {
+      return;
+    }
+    const online = await checkIsOnline();
+    if (!online) {
+      Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
       return;
     }
     setRetryLoading(true);
@@ -2223,7 +2357,12 @@ const HomeScreen = () => {
               onCancelBooking={() => requestFullCancel()}
               // Cancel while waiting: confirm, then a full cancel back to a clean
               // Home (it used to drop back to the fare/confirm screen).
-              onBackToConfirm={() => {
+              onBackToConfirm={async () => {
+                const online = await checkIsOnline();
+                if (!online) {
+                  Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
+                  return;
+                }
                 const msg = 'Are you sure you want to cancel this booking?';
                 if (Platform.OS === 'web') {
                   if (window.confirm(msg)) {
@@ -2271,7 +2410,11 @@ const HomeScreen = () => {
               }
               onAdvanceBooking={handleAdvanceBookingPress}
               advanceCashOnlyNote={Boolean(scheduledAt) && !isBooked}
-              fareIsEstimate={Boolean(scheduledAt) && isBooked && !isConfirmed}
+              fareIsEstimate={
+                isBooked &&
+                (Boolean(scheduledAt) ||
+                  (Boolean(activeBooking?.is_advance) && statusNum === 5))
+              }
               showMinimizeButton={showAcceptedAdvanceTracking}
               onMinimizePress={handleMinimizeAcceptedAdvance}
             />

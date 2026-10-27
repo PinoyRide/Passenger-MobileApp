@@ -17,6 +17,8 @@ import {
   clearBookingState,
   clearSavedPlaces,
   clearUserInfo,
+  selectActiveBooking,
+  selectBookingStatus,
   selectUserInfo,
 } from '@/Redux/Slices/userSlice';
 import { useDispatch, useSelector } from 'react-redux';
@@ -30,6 +32,8 @@ const SettingsScreen = () => {
   const navigation = useNavigation();
   const dispatch = useDispatch();
   const userInfo = useSelector(selectUserInfo);
+  const activeBooking = useSelector(selectActiveBooking);
+  const bookingStatus = useSelector(selectBookingStatus);
   const { makePostRequest, loading: loggingOut } = usePostRequest();
 
   useEffect(() => {
@@ -107,14 +111,12 @@ const SettingsScreen = () => {
       {},
     );
 
-    if (error && offline) {
-      Alert.alert('No Internet Connection', error);
+    if (error || !response || response?.code !== 200) {
+      Alert.alert(
+        offline ? 'No Internet Connection' : 'Ongoing Booking',
+        error || response?.message || 'Failed to log out. Please try again.',
+      );
       return;
-    }
-    // Any server refusal (e.g. "ongoing booking", often from a stale saved
-    // booking) must not trap the user: log out locally regardless.
-    if (error) {
-      console.warn('Logout API refused; logging out locally:', error);
     }
 
     // stop pushes to this phone (backend also clears the saved token)
@@ -131,7 +133,22 @@ const SettingsScreen = () => {
     );
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (activeBooking?.id && [1, 2].includes(Number(bookingStatus))) {
+      Alert.alert(
+        'Ongoing Booking',
+        'You have an ongoing booking. Please complete your current booking first.',
+      );
+      return;
+    }
+    const online = await checkIsOnline();
+    if (!online) {
+      Alert.alert(
+        'No Internet Connection',
+        'Logging out requires an internet connection. Please reconnect and try again.',
+      );
+      return;
+    }
     if (Platform.OS === 'web') {
       // Alert.alert buttons are no-ops on react-native-web.
       if (window.confirm('Are you sure you want to log out?')) {

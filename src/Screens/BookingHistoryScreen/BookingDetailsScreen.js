@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Alert,
   FlatList,
   Image,
   Linking,
@@ -18,6 +19,7 @@ import { AlertBox, AppButton } from '@/Components';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppUtil, Constants } from '@/Utils';
 import usePostRequest from '@/Services/Api';
+import { checkIsOnline } from '@/Utils/Network';
 import {
   setDropoffLocation,
   setPickupLocation,
@@ -149,6 +151,14 @@ const BookingDetailsScreen = () => {
   };
 
   const handleCancelAdvance = async () => {
+    const online = await checkIsOnline();
+    if (!online) {
+      Alert.alert(
+        'No Internet Connection',
+        'Please check your connection and try again.',
+      );
+      return;
+    }
     setCancelLoading(true);
     const { response, error } = await cancelAdvance.makePostRequest(
       Constants.ENDPOINT.CANCEL_ADVANCE,
@@ -167,6 +177,14 @@ const BookingDetailsScreen = () => {
   };
 
   const confirmCancelAdvance = async () => {
+    const online = await checkIsOnline();
+    if (!online) {
+      Alert.alert(
+        'No Internet Connection',
+        'Please check your connection and try again.',
+      );
+      return;
+    }
     setCancelLoading(true);
     const { response, error } = await cancelAdvance.makePostRequest(
       Constants.ENDPOINT.CANCEL_ADVANCE,

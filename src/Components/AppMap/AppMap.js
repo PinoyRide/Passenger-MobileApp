@@ -10,6 +10,7 @@ import { useTheme } from 'react-native-paper';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { Constants } from '@/Utils';
 import { fetchWithTimeout } from '@/Utils/Network';
+import useNetworkStatus from '@/Hooks/useNetworkStatus';
 
 const AppMap = forwardRef(
   (
@@ -282,6 +283,7 @@ const AppMap = forwardRef(
     // The rider marker still moves every poll (state update above) — only the
     // drawn road-path line stays fixed within a leg, which is cheaper and
     // matches how Grab/Uber behave.
+    const isOnline = useNetworkStatus();
     const lastFetchedLegKeyRef = useRef(null);
     const hasRiderCoords = Boolean(riderMarkerLat && riderMarkerLong);
 
@@ -387,13 +389,17 @@ const AppMap = forwardRef(
               }
             }
           }
+          lastFetchedLegKeyRef.current = legKey;
         } catch (e) {
+          lastFetchedLegKeyRef.current = null;
           console.error('Error fetching route:', e);
         }
       };
 
+      if (!isOnline) {
+        return;
+      }
       fetchRoute();
-      lastFetchedLegKeyRef.current = legKey;
     }, [
       statusNum,
       firstMarkerLat,
@@ -401,6 +407,7 @@ const AppMap = forwardRef(
       secondMarkerLat,
       secondMarkerLong,
       hasRiderCoords,
+      isOnline,
     ]);
 
     const decodePolyline = encoded => {

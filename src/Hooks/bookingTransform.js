@@ -47,6 +47,16 @@ export const isAcceptedAdvanceBooking = booking => {
 export const isAdvanceOnLiveTripMap = booking =>
   Boolean(booking?.is_advance) && [1, 2].includes(getRawStatus(booking));
 
+// Ongoing booking (Accepted / In Transit, or unaccepted instant booking) that
+// should open directly on the Home ride screen when tapped in Booking History.
+export const isOngoingOnLiveTripMap = booking => {
+  const status = getRawStatus(booking);
+  if (status === 1 || status === 2) {
+    return true;
+  }
+  return !booking?.is_advance && status === 0;
+};
+
 // Advance bookings already show the accepted-rider modal at status 5; skip "We found you a Rider!" at status 1.
 export const shouldShowRiderFoundAlert = booking => !booking?.is_advance;
 
@@ -120,6 +130,7 @@ export const getHistoryBadgeColor = (status, colors) => {
   if (
     s === 'Advance Booking' ||
     s === 'Accepted' ||
+    s === 'On Going' ||
     s === 'On the way' ||
     s === 'Trip Started'
   ) {

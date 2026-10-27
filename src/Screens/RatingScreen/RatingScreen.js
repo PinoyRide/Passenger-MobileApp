@@ -28,7 +28,7 @@ const RatingScreen = () => {
   const route = useRoute();
   const dispatch = useDispatch();
 
-  const paymentDetails = route?.params?.bookingDetails?.payment_details;
+  const paymentDetails = route?.params?.bookingDetails?.payment_details || {};
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [alertMessage, setAlertMessage] = useState('');
@@ -210,6 +210,7 @@ const RatingScreen = () => {
               <AppButton
                 title="Submit"
                 onPress={handleSubmit}
+                disabled={rateBooking.loading}
                 isBold
                 mode="contained"
               />

@@ -78,7 +78,7 @@ const BottomModal = ({
   const actionButtons = [
     {
       visible: !isBooked,
-      title: 'Book',
+      title: isOnline ? 'Book' : 'No Internet',
       onPress: onInquireBooking,
       color: pickup && dropoff && isOnline ? colors.primary : colors.grey5,
       disabled: !pickup || !dropoff || isLoading || !isOnline,
@@ -92,12 +92,12 @@ const BottomModal = ({
     },
     {
       visible: isConfirmed,
-      title: 'Cancel',
+      title: isOnline ? 'Cancel' : 'No Internet',
       onPress: onBackToConfirm,
-      color: colors.error,
+      color: isOnline ? colors.error : colors.grey5,
       outlined: true,
-      textColor: colors.error,
-      disabled: isLoading,
+      textColor: isOnline ? colors.error : colors.grey5,
+      disabled: isLoading || !isOnline,
     },
   ];
 
@@ -186,11 +186,7 @@ const BottomModal = ({
                 onPress={onMinimizePress}
                 style={styles.minimizeButton}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Image
-                  source={require('@/Assets/Common/Close.png')}
-                  style={styles.minimizeIcon}
-                  resizeMode="contain"
-                />
+                <Text style={styles.minimizeButtonText}>Close</Text>
               </TouchableOpacity>
             ) : null}
           </View>
@@ -369,14 +365,17 @@ const getStyles = ({ colors }) =>
       paddingRight: 8,
     },
     minimizeButton: {
-      width: 28,
-      height: 28,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 6,
+      backgroundColor: colors.grey ?? '#D9D9D9',
       alignItems: 'center',
       justifyContent: 'center',
     },
-    minimizeIcon: {
-      width: 20,
-      height: 20,
+    minimizeButtonText: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 14,
+      color: colors.text,
     },
     locationColumn: {
       marginBottom: 20,

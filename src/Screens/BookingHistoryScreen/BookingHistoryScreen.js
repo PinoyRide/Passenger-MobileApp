@@ -31,13 +31,16 @@ import {
   getBookingTypeLabel,
   getReplacementId,
   isAdvanceOnLiveTripMap,
+  isOngoingOnLiveTripMap,
   isReplacedBooking,
   transformBooking,
 } from '@/Hooks/bookingTransform';
 
-// Pending advance bookings (status 5, 1 or 2) always go on top: accepted ones
-// (rider assigned, or status 1/2) first, then unaccepted, each by pickup time.
-// Everything else keeps the backend's order. Works on raw (untransformed) rows.
+// Ongoing regular bookings (status 1/2) and pending advance bookings (status 5,
+// 1 or 2) always go on top: ongoing regular trips first, then accepted advance
+// bookings, then unaccepted advance bookings, then the rest of history.
+const isActiveRegular = b =>
+  !b?.is_advance && [1, 2].includes(Number(b?.status));
 const isPendingAdvance = b =>
   b?.is_advance && [5, 1, 2].includes(Number(b.status));
 const isAcceptedAdvance = b =>
@@ -52,12 +55,16 @@ export const sortPendingAdvanceFirst = (history = [], upcoming = []) => {
   const seen = new Set(history.map(b => b.id));
   const all = [
     ...history,
-    ...upcoming.filter(b => isPendingAdvance(b) && !seen.has(b.id)),
+    ...upcoming.filter(
+      b => (isPendingAdvance(b) || isActiveRegular(b)) && !seen.has(b.id),
+    ),
   ];
+  const activeRegular = all.filter(isActiveRegular);
   const pending = all.filter(isPendingAdvance);
-  const rest = history.filter(b => !isPendingAdvance(b));
+  const rest = history.filter(b => !isPendingAdvance(b) && !isActiveRegular(b));
   const byPickup = (a, b) => pickupMs(a) - pickupMs(b);
   return [
+    ...activeRegular,
     ...pending.filter(isAcceptedAdvance).sort(byPickup),
     ...pending.filter(b => !isAcceptedAdvance(b)).sort(byPickup),
     ...rest,
@@ -266,7 +273,7 @@ const BookingHistoryScreen = () => {
   };
 
   const handleCardPress = item => {
-    if (isAdvanceOnLiveTripMap(item)) {
+    if (isOngoingOnLiveTripMap(item) || isAdvanceOnLiveTripMap(item)) {
       navigation.navigate('HomeScreen', {
         expandAdvanceBookingId: item.id,
       });

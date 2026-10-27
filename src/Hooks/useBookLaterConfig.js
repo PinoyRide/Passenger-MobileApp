@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import usePostRequest from '@/Services/Api';
+import useNetworkStatus from '@/Hooks/useNetworkStatus';
 import { Constants } from '@/Utils';
 
 export const DEFAULT_PASSENGER_CANCELLATION_NOTICE =
@@ -13,6 +14,8 @@ const DEFAULT_MAX_WINDOW_DAYS = 30;
  */
 const useBookLaterConfig = () => {
   const getConfigRequest = usePostRequest();
+  const isOnline = useNetworkStatus();
+  const wasOnlineRef = useRef(isOnline);
   const lastFetchAt = useRef(0);
   const [config, setConfig] = useState({
     enabled: true,
@@ -40,6 +43,15 @@ const useBookLaterConfig = () => {
   useEffect(() => {
     fetchConfig();
   }, []);
+
+  useEffect(() => {
+    const cameBackOnline = isOnline && !wasOnlineRef.current;
+    wasOnlineRef.current = isOnline;
+    if (cameBackOnline && !getConfigRequest.response) {
+      lastFetchAt.current = 0;
+      fetchConfig();
+    }
+  }, [isOnline]);
 
   useEffect(() => {
     if (!Constants.FEATURE_STATUS.BOOK_LATER) {
