@@ -517,9 +517,7 @@ const BookingDetailsScreen = () => {
               {riderContact === 'loading' ? (
                 <Text style={styles.paymentMethodText}>Loading…</Text>
               ) : riderContact === 'expired' ? (
-                <Text style={styles.contactExpiredText}>
-                  Contact access expired.
-                </Text>
+                <Text style={styles.contactExpiredText}>+639**********</Text>
               ) : riderContact?.number ? (
                 <TouchableOpacity
                   onPress={() =>
