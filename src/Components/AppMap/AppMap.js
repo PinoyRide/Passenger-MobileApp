@@ -104,6 +104,9 @@ const AppMap = forwardRef(
           latitude: parseFloat(riderMarkerLat),
           longitude: parseFloat(riderMarkerLong),
         });
+        // Live GPS must win over the one-time leg-start snap, otherwise the
+        // marker freezes where the rider accepted while only the ETA updates.
+        setSnappedRider(null);
       } else {
         // Clear the coord so the marker unmounts cleanly when the rider is no
         // longer being tracked (booking cancelled / completed). Also reset the
