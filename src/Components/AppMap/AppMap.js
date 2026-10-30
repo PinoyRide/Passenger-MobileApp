@@ -2,11 +2,13 @@ import React, {
   forwardRef,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
 } from 'react';
 import { Image, StyleSheet } from 'react-native';
 import { useTheme } from 'react-native-paper';
+import { trimRouteToRider } from '../../Utils/routeTrim';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { Constants } from '@/Utils';
 import { fetchWithTimeout } from '@/Utils/Network';
@@ -288,6 +290,8 @@ const AppMap = forwardRef(
     // matches how Grab/Uber behave.
     const isOnline = useNetworkStatus();
     const lastFetchedLegKeyRef = useRef(null);
+    const lastRerouteAtRef = useRef(0);
+    const [rerouteTick, setRerouteTick] = useState(0);
     const hasRiderCoords = Boolean(riderMarkerLat && riderMarkerLong);
 
     useEffect(() => {
@@ -411,6 +415,7 @@ const AppMap = forwardRef(
       secondMarkerLong,
       hasRiderCoords,
       isOnline,
+      rerouteTick,
     ]);
 
     const decodePolyline = encoded => {
@@ -447,6 +452,32 @@ const AppMap = forwardRef(
     // so the pin sits exactly at the polyline origin. Falls back to the raw
     // GPS coord from the poll until the first route fetch completes.
     const finalRiderCoord = snappedRider || riderCoord;
+
+    // Shrink the track line as the rider moves: it starts at the live rider
+    // position and drops the part of the road already driven.
+    const isLiveLeg = statusNum === 1 || statusNum === 2;
+    const trimmed = useMemo(
+      () =>
+        isLiveLeg && riderCoord
+          ? trimRouteToRider(routeCoords, riderCoord)
+          : { coords: routeCoords, offRouteMeters: 0 },
+      [isLiveLeg, riderCoord, routeCoords],
+    );
+
+    // If the rider leaves the drawn road (wrong turn / detour), re-fetch the
+    // route from the live position, throttled to once every 30s.
+    useEffect(() => {
+      if (!isLiveLeg || trimmed.offRouteMeters < 60) {
+        return;
+      }
+      const now = Date.now();
+      if (now - lastRerouteAtRef.current < 30000) {
+        return;
+      }
+      lastRerouteAtRef.current = now;
+      lastFetchedLegKeyRef.current = null;
+      setRerouteTick(t => t + 1);
+    }, [isLiveLeg, trimmed.offRouteMeters]);
 
     // Final coordinates used by the Marker components below. Prefer the
     // road-snapped point (matches the polyline exactly); fall back to the
@@ -557,9 +588,9 @@ const AppMap = forwardRef(
           </Marker>
         )}
 
-        {routeCoords.length > 0 && (
+        {trimmed.coords.length > 1 && (
           <Polyline
-            coordinates={routeCoords}
+            coordinates={trimmed.coords}
             strokeColor={colors.primary}
             strokeWidth={5}
           />
