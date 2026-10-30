@@ -2,13 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 
 // Glides a coordinate from its previous value to the new one over durationMs,
 // so the rider marker (and the track line tied to it) moves smoothly between
-// 2-second location polls instead of jumping, like Grab.
+// rider location updates (rider app sends every 5s) instead of jumping, like Grab.
 export const lerpCoord = (from, to, t) => ({
   latitude: from.latitude + (to.latitude - from.latitude) * t,
   longitude: from.longitude + (to.longitude - from.longitude) * t,
 });
 
-const useSmoothCoord = (target, durationMs = 1800) => {
+const useSmoothCoord = (target, durationMs = 4800) => {
   const [coord, setCoord] = useState(target);
   const currentRef = useRef(target);
   const frameRef = useRef(null);
@@ -26,8 +26,8 @@ const useSmoothCoord = (target, durationMs = 1800) => {
     const start = Date.now();
     const step = () => {
       const t = Math.min(1, (Date.now() - start) / durationMs);
-      const eased = t * (2 - t); // ease-out
-      const next = lerpCoord(from, target, eased);
+      // Linear so back-to-back updates read as one continuous drive.
+      const next = lerpCoord(from, target, t);
       currentRef.current = next;
       setCoord(next);
       if (t < 1) {
