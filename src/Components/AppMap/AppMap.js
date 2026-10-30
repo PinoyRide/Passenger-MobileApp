@@ -9,6 +9,7 @@ import React, {
 import { Image, StyleSheet } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { trimRouteToRider } from '../../Utils/routeTrim';
+import useSmoothCoord from '../../Utils/useSmoothCoord';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { Constants } from '@/Utils';
 import { fetchWithTimeout } from '@/Utils/Network';
@@ -451,17 +452,19 @@ const AppMap = forwardRef(
     // u2705 Rider prefers snappedRider (leg.start_location from Directions API)
     // so the pin sits exactly at the polyline origin. Falls back to the raw
     // GPS coord from the poll until the first route fetch completes.
-    const finalRiderCoord = snappedRider || riderCoord;
+    // Glide between 2s polls so the rider moves smoothly instead of jumping.
+    const smoothRider = useSmoothCoord(riderCoord);
+    const finalRiderCoord = snappedRider || smoothRider;
 
     // Shrink the track line as the rider moves: it starts at the live rider
     // position and drops the part of the road already driven.
     const isLiveLeg = statusNum === 1 || statusNum === 2;
     const trimmed = useMemo(
       () =>
-        isLiveLeg && riderCoord
-          ? trimRouteToRider(routeCoords, riderCoord)
+        isLiveLeg && smoothRider
+          ? trimRouteToRider(routeCoords, smoothRider)
           : { coords: routeCoords, offRouteMeters: 0 },
-      [isLiveLeg, riderCoord, routeCoords],
+      [isLiveLeg, smoothRider, routeCoords],
     );
 
     // If the rider leaves the drawn road (wrong turn / detour), re-fetch the
