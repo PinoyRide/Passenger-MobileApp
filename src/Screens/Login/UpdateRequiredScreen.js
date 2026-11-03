@@ -29,6 +29,7 @@ const UpdateRequiredScreen = ({ route }) => {
 
   const { makePostRequest } = usePostRequest();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [logoutError, setLogoutError] = useState('');
 
   // Block the hardware back button — nowhere to go back to, the app is outdated.
   useFocusEffect(
@@ -47,35 +48,36 @@ const UpdateRequiredScreen = ({ route }) => {
       return;
     }
     setIsProcessing(true);
+    setLogoutError('');
 
+    let loggedOut = false;
     try {
-      // Best-effort logout — a force-update gate shouldn't get stuck
-      // waiting on (or blocked by) the network. Whatever happens, we
-      // still want to clear local session state and send the person
-      // to the update link.
+      // Logout must succeed before we open the store. If it fails, the
+      // server keeps is_login=1 and the account gets stuck after the
+      // update, so stay here and let the passenger retry.
       const { response, error } = await makePostRequest(
         Constants.ENDPOINT.LOGOUT,
         {},
       );
-
-      if (error || !response) {
-        console.warn('Logout before force-update failed (continuing):', error);
-      } else {
-        console.log('Logged out before force-update redirect:', response);
-      }
+      loggedOut = !error && !!response;
     } catch (err) {
-      console.warn('Logout before force-update threw (continuing):', err);
-    } finally {
-      await deletePushToken();
-      dispatch(clearUserInfo());
-      dispatch(clearBookingState());
-      dispatch(clearSavedPlaces());
-
-      if (updateLink) {
-        await Linking.openURL(updateLink);
-      }
-      setIsProcessing(false);
+      loggedOut = false;
     }
+
+    if (!loggedOut) {
+      setLogoutError('Walang internet o may problema sa server. Subukan ulit.');
+      setIsProcessing(false);
+      return;
+    }
+
+    await deletePushToken();
+    dispatch(clearUserInfo());
+    dispatch(clearBookingState());
+    dispatch(clearSavedPlaces());
+    if (updateLink) {
+      await Linking.openURL(updateLink);
+    }
+    setIsProcessing(false);
   };
 
   return (
@@ -86,6 +88,7 @@ const UpdateRequiredScreen = ({ route }) => {
         version is now {minimumVersion || '—'}. Please update the app to
         continue.
       </Text>
+      {logoutError ? <Text style={styles.errorText}>{logoutError}</Text> : null}
       <TouchableOpacity
         style={[styles.button, isProcessing && styles.buttonDisabled]}
         onPress={handleUpdatePress}
@@ -93,7 +96,9 @@ const UpdateRequiredScreen = ({ route }) => {
         {isProcessing ? (
           <ActivityIndicator size="small" color="#fff" />
         ) : (
-          <Text style={styles.buttonText}>Update Now</Text>
+          <Text style={styles.buttonText}>
+            {logoutError ? 'Retry' : 'Update Now'}
+          </Text>
         )}
       </TouchableOpacity>
     </View>
@@ -134,6 +139,13 @@ const getStyles = ({ colors }) =>
       minWidth: 140,
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    errorText: {
+      fontSize: 12,
+      fontFamily: 'Poppins Regular',
+      color: '#D32F2F',
+      textAlign: 'center',
+      marginBottom: 12,
     },
     buttonDisabled: {
       opacity: 0.6,

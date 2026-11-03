@@ -1,18 +1,55 @@
 import { Image, StyleSheet, View } from 'react-native';
 import React, { useEffect } from 'react';
 import { useNavigation } from '@react-navigation/native';
-import { useSelector } from 'react-redux';
-import { selectUserInfo } from '@/Redux/Slices/userSlice'; // adjust path to your selector
+import { useDispatch, useSelector } from 'react-redux';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  clearBookingState,
+  clearSavedPlaces,
+  clearUserInfo,
+  selectUserInfo,
+} from '@/Redux/Slices/userSlice';
+import { deletePushToken } from '@/Services/Push/pushPlatform';
+import AppUtil from '@/Utils/AppUtil';
+import {
+  LAST_RUN_VERSION_KEY,
+  isUpdatedSinceLastRun,
+} from '@/Utils/appVersionChange';
+
+// First launch after an app update: drop the old login and push token so
+// the passenger logs in fresh (the backend lets a newer version replace
+// the stale session). Returns true when the session was cleared.
+const clearSessionIfUpdated = async dispatch => {
+  try {
+    const current = AppUtil.getAppVersionNo();
+    const lastRun = await AsyncStorage.getItem(LAST_RUN_VERSION_KEY);
+    await AsyncStorage.setItem(LAST_RUN_VERSION_KEY, String(current));
+    if (isUpdatedSinceLastRun(lastRun, current)) {
+      await deletePushToken();
+      dispatch(clearUserInfo());
+      dispatch(clearBookingState());
+      dispatch(clearSavedPlaces());
+      return true;
+    }
+  } catch (err) {
+    console.warn('Version check on launch failed:', err);
+  }
+  return false;
+};
 
 const SplashScreen = () => {
   const navigation = useNavigation();
+  const dispatch = useDispatch();
   const userInfo = useSelector(selectUserInfo); // persisted value from redux-persist
 
   useEffect(() => {
     const init = async () => {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const [cleared] = await Promise.all([
+        clearSessionIfUpdated(dispatch),
+        new Promise(resolve => setTimeout(resolve, 1000)),
+      ]);
 
-      if (userInfo) {
+      if (userInfo && !cleared) {
         navigation.replace('HomeScreen'); // user already logged in
       } else {
         navigation.replace('OnboardingScreen'); // first time or logged out
@@ -20,7 +57,8 @@ const SplashScreen = () => {
     };
 
     init();
-  }, [userInfo, navigation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <View style={styles.container}>
