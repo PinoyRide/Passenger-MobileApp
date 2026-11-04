@@ -9,6 +9,10 @@ import React, {
 import { Image, StyleSheet } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { trimRouteToRider } from '../../Utils/routeTrim';
+import {
+  routeFromDirections,
+  shouldRefetchRoute,
+} from '../../Utils/routeDirections';
 import useSmoothCoord from '../../Utils/useSmoothCoord';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { Constants } from '@/Utils';
@@ -292,6 +296,10 @@ const AppMap = forwardRef(
     const isOnline = useNetworkStatus();
     const lastFetchedLegKeyRef = useRef(null);
     const lastRerouteAtRef = useRef(0);
+    const currentLegKeyRef = useRef(null);
+    const lastFetchAtRef = useRef(0);
+    const lastFetchPosRef = useRef(null);
+    const retryTimerRef = useRef(null);
     const [rerouteTick, setRerouteTick] = useState(0);
     const hasRiderCoords = Boolean(riderMarkerLat && riderMarkerLong);
 
@@ -313,6 +321,13 @@ const AppMap = forwardRef(
         // Either nothing to draw, or we've already fetched this exact leg —
         // skip the API call entirely.
         return;
+      }
+
+      // New leg: drop the previous leg's line (e.g. the pickup->dropoff
+      // preview) so it is never trimmed into a straight rider line.
+      if (currentLegKeyRef.current !== legKey) {
+        currentLegKeyRef.current = legKey;
+        setRouteCoords([]);
       }
 
       const fetchRoute = async () => {
@@ -349,16 +364,31 @@ const AppMap = forwardRef(
             `https://maps.googleapis.com/maps/api/directions/json?origin=${originLat},${originLong}&destination=${destLat},${destLong}&mode=driving&key=${Constants.GOOGLE_MAP_API_KEY}`,
           );
           const data = await response.json();
-          if (data.routes && data.routes.length > 0) {
-            const route = data.routes[0];
-            setRouteCoords(decodePolyline(route.overview_polyline.points));
+          const parsed = routeFromDirections(data);
+          if (!parsed.ok) {
+            // Rejected/empty response: leave the leg unfetched and retry.
+            console.warn('Directions failed:', data && data.status);
+            lastFetchedLegKeyRef.current = null;
+            clearTimeout(retryTimerRef.current);
+            retryTimerRef.current = setTimeout(
+              () => setRerouteTick(t => t + 1),
+              5000,
+            );
+            return;
+          }
+          {
+            setRouteCoords(parsed.coords);
+            lastFetchAtRef.current = Date.now();
+            lastFetchPosRef.current = hasRiderCoords
+              ? { latitude: Number(originLat), longitude: Number(originLong) }
+              : null;
 
             // ✅ Pull the road-snapped endpoints straight out of the Directions
             // response so the pickup/dropoff pins line up exactly with where
             // the polyline actually starts/ends. The rider marker is NEVER
             // snapped — it always shows real GPS so it doesn't appear to
             // teleport onto a road it isn't actually on.
-            const leg = route.legs && route.legs[0];
+            const leg = parsed.leg;
             if (leg) {
               if (statusNum === 1 && hasRiderCoords) {
                 // Leg 1: rider is origin, pickup is destination.
@@ -419,36 +449,6 @@ const AppMap = forwardRef(
       rerouteTick,
     ]);
 
-    const decodePolyline = encoded => {
-      let points = [],
-        index = 0,
-        lat = 0,
-        lng = 0;
-      while (index < encoded.length) {
-        let b,
-          shift = 0,
-          result = 0;
-        do {
-          b = encoded.charCodeAt(index++) - 63;
-          result |= (b & 0x1f) << shift;
-          shift += 5;
-        } while (b >= 0x20);
-        const dlat = result & 1 ? ~(result >> 1) : result >> 1;
-        lat += dlat;
-        shift = 0;
-        result = 0;
-        do {
-          b = encoded.charCodeAt(index++) - 63;
-          result |= (b & 0x1f) << shift;
-          shift += 5;
-        } while (b >= 0x20);
-        const dlng = result & 1 ? ~(result >> 1) : result >> 1;
-        lng += dlng;
-        points.push({ latitude: lat / 1e5, longitude: lng / 1e5 });
-      }
-      return points;
-    };
-
     // u2705 Rider prefers snappedRider (leg.start_location from Directions API)
     // so the pin sits exactly at the polyline origin. Falls back to the raw
     // GPS coord from the poll until the first route fetch completes.
@@ -467,20 +467,33 @@ const AppMap = forwardRef(
       [isLiveLeg, smoothRider, routeCoords],
     );
 
-    // If the rider leaves the drawn road (wrong turn / detour), re-fetch the
-    // route from the live position, throttled to once every 30s.
+    // Keep the live route fresh while the rider moves: re-fetch every ~15s or
+    // after ~50m of travel, and right away (max once per 15s) if the rider
+    // leaves the drawn road.
     useEffect(() => {
-      if (!isLiveLeg || trimmed.offRouteMeters < 60) {
+      if (!isLiveLeg || !smoothRider || !lastFetchPosRef.current) {
         return;
       }
       const now = Date.now();
-      if (now - lastRerouteAtRef.current < 30000) {
+      if (now - lastRerouteAtRef.current < 15000) {
+        return;
+      }
+      const offRoute = trimmed.offRouteMeters >= 60;
+      const due = shouldRefetchRoute({
+        lastAt: lastFetchAtRef.current,
+        lastPos: lastFetchPosRef.current,
+        now,
+        pos: smoothRider,
+      });
+      if (!offRoute && !due) {
         return;
       }
       lastRerouteAtRef.current = now;
       lastFetchedLegKeyRef.current = null;
       setRerouteTick(t => t + 1);
-    }, [isLiveLeg, trimmed.offRouteMeters]);
+    }, [isLiveLeg, smoothRider, trimmed.offRouteMeters]);
+
+    useEffect(() => () => clearTimeout(retryTimerRef.current), []);
 
     // Final coordinates used by the Marker components below. Prefer the
     // road-snapped point (matches the polyline exactly); fall back to the
