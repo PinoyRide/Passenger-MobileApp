@@ -11,14 +11,16 @@ import {
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 
 import usePostRequest from '@/Services/Api';
 import { Constants } from '@/Utils';
+import { logoutErrorText, shouldCallLogout } from '@/Utils/updateLogout';
 import {
   clearBookingState,
   clearSavedPlaces,
   clearUserInfo,
+  selectUserInfo,
 } from '@/Redux/Slices/userSlice';
 
 const UpdateRequiredScreen = ({ route }) => {
@@ -26,6 +28,7 @@ const UpdateRequiredScreen = ({ route }) => {
   const { colors } = useTheme();
   const styles = getStyles({ colors });
   const dispatch = useDispatch();
+  const userInfo = useSelector(selectUserInfo);
 
   const { makePostRequest } = usePostRequest();
   const [isProcessing, setIsProcessing] = useState(false);
@@ -50,22 +53,27 @@ const UpdateRequiredScreen = ({ route }) => {
     setIsProcessing(true);
     setLogoutError('');
 
-    let loggedOut = false;
-    try {
-      // Logout must succeed before we open the store. If it fails, the
-      // server keeps is_login=1 and the account gets stuck after the
-      // update, so stay here and let the passenger retry.
-      const { response, error } = await makePostRequest(
-        Constants.ENDPOINT.LOGOUT,
-        {},
-      );
-      loggedOut = !error && !!response;
-    } catch (err) {
-      loggedOut = false;
+    // Already logged out: nothing to clear on the server, go to the store.
+    let loggedOut = !shouldCallLogout(userInfo);
+    let errorText = '';
+    if (!loggedOut) {
+      try {
+        // Logout must succeed before we open the store. If it fails, the
+        // server keeps is_login=1 and the account gets stuck after the
+        // update, so stay here and let the passenger retry.
+        const { response, error } = await makePostRequest(
+          Constants.ENDPOINT.LOGOUT,
+          {},
+        );
+        loggedOut = !error && !!response;
+        errorText = logoutErrorText(error);
+      } catch (err) {
+        errorText = logoutErrorText(null);
+      }
     }
 
     if (!loggedOut) {
-      setLogoutError('Walang internet o may problema sa server. Subukan ulit.');
+      setLogoutError(errorText);
       setIsProcessing(false);
       return;
     }
