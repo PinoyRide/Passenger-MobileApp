@@ -13,6 +13,7 @@ import {
   routeFromDirections,
   shouldRefetchRoute,
 } from '../../Utils/routeDirections';
+import { framePoints, isUserControlling } from '../../Utils/passengerCamera';
 import useSmoothCoord from '../../Utils/useSmoothCoord';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { Constants } from '@/Utils';
@@ -48,6 +49,11 @@ const AppMap = forwardRef(
     const mapRef = useRef(null);
     const [mapReady, setMapReady] = useState(false);
     const [routeCoords, setRouteCoords] = useState([]);
+    // Last time the passenger panned/pinched; auto-framing pauses after it.
+    const lastTouchAtRef = useRef(0);
+    const markUserTouch = () => {
+      lastTouchAtRef.current = Date.now();
+    };
 
     // 🔧 Normalize bookingStatus to a Number once — it may arrive as a string
     // ("1") from Redux/the API, and strict "1" === 1 comparisons would fail.
@@ -242,36 +248,30 @@ const AppMap = forwardRef(
         return;
       }
 
+      // Passenger is panning/pinching: don't fight them.
+      if (isUserControlling(lastTouchAtRef.current, Date.now())) {
+        return;
+      }
+
+      // Keep the rider and the passenger's pin (pickup, then dropoff) both in
+      // view. This zooms in gradually as the rider gets closer, down to a
+      // minimum span, and never recenters on the rider alone.
       const destLat = statusNum === 2 ? secondMarkerLat : firstMarkerLat;
       const destLong = statusNum === 2 ? secondMarkerLong : firstMarkerLong;
-
-      if (destLat && destLong) {
-        mapRef.current.fitToCoordinates(
-          [
-            {
-              latitude: parseFloat(riderMarkerLat),
-              longitude: parseFloat(riderMarkerLong),
-            },
-            {
-              latitude: parseFloat(destLat),
-              longitude: parseFloat(destLong),
-            },
-          ],
-          {
-            edgePadding: { top: 150, right: 80, bottom: 260, left: 80 },
-            animated: true,
-          },
-        );
-      } else {
-        mapRef.current.animateToRegion(
-          {
-            latitude: parseFloat(riderMarkerLat),
-            longitude: parseFloat(riderMarkerLong),
-            latitudeDelta: minDelta,
-            longitudeDelta: minDelta,
-          },
-          500,
-        );
+      const points = framePoints(
+        {
+          latitude: parseFloat(riderMarkerLat),
+          longitude: parseFloat(riderMarkerLong),
+        },
+        destLat && destLong
+          ? { latitude: parseFloat(destLat), longitude: parseFloat(destLong) }
+          : null,
+      );
+      if (points) {
+        mapRef.current.fitToCoordinates(points, {
+          edgePadding: { top: 150, right: 80, bottom: 260, left: 80 },
+          animated: true,
+        });
       }
     }, [
       mapReady,
@@ -522,6 +522,8 @@ const AppMap = forwardRef(
         style={[styles.container, style]}
         provider="google"
         onMapReady={() => setMapReady(true)}
+        onTouchStart={markUserTouch}
+        onPanDrag={markUserTouch}
         initialRegion={{
           latitude: 14.5995,
           longitude: 120.9842,
