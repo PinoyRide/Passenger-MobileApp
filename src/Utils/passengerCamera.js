@@ -1,7 +1,7 @@
 // Passenger live-tracking camera rules. Pure (no RN imports) so it runs
 // under `node --test`.
-// ~450 m: the closest the auto-zoom gets, so it never ends up too zoomed in.
-const MIN_SPAN_DEG = 0.004;
+// ~150 m: the closest the auto-zoom gets, so a nearby rider is zoomed right in.
+const MIN_SPAN_DEG = 0.0013;
 // After the passenger pans or pinches, leave the camera alone this long.
 const USER_PAUSE_MS = 10000;
 

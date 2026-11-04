@@ -8,10 +8,10 @@ import React, {
 } from 'react';
 import { Image, StyleSheet } from 'react-native';
 import { useTheme } from 'react-native-paper';
-import { trimRouteToRider } from '../../Utils/routeTrim';
 import {
   routeFromDirections,
   shouldRefetchRoute,
+  trimRouteAlongRoad,
 } from '../../Utils/routeDirections';
 import { framePoints, isUserControlling } from '../../Utils/passengerCamera';
 import useSmoothCoord from '../../Utils/useSmoothCoord';
@@ -269,7 +269,7 @@ const AppMap = forwardRef(
       );
       if (points) {
         mapRef.current.fitToCoordinates(points, {
-          edgePadding: { top: 150, right: 80, bottom: 260, left: 80 },
+          edgePadding: { top: 80, right: 40, bottom: 200, left: 40 },
           animated: true,
         });
       }
@@ -449,12 +449,8 @@ const AppMap = forwardRef(
       rerouteTick,
     ]);
 
-    // u2705 Rider prefers snappedRider (leg.start_location from Directions API)
-    // so the pin sits exactly at the polyline origin. Falls back to the raw
-    // GPS coord from the poll until the first route fetch completes.
     // Glide between 2s polls so the rider moves smoothly instead of jumping.
     const smoothRider = useSmoothCoord(riderCoord);
-    const finalRiderCoord = snappedRider || smoothRider;
 
     // Shrink the track line as the rider moves: it starts at the live rider
     // position and drops the part of the road already driven.
@@ -462,10 +458,19 @@ const AppMap = forwardRef(
     const trimmed = useMemo(
       () =>
         isLiveLeg && smoothRider
-          ? trimRouteToRider(routeCoords, smoothRider)
+          ? trimRouteAlongRoad(routeCoords, smoothRider)
           : { coords: routeCoords, offRouteMeters: 0 },
       [isLiveLeg, smoothRider, routeCoords],
     );
+
+    // The rider pin sits where the line starts (the rider's spot on the road),
+    // so pin and line move together and no line is left behind the rider.
+    // Off the road (>30 m) the pin shows the raw position until the reroute.
+    const onRoad =
+      isLiveLeg && trimmed.coords.length > 1 && trimmed.offRouteMeters <= 30;
+    const finalRiderCoord = onRoad
+      ? trimmed.coords[0]
+      : smoothRider || snappedRider;
 
     // Keep the live route fresh while the rider moves: re-fetch every ~15s or
     // after ~50m of travel, and right away (max once per 15s) if the rider

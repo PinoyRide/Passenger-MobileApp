@@ -87,7 +87,48 @@ function shouldRefetchRoute({ lastAt, lastPos, now, pos }) {
   );
 }
 
+// Trims the route so it starts exactly where the rider is on the road: the
+// rider is projected onto the nearest segment (not snapped to a vertex), so
+// the line never cuts a corner or trails behind the rider marker.
+function trimRouteAlongRoad(route, rider) {
+  if (!rider || !Array.isArray(route) || route.length === 0) {
+    return { coords: route || [], offRouteMeters: 0 };
+  }
+  if (route.length === 1) {
+    return { coords: [rider], offRouteMeters: distanceMeters(rider, route[0]) };
+  }
+  const kx = Math.cos((rider.latitude * Math.PI) / 180);
+  let best = { d: Infinity, seg: 0, pt: route[0] };
+  for (let i = 0; i < route.length - 1; i++) {
+    const a = route[i];
+    const b = route[i + 1];
+    const ax = a.longitude * kx;
+    const bx = b.longitude * kx;
+    const px = rider.longitude * kx;
+    const dx = bx - ax;
+    const dy = b.latitude - a.latitude;
+    const len2 = dx * dx + dy * dy;
+    let t = len2
+      ? ((px - ax) * dx + (rider.latitude - a.latitude) * dy) / len2
+      : 0;
+    t = Math.max(0, Math.min(1, t));
+    const pt = {
+      latitude: a.latitude + t * (b.latitude - a.latitude),
+      longitude: a.longitude + t * (b.longitude - a.longitude),
+    };
+    const d = distanceMeters(rider, pt);
+    if (d < best.d) {
+      best = { d, seg: i, pt };
+    }
+  }
+  return {
+    coords: [best.pt, ...route.slice(best.seg + 1)],
+    offRouteMeters: best.d,
+  };
+}
+
 module.exports = {
+  trimRouteAlongRoad,
   REFETCH_INTERVAL_MS,
   decodePolyline,
   routeFromDirections,

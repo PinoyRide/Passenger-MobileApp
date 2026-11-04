@@ -32,3 +32,7 @@ test('auto-framing pauses while the user is touching the map', () => {
   assert.equal(isUserControlling(1000, 1000 + USER_PAUSE_MS - 1), true);
   assert.equal(isUserControlling(1000, 1000 + USER_PAUSE_MS), false);
 });
+
+test('tight floor: about 150 m so a nearby rider is zoomed right in', () => {
+  assert.ok(MIN_SPAN_DEG <= 0.0014 && MIN_SPAN_DEG >= 0.0012);
+});
