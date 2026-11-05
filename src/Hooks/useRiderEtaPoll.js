@@ -8,8 +8,10 @@ const DEFAULT_REFRESH_S = 15;
  * Polls POST booking/get_eta while a booking is accepted (status 1) or in
  * transit (status 2) and maps {eta_state, eta_minutes, pretty_eta} to the
  * shape used by getRiderEtaText / getDropoffEtaText.
+ * Re-ticks immediately when status changes so Begin Ride / status 2 does not
+ * wait for the previous refresh timer.
  */
-const useRiderEtaPoll = ({ bookingId, customerId, enabled, onEta }) => {
+const useRiderEtaPoll = ({ bookingId, customerId, enabled, status, onEta }) => {
   const api = usePostRequest();
   const onEtaRef = useRef(onEta);
   onEtaRef.current = onEta;
@@ -47,7 +49,7 @@ const useRiderEtaPoll = ({ bookingId, customerId, enabled, onEta }) => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [enabled, bookingId, customerId]);
+  }, [enabled, bookingId, customerId, status]);
 };
 
 export default useRiderEtaPoll;

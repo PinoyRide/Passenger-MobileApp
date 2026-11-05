@@ -78,7 +78,7 @@ import useNetworkStatus from '@/Hooks/useNetworkStatus';
 import { checkIsOnline } from '@/Utils/Network';
 import { getBookingVehicle } from '@/Hooks/bookingVehicle';
 import { getRiderEtaText } from '@/Hooks/riderEta';
-import { getDropoffEtaText } from '@/Utils/dropoffEta';
+import { getDropoffEtaText, keepDropoffEta } from '@/Utils/dropoffEta';
 import useBookLaterConfig from '@/Hooks/useBookLaterConfig';
 import {
   formatScheduledDateLabel,
@@ -1459,6 +1459,10 @@ const HomeScreen = () => {
           }
           riderAlertShownRef.current = true;
         }
+      } else if (statusNum === 2) {
+        // Keep last good drop-off ETA across booking-details polls; get_eta owns updates.
+        dispatch(setRiderDetails(rider_details));
+        applyBookingVehicle(data, rider_details);
       } else {
         setRiderEta(null);
         setRiderEtaReceivedAt(0);
@@ -2050,9 +2054,12 @@ New reference: ${activeBooking.ref_code}`
     customerId: userInfo?.id,
     enabled:
       isOnline && ((statusNum === 1 && !riderArrived) || statusNum === 2),
+    status: statusNum,
     onEta: eta => {
-      setRiderEta(eta);
-      setRiderEtaReceivedAt(Date.now());
+      setRiderEta(prev => (statusNum === 2 ? keepDropoffEta(prev, eta) : eta));
+      if (statusNum !== 2 || (eta && (!eta.leg || eta.leg === 'dropoff'))) {
+        setRiderEtaReceivedAt(Date.now());
+      }
     },
   });
 

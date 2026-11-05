@@ -4,39 +4,35 @@ import mod from '../dropoffEta.js';
 const {
   getDropoffEtaText,
   formatArrivalClock,
-  DROPOFF_ETA_STALE_MS,
+  keepDropoffEta,
   IN_TRANSIT,
 } = mod;
 
 test('shows In transit when there is no eta yet', () => {
-  assert.equal(getDropoffEtaText(null, Date.now()), IN_TRANSIT);
+  assert.equal(getDropoffEtaText(null), IN_TRANSIT);
 });
 
 test('shows In transit for a pickup-leg payload', () => {
-  const now = Date.now();
   assert.equal(
-    getDropoffEtaText(
-      { state: 'en_route', eta_minutes: 8, leg: 'pickup' },
-      now,
-      now,
-    ),
+    getDropoffEtaText({ state: 'en_route', eta_minutes: 8, leg: 'pickup' }),
     IN_TRANSIT,
   );
 });
 
-test('shows In transit when the eta is stale', () => {
-  const old = Date.now() - DROPOFF_ETA_STALE_MS - 1;
+test('keeps showing a drop-off eta with no stale timeout', () => {
+  const noon = new Date(2026, 10, 5, 12, 0, 0, 0).getTime();
+  const oldReceived = noon - 10 * 60 * 1000;
   assert.equal(
     getDropoffEtaText(
       { state: 'en_route', eta_minutes: 8, leg: 'dropoff' },
-      old,
+      oldReceived,
+      noon,
     ),
-    IN_TRANSIT,
+    'In transit · ETA 12:08 PM',
   );
 });
 
 test('formats arrival as 12-hour clock', () => {
-  // 2026-11-05 12:00:00 local
   const noon = new Date(2026, 10, 5, 12, 0, 0, 0).getTime();
   assert.equal(formatArrivalClock(15, noon), '12:15 PM');
   assert.equal(formatArrivalClock(1, noon), '12:01 PM');
@@ -86,4 +82,21 @@ test('uses pretty minutes as a clock when eta_minutes is missing', () => {
     ),
     'In transit · ETA 12:12 PM',
   );
+});
+
+test('keepDropoffEta keeps previous when poll is empty or pickup', () => {
+  const prev = { state: 'en_route', eta_minutes: 10, leg: 'dropoff' };
+  assert.equal(keepDropoffEta(prev, null), prev);
+  assert.equal(keepDropoffEta(prev, undefined), prev);
+  assert.equal(
+    keepDropoffEta(prev, { state: 'en_route', eta_minutes: 3, leg: 'pickup' }),
+    prev,
+  );
+});
+
+test('keepDropoffEta replaces with a newer valid drop-off eta', () => {
+  const prev = { state: 'en_route', eta_minutes: 10, leg: 'dropoff' };
+  const next = { state: 'en_route', eta_minutes: 6, leg: 'dropoff' };
+  assert.equal(keepDropoffEta(prev, next), next);
+  assert.equal(keepDropoffEta(null, next), next);
 });

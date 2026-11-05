@@ -1,7 +1,14 @@
 // Status 2 banner text only — keep the existing UI, append arrival clock.
 // Arrival = now + eta_minutes, shown as "12:15 PM". Uses booking/get_eta.
-const DROPOFF_ETA_STALE_MS = 90000;
+// Once a drop-off ETA has appeared, keep it until a newer valid one arrives
+// or the ride ends — never hide it for staleness or a failed poll.
 const IN_TRANSIT = 'In transit';
+
+const isDropoffEta = eta =>
+  Boolean(eta && eta.state && (!eta.leg || eta.leg === 'dropoff'));
+
+const keepDropoffEta = (prev, incoming) =>
+  isDropoffEta(incoming) ? incoming : prev;
 
 const formatArrivalClock = (etaMinutes, now = Date.now()) => {
   if (!Number.isFinite(etaMinutes)) {
@@ -44,11 +51,9 @@ const formatEtaPart = (dropoffEta, now) => {
   return null;
 };
 
-const getDropoffEtaText = (dropoffEta, receivedAt, now = Date.now()) => {
-  if (!dropoffEta || (dropoffEta.leg && dropoffEta.leg !== 'dropoff')) {
-    return IN_TRANSIT;
-  }
-  if (!receivedAt || now - receivedAt > DROPOFF_ETA_STALE_MS) {
+// receivedAt kept in the signature for call-site compatibility; ignored.
+const getDropoffEtaText = (dropoffEta, _receivedAt, now = Date.now()) => {
+  if (!isDropoffEta(dropoffEta)) {
     return IN_TRANSIT;
   }
   const part = formatEtaPart(dropoffEta, now);
@@ -60,8 +65,9 @@ const getDropoffEtaText = (dropoffEta, receivedAt, now = Date.now()) => {
 };
 
 module.exports = {
-  DROPOFF_ETA_STALE_MS,
   IN_TRANSIT,
+  isDropoffEta,
+  keepDropoffEta,
   formatArrivalClock,
   getDropoffEtaText,
 };
