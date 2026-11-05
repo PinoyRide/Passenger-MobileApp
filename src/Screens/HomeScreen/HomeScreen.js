@@ -78,6 +78,7 @@ import useNetworkStatus from '@/Hooks/useNetworkStatus';
 import { checkIsOnline } from '@/Utils/Network';
 import { getBookingVehicle } from '@/Hooks/bookingVehicle';
 import { getRiderEtaText } from '@/Hooks/riderEta';
+import { getDropoffEtaText } from '@/Utils/dropoffEta';
 import useBookLaterConfig from '@/Hooks/useBookLaterConfig';
 import {
   formatScheduledDateLabel,
@@ -1967,6 +1968,8 @@ const HomeScreen = () => {
     ? 'Your Rider has arrived'
     : statusNum === 1
     ? getRiderEtaText(riderEta, riderEtaReceivedAt) ?? statusMessages[1]
+    : statusNum === 2
+    ? getDropoffEtaText(riderEta, riderEtaReceivedAt)
     : statusNum === 5
     ? hasRider(activeBooking, riderDetails) && scheduledDateObj
       ? `Your Rider will pick you up at ${formatScheduledTimeLabel(
@@ -1977,9 +1980,10 @@ const HomeScreen = () => {
   // re-pooled booking: show its new reference on the card banner
   const bannerText =
     activeBooking?.replaces && activeBooking?.ref_code && etaBannerText
-      ? `${etaBannerText}\nNew reference: ${activeBooking.ref_code}`
+      ? `${etaBannerText}
+New reference: ${activeBooking.ref_code}`
       : etaBannerText;
-  if (statusNum === 1) {
+  if (statusNum === 1 || statusNum === 2) {
     void etaStaleTick;
   }
 
@@ -2044,7 +2048,8 @@ const HomeScreen = () => {
   useRiderEtaPoll({
     bookingId: activeBooking?.id,
     customerId: userInfo?.id,
-    enabled: statusNum === 1 && !riderArrived && isOnline,
+    enabled:
+      isOnline && ((statusNum === 1 && !riderArrived) || statusNum === 2),
     onEta: eta => {
       setRiderEta(eta);
       setRiderEtaReceivedAt(Date.now());

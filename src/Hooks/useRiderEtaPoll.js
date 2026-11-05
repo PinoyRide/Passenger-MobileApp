@@ -5,9 +5,9 @@ import { Constants } from '@/Utils';
 const DEFAULT_REFRESH_S = 15;
 
 /**
- * Polls POST booking/get_eta while a booking is accepted (status 1) and maps
- * {eta_state, eta_minutes, pretty_eta} to the riderEta shape used by
- * getRiderEtaText ({state, eta_minutes, pretty}).
+ * Polls POST booking/get_eta while a booking is accepted (status 1) or in
+ * transit (status 2) and maps {eta_state, eta_minutes, pretty_eta} to the
+ * shape used by getRiderEtaText / getDropoffEtaText.
  */
 const useRiderEtaPoll = ({ bookingId, customerId, enabled, onEta }) => {
   const api = usePostRequest();
@@ -34,6 +34,7 @@ const useRiderEtaPoll = ({ bookingId, customerId, enabled, onEta }) => {
           state: d.eta_state,
           eta_minutes: d.eta_minutes,
           pretty: d.pretty_eta,
+          leg: d.leg,
         });
       }
       const next = Number(d?.refresh_after_seconds) || DEFAULT_REFRESH_S;
