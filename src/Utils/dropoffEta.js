@@ -2,7 +2,7 @@
 // Arrival = now + eta_minutes, shown as "12:15 PM". Uses booking/get_eta.
 // Once a drop-off ETA has appeared, keep it until a newer valid one arrives
 // or the ride ends — never hide it for staleness or a failed poll.
-const IN_TRANSIT = 'In transit';
+const IN_TRANSIT = 'In transit. Do not use your phone';
 
 const isDropoffEta = eta =>
   Boolean(eta && eta.state && (!eta.leg || eta.leg === 'dropoff'));

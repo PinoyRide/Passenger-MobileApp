@@ -8,11 +8,12 @@ const {
   IN_TRANSIT,
 } = mod;
 
-test('shows In transit when there is no eta yet', () => {
+test('base banner is In transit. Do not use your phone', () => {
+  assert.equal(IN_TRANSIT, 'In transit. Do not use your phone');
   assert.equal(getDropoffEtaText(null), IN_TRANSIT);
 });
 
-test('shows In transit for a pickup-leg payload', () => {
+test('shows base banner for a pickup-leg payload', () => {
   assert.equal(
     getDropoffEtaText({ state: 'en_route', eta_minutes: 8, leg: 'pickup' }),
     IN_TRANSIT,
@@ -28,7 +29,7 @@ test('keeps showing a drop-off eta with no stale timeout', () => {
       oldReceived,
       noon,
     ),
-    'In transit · ETA 12:08 PM',
+    `${IN_TRANSIT} · ETA 12:08 PM`,
   );
 });
 
@@ -48,7 +49,7 @@ test('appends arrival clock while en route', () => {
       noon,
       noon,
     ),
-    'In transit · ETA 12:15 PM',
+    `${IN_TRANSIT} · ETA 12:15 PM`,
   );
 });
 
@@ -60,7 +61,7 @@ test('appends Arriving now when close', () => {
       now,
       now,
     ),
-    'In transit · Arriving now',
+    `${IN_TRANSIT} · Arriving now`,
   );
   assert.equal(
     getDropoffEtaText(
@@ -68,7 +69,7 @@ test('appends Arriving now when close', () => {
       now,
       now,
     ),
-    'In transit · Arriving now',
+    `${IN_TRANSIT} · Arriving now`,
   );
 });
 
@@ -80,7 +81,7 @@ test('uses pretty minutes as a clock when eta_minutes is missing', () => {
       noon,
       noon,
     ),
-    'In transit · ETA 12:12 PM',
+    `${IN_TRANSIT} · ETA 12:12 PM`,
   );
 });
 

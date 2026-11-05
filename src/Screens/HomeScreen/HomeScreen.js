@@ -237,7 +237,7 @@ const HomeScreen = () => {
   const statusMessages = {
     0: 'Waiting for the Rider to accept your Booking',
     1: 'Your Rider will arrive soon',
-    2: "In transit, Don't Use your Phone",
+    2: 'In transit. Do not use your phone',
   };
 
   const riderFoundTimeout = useRef(null);
