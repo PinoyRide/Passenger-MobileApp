@@ -9,6 +9,10 @@ import {
 } from 'react-native';
 import { Icon } from 'react-native-paper';
 import { ON_PRIMARY_BUTTON_TEXT } from '@/Theme';
+import {
+  CANCEL_FREE_BODY,
+  CANCEL_WITH_PENALTY_BODY,
+} from '@/Utils/cancellationPolicy';
 
 const formatPeso = amount => {
   const n = Number(amount);
@@ -44,9 +48,7 @@ const CancelPenaltyModal = ({
               : 'Cancel Booking?'}
           </Text>
           <Text style={styles.body}>
-            {penaltyApplies
-              ? 'Are you sure you want to cancel this advance booking? A cancellation penalty of 10% of the estimated fare will be applied.'
-              : 'Are you sure you want to cancel this advance booking? No cancellation penalty applies.'}
+            {penaltyApplies ? CANCEL_WITH_PENALTY_BODY : CANCEL_FREE_BODY}
           </Text>
           {penaltyApplies && amountText ? (
             <Text style={styles.amount}>Penalty: {amountText}</Text>

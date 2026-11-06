@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import usePostRequest from '@/Services/Api';
 import useNetworkStatus from '@/Hooks/useNetworkStatus';
 import { Constants } from '@/Utils';
+import { PASSENGER_CANCELLATION_NOTICE } from '@/Utils/cancellationPolicy';
 
 export const DEFAULT_PASSENGER_CANCELLATION_NOTICE =
-  'Notice:  Cancellations made within 2 hours but more than 30 minutes before the scheduled booking time will incur a 10% penalty of the estimated fare and count as 1 violation.';
+  PASSENGER_CANCELLATION_NOTICE;
 
 const DEFAULT_MIN_LEAD_MINUTES = 120;
 const DEFAULT_MAX_WINDOW_DAYS = 30;
