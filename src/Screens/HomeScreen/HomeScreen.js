@@ -89,7 +89,11 @@ import PickDateModal from './Components/PickDateModal';
 import ChoosePickupPanel from './Components/ChoosePickupPanel';
 import NoRidersAvailableModal from '@/Components/AlertBox/NoRidersAvailableModal';
 import CancelPenaltyModal from '@/Components/AlertBox/CancelPenaltyModal';
-import { freeCancellationPreview } from '@/Utils/cancellationDialog';
+import {
+  cancellationDecision,
+  freeCancellationPreview,
+  useCancellationSubmitGuard,
+} from '@/Utils/cancellationDialog';
 import SafetyGuideModal from '@/Components/SafetyGuide/SafetyGuideModal';
 import EmergencyButton from '@/Components/EmergencyButton';
 import {
@@ -247,6 +251,7 @@ const HomeScreen = () => {
   const [showSafetyGuide, setShowSafetyGuide] = useState(false);
   const [penaltyPreview, setPenaltyPreview] = useState(null);
   const [cancelPreviewLoading, setCancelPreviewLoading] = useState(false);
+  const cancelSubmitGuard = useCancellationSubmitGuard();
   const [penaltyLoading, setPenaltyLoading] = useState(false);
   const [retryLoading, setRetryLoading] = useState(false);
   const [noRidersError, setNoRidersError] = useState('');
@@ -1692,6 +1697,7 @@ const HomeScreen = () => {
   };
 
   const confirmPenaltyCancel = async bookingIdOverride => {
+    setPenaltyLoading(true);
     const online = await checkIsOnline();
     if (!online) {
       Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
@@ -1700,6 +1706,7 @@ const HomeScreen = () => {
     setPenaltyLoading(true);
     const targetId =
       bookingIdOverride ?? penaltyPreview?.booking_id ?? activeBooking?.id;
+    setCancelPreviewLoading(false);
     const { error } = await cancelAdvance.makePostRequest(
       Constants.ENDPOINT.CANCEL_ADVANCE,
       { booking_id: targetId, customer_id: userInfo?.id },
@@ -2286,11 +2293,23 @@ New reference: ${activeBooking.ref_code}`
           penaltyApplies={Boolean(penaltyPreview?.penalty_applies)}
           loading={penaltyLoading || cancelPreviewLoading}
           onYes={() => {
-            if (penaltyPreview?.penalty_applies) {
-              confirmPenaltyCancel();
+            const decision = cancellationDecision(
+              Boolean(penaltyPreview?.penalty_applies),
+              penaltyLoading || cancelPreviewLoading,
+            );
+            if (!decision.allowSubmit || !cancelSubmitGuard.begin()) {
               return;
             }
-            requestFullCancel(penaltyPreview?.booking_id);
+            const bookingId = penaltyPreview?.booking_id;
+            if (decision.dismissFree) {
+              setPenaltyPreview(null);
+            }
+            const finishSubmit = () => cancelSubmitGuard.end();
+            if (penaltyPreview?.penalty_applies) {
+              confirmPenaltyCancel().finally(finishSubmit);
+              return;
+            }
+            requestFullCancel(bookingId).finally(finishSubmit);
           }}
           onNo={() => setPenaltyPreview(null)}
         />
