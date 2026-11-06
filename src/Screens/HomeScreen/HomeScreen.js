@@ -89,6 +89,7 @@ import PickDateModal from './Components/PickDateModal';
 import ChoosePickupPanel from './Components/ChoosePickupPanel';
 import NoRidersAvailableModal from '@/Components/AlertBox/NoRidersAvailableModal';
 import CancelPenaltyModal from '@/Components/AlertBox/CancelPenaltyModal';
+import { freeCancellationPreview } from '@/Utils/cancellationDialog';
 import SafetyGuideModal from '@/Components/SafetyGuide/SafetyGuideModal';
 import EmergencyButton from '@/Components/EmergencyButton';
 import {
@@ -245,6 +246,7 @@ const HomeScreen = () => {
   const [riderArrivedAt, setRiderArrivedAt] = useState(null);
   const [showSafetyGuide, setShowSafetyGuide] = useState(false);
   const [penaltyPreview, setPenaltyPreview] = useState(null);
+  const [cancelPreviewLoading, setCancelPreviewLoading] = useState(false);
   const [penaltyLoading, setPenaltyLoading] = useState(false);
   const [retryLoading, setRetryLoading] = useState(false);
   const [noRidersError, setNoRidersError] = useState('');
@@ -1647,6 +1649,7 @@ const HomeScreen = () => {
       triggerUpdateBookingStatus();
       return;
     }
+    setCancelPreviewLoading(true);
     const { response, error } = await cancelAdvance.makePostRequest(
       Constants.ENDPOINT.CANCEL_ADVANCE,
       {
@@ -1655,6 +1658,7 @@ const HomeScreen = () => {
         preview: true,
       },
     );
+    setCancelPreviewLoading(false);
     if (error && /no longer be cancelled/i.test(String(error))) {
       // re-pooled by a rider cancel: cancel the new booking instead
       const next = bookingIdOverride
@@ -2258,7 +2262,12 @@ New reference: ${activeBooking.ref_code}`
           onClose={() => setShowSafetyGuide(false)}
         />
         <NoRidersAvailableModal
-          visible={noRiders.expired && stillUnaccepted && !penaltyPreview}
+          visible={
+            noRiders.expired &&
+            stillUnaccepted &&
+            !penaltyPreview &&
+            !cancelPreviewLoading
+          }
           loading={retryLoading}
           errorText={noRidersError}
           onTryAgain={handleNoRidersTryAgain}
@@ -2274,8 +2283,15 @@ New reference: ${activeBooking.ref_code}`
           visible={Boolean(penaltyPreview)}
           penaltyAmount={penaltyPreview?.penalty_amount}
           prettyPenaltyAmount={penaltyPreview?.pretty_penalty_amount}
-          loading={penaltyLoading}
-          onYes={() => confirmPenaltyCancel()}
+          penaltyApplies={Boolean(penaltyPreview?.penalty_applies)}
+          loading={penaltyLoading || cancelPreviewLoading}
+          onYes={() => {
+            if (penaltyPreview?.penalty_applies) {
+              confirmPenaltyCancel();
+              return;
+            }
+            requestFullCancel(penaltyPreview?.booking_id);
+          }}
           onNo={() => setPenaltyPreview(null)}
         />
 
@@ -2375,21 +2391,10 @@ New reference: ${activeBooking.ref_code}`
                   Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
                   return;
                 }
-                const msg = 'Are you sure you want to cancel this booking?';
-                if (Platform.OS === 'web') {
-                  if (window.confirm(msg)) {
-                    requestFullCancel();
-                  }
-                  return;
-                }
-                Alert.alert('Cancel Booking', msg, [
-                  { text: 'No', style: 'cancel' },
-                  {
-                    text: 'Yes',
-                    style: 'destructive',
-                    onPress: () => requestFullCancel(),
-                  },
-                ]);
+                // Use the same designed dialog as Booking History, never the
+                // phone's native confirmation. requestFullCancel replaces it
+                // with the backend-priced dialog when a penalty applies.
+                setPenaltyPreview(freeCancellationPreview(activeBooking?.id));
               }}
               onBackToEdit={() => {
                 dispatch(setIsBooked(false));
