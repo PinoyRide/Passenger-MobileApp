@@ -11,7 +11,7 @@ import { Icon } from 'react-native-paper';
 import { ON_PRIMARY_BUTTON_TEXT } from '@/Theme';
 import {
   CANCEL_FREE_BODY,
-  CANCEL_WITH_PENALTY_BODY,
+  cancelWithPenaltyBody,
 } from '@/Utils/cancellationPolicy';
 
 const formatPeso = amount => {
@@ -28,6 +28,7 @@ const CancelPenaltyModal = ({
   penaltyAmount,
   prettyPenaltyAmount,
   penaltyApplies = true,
+  penaltyPercent,
   onYes,
   onNo,
   loading = false,
@@ -48,7 +49,9 @@ const CancelPenaltyModal = ({
               : 'Cancel Booking?'}
           </Text>
           <Text style={styles.body}>
-            {penaltyApplies ? CANCEL_WITH_PENALTY_BODY : CANCEL_FREE_BODY}
+            {penaltyApplies
+              ? cancelWithPenaltyBody(penaltyPercent)
+              : CANCEL_FREE_BODY}
           </Text>
           {penaltyApplies && amountText ? (
             <Text style={styles.amount}>Penalty: {amountText}</Text>

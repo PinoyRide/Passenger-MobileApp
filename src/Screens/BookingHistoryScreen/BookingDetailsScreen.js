@@ -570,6 +570,9 @@ const BookingDetailsScreen = () => {
         visible={Boolean(cancelPreview)}
         penaltyApplies={Boolean(cancelPreview?.penalty_applies)}
         penaltyAmount={cancelPreview?.penalty_amount}
+        penaltyPercent={
+          cancelPreview?.cancellation_policy?.passenger_cancel_penalty_percent
+        }
         loading={cancelLoading}
         onYes={confirmCancelAdvance}
         onNo={() => setCancelPreview(null)}

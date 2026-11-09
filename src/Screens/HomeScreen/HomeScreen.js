@@ -2291,6 +2291,10 @@ New reference: ${activeBooking.ref_code}`
           penaltyAmount={penaltyPreview?.penalty_amount}
           prettyPenaltyAmount={penaltyPreview?.pretty_penalty_amount}
           penaltyApplies={Boolean(penaltyPreview?.penalty_applies)}
+          penaltyPercent={
+            penaltyPreview?.cancellation_policy
+              ?.passenger_cancel_penalty_percent
+          }
           loading={penaltyLoading || cancelPreviewLoading}
           onYes={() => {
             const decision = cancellationDecision(
@@ -2360,6 +2364,9 @@ New reference: ${activeBooking.ref_code}`
               activeBooking?.dropoff_location,
           )}
           noticeText={bookLater.noticeText}
+          penaltyPercent={
+            activeBooking?.cancellation_policy?.passenger_cancel_penalty_percent
+          }
         />
 
         {showChoosePickupPanel && (

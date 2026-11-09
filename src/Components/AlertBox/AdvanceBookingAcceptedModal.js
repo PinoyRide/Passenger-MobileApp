@@ -3,10 +3,18 @@ import { ON_PRIMARY_BUTTON_TEXT } from '@/Theme';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { AppButton } from '@/Components';
-import { DEFAULT_PASSENGER_CANCELLATION_NOTICE } from '@/Hooks/useBookLaterConfig';
+import {
+  cancelPenaltyPercent,
+  passengerCancellationNotice,
+} from '@/Utils/cancellationPolicy';
 
-const NoticeBlock = ({ text, style, boldStyle }) => {
-  const full = text || DEFAULT_PASSENGER_CANCELLATION_NOTICE;
+// The booking's backend percent wins; then any server notice text; then the
+// no-number fallback copy.
+const NoticeBlock = ({ text, penaltyPercent, style, boldStyle }) => {
+  const full =
+    cancelPenaltyPercent(penaltyPercent) != null
+      ? passengerCancellationNotice(penaltyPercent)
+      : text || passengerCancellationNotice();
   const match = full.match(/^(Notice:\s*)(.*)$/i);
   if (!match) {
     return <Text style={style}>{full}</Text>;
@@ -31,6 +39,7 @@ const AdvanceBookingAcceptedModal = ({
   pickup,
   dropoff,
   noticeText,
+  penaltyPercent,
 }) => {
   const { colors } = useTheme();
   const styles = getStyles({ colors });
@@ -73,6 +82,7 @@ const AdvanceBookingAcceptedModal = ({
 
         <NoticeBlock
           text={noticeText}
+          penaltyPercent={penaltyPercent}
           style={styles.notice}
           boldStyle={styles.noticeBold}
         />

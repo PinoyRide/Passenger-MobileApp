@@ -2,10 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import usePostRequest from '@/Services/Api';
 import useNetworkStatus from '@/Hooks/useNetworkStatus';
 import { Constants } from '@/Utils';
-import { PASSENGER_CANCELLATION_NOTICE } from '@/Utils/cancellationPolicy';
 
-export const DEFAULT_PASSENGER_CANCELLATION_NOTICE =
-  PASSENGER_CANCELLATION_NOTICE;
+// booking/get_config/ has no backend route yet, so noticeText stays null and
+// the notice is built from the booking's cancellation_policy percent instead.
 
 const DEFAULT_MIN_LEAD_MINUTES = 120;
 const DEFAULT_MAX_WINDOW_DAYS = 30;
@@ -23,7 +22,7 @@ const useBookLaterConfig = () => {
     minLeadMinutes: DEFAULT_MIN_LEAD_MINUTES,
     maxWindowDays: DEFAULT_MAX_WINDOW_DAYS,
     serverOffsetMs: 0,
-    noticeText: DEFAULT_PASSENGER_CANCELLATION_NOTICE,
+    noticeText: null,
     leadTimeSubtitleHours: 2,
   });
 
@@ -91,7 +90,7 @@ const useBookLaterConfig = () => {
       data.passenger_cancellation_notice ||
       data.cancellation_notice_text ||
       data.scheduled_cancellation_notice ||
-      DEFAULT_PASSENGER_CANCELLATION_NOTICE;
+      null;
 
     const leadHours = Math.max(1, Math.round(minLeadMinutes / 60));
 
