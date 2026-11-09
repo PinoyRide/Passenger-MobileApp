@@ -35,6 +35,7 @@ import {
   isReplacedBooking,
   transformBooking,
 } from '@/Hooks/bookingTransform';
+import { cancelPreviewOutcome } from '@/Utils/cancellationDialog';
 
 const BookingDetailsScreen = () => {
   const { colors } = useTheme();
@@ -159,8 +160,10 @@ const BookingDetailsScreen = () => {
       );
       return;
     }
+    // Dialog opens in its loading state; free/penalty only after a preview.
+    setCancelPreview(null);
     setCancelLoading(true);
-    const { response, error } = await cancelAdvance.makePostRequest(
+    const result = await cancelAdvance.makePostRequest(
       Constants.ENDPOINT.CANCEL_ADVANCE,
       {
         booking_id: bookingDetails.id,
@@ -169,11 +172,12 @@ const BookingDetailsScreen = () => {
       },
     );
     setCancelLoading(false);
-    if (error) {
-      showCancelError(error);
+    const outcome = cancelPreviewOutcome(result);
+    if (outcome.kind === 'ready' || outcome.kind === 'error') {
+      setCancelPreview(outcome.preview || { failed: true });
       return;
     }
-    setCancelPreview(response?.data || {});
+    showCancelError(result.error); // e.g. "can no longer be cancelled"
   };
 
   const confirmCancelAdvance = async () => {
@@ -567,14 +571,18 @@ const BookingDetailsScreen = () => {
       ) : null}
 
       <CancelPenaltyModal
-        visible={Boolean(cancelPreview)}
+        visible={Boolean(cancelPreview) || cancelLoading}
+        checking={cancelLoading && !cancelPreview}
+        failed={Boolean(cancelPreview?.failed)}
         penaltyApplies={Boolean(cancelPreview?.penalty_applies)}
         penaltyAmount={cancelPreview?.penalty_amount}
         penaltyPercent={
           cancelPreview?.cancellation_policy?.passenger_cancel_penalty_percent
         }
         loading={cancelLoading}
-        onYes={confirmCancelAdvance}
+        onYes={
+          cancelPreview?.failed ? handleCancelAdvance : confirmCancelAdvance
+        }
         onNo={() => setCancelPreview(null)}
       />
 

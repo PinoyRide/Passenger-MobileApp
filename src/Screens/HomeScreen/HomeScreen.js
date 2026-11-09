@@ -90,8 +90,11 @@ import ChoosePickupPanel from './Components/ChoosePickupPanel';
 import NoRidersAvailableModal from '@/Components/AlertBox/NoRidersAvailableModal';
 import CancelPenaltyModal from '@/Components/AlertBox/CancelPenaltyModal';
 import {
-  cancellationDecision,
-  freeCancellationPreview,
+  cancelPreviewOutcome,
+  cancelRoute,
+  cancelYesAction,
+  instantCancelPreview,
+  updateStatusCancelOutcome,
   useCancellationSubmitGuard,
 } from '@/Utils/cancellationDialog';
 import SafetyGuideModal from '@/Components/SafetyGuide/SafetyGuideModal';
@@ -1635,69 +1638,74 @@ const HomeScreen = () => {
     clearTransientBookingUi();
   };
 
-  // Full cancel entry point. Advance bookings ask the backend for a penalty
-  // preview first (Figma "Cancel Booking with Penalty?"); instant bookings and
-  // penalty-free advance bookings cancel the way they always have.
-  const requestFullCancel = async bookingIdOverride => {
+  // Full cancel entry point. Advance bookings always use cancel_advance:
+  // preview first (dialog shows a loading state), then exactly one dialog.
+  // Only instant bookings use update_status. `confirm` shows the free dialog;
+  // without it a free preview cancels straight away. `advance` forces the
+  // preview (update_status answered 409 use_cancel_advance).
+  const requestFullCancel = async (bookingIdOverride, confirm, advance) => {
     const online = await checkIsOnline();
     if (!online) {
       Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
       return;
     }
-    const isAdvance = Boolean(
-      activeBooking?.is_advance ||
-        scheduledAt ||
-        activeBooking?.scheduled_pickup_at ||
-        activeBooking?.scheduled_at,
-    );
-    if (!isAdvance || !activeBooking?.id) {
-      triggerUpdateBookingStatus();
+    const cancelInstant = () =>
+      confirm
+        ? setPenaltyPreview(instantCancelPreview(activeBooking?.id))
+        : triggerUpdateBookingStatus();
+    const booking = advance
+      ? { ...activeBooking, is_advance: true }
+      : activeBooking;
+    const path = cancelRoute(booking, scheduledAt, bookingIdOverride);
+    if (path === 'update_status') {
+      cancelInstant();
       return;
     }
+    // Never free-cancel an advance booking without a successful preview.
+    const failed = { booking_id: bookingIdOverride ?? null, failed: true };
+    if (path === 'error') {
+      setPenaltyPreview(failed);
+      return;
+    }
+    setPenaltyPreview(null);
     setCancelPreviewLoading(true);
-    const { response, error } = await cancelAdvance.makePostRequest(
-      Constants.ENDPOINT.CANCEL_ADVANCE,
-      {
+    const outcome = cancelPreviewOutcome(
+      await cancelAdvance.makePostRequest(Constants.ENDPOINT.CANCEL_ADVANCE, {
         booking_id: bookingIdOverride ?? activeBooking.id,
         customer_id: userInfo?.id,
         preview: true,
-      },
+      }),
     );
     setCancelPreviewLoading(false);
-    if (error && /no longer be cancelled/i.test(String(error))) {
+    if (outcome.kind === 'replaced') {
       // re-pooled by a rider cancel: cancel the new booking instead
       const next = bookingIdOverride
         ? null
         : await resolveReplacedId(activeBooking.id);
       if (next) {
-        requestFullCancel(next.id);
+        requestFullCancel(next.id, confirm);
         return;
       }
       finishFullCancel();
       return;
     }
-    if (error) {
-      // Backend without migration 0102 yet: keep the old cancel working.
-      if (/404/.test(String(error))) {
-        triggerUpdateBookingStatus();
-        setShowWaitingBanner(false);
-        return;
-      }
-      setAlertMessage(error);
-      setShowAlert(true);
+    if (outcome.kind === 'instant' && !advance) {
+      cancelInstant(); // backend: not an advance booking, so no fee applies
       return;
     }
-    const preview = response?.data || response || {};
-    if (preview.penalty_applies) {
-      setPenaltyPreview(preview);
+    if (outcome.kind !== 'ready') {
+      setPenaltyPreview(failed);
+      return;
+    }
+    if (outcome.preview.penalty_applies || confirm) {
+      setPenaltyPreview(outcome.preview);
       return;
     }
     // free cancel: still go through cancel_advance so cancelled_by is recorded
-    confirmPenaltyCancel(preview.booking_id ?? bookingIdOverride);
+    confirmPenaltyCancel(outcome.preview.booking_id ?? bookingIdOverride);
   };
 
   const confirmPenaltyCancel = async bookingIdOverride => {
-    setPenaltyLoading(true);
     const online = await checkIsOnline();
     if (!online) {
       Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
@@ -1734,6 +1742,12 @@ const HomeScreen = () => {
   };
 
   const handleUpdateBookingStatus = () => {
+    const err = updateBookingStatus.error;
+    if (updateStatusCancelOutcome({ error: err }) === 'use_cancel_advance') {
+      isCancellingToConfirmRef.current = false;
+      requestFullCancel(undefined, true, true); // fee due: priced dialog
+      return;
+    }
     if (updateBookingStatus.error) {
       if (!updateBookingStatus.isOffline) {
         setAlertMessage(updateBookingStatus.error);
@@ -2287,7 +2301,9 @@ New reference: ${activeBooking.ref_code}`
           }}
         />
         <CancelPenaltyModal
-          visible={Boolean(penaltyPreview)}
+          visible={Boolean(penaltyPreview) || cancelPreviewLoading}
+          checking={cancelPreviewLoading}
+          failed={Boolean(penaltyPreview?.failed)}
           penaltyAmount={penaltyPreview?.penalty_amount}
           prettyPenaltyAmount={penaltyPreview?.pretty_penalty_amount}
           penaltyApplies={Boolean(penaltyPreview?.penalty_applies)}
@@ -2295,25 +2311,25 @@ New reference: ${activeBooking.ref_code}`
             penaltyPreview?.cancellation_policy
               ?.passenger_cancel_penalty_percent
           }
-          loading={penaltyLoading || cancelPreviewLoading}
+          loading={penaltyLoading}
           onYes={() => {
-            const decision = cancellationDecision(
-              Boolean(penaltyPreview?.penalty_applies),
+            const action = cancelYesAction(
+              penaltyPreview,
               penaltyLoading || cancelPreviewLoading,
             );
-            if (!decision.allowSubmit || !cancelSubmitGuard.begin()) {
+            if (action === 'none' || !cancelSubmitGuard.begin()) {
               return;
             }
-            const bookingId = penaltyPreview?.booking_id;
-            if (decision.dismissFree) {
-              setPenaltyPreview(null);
-            }
             const finishSubmit = () => cancelSubmitGuard.end();
-            if (penaltyPreview?.penalty_applies) {
+            if (action === 'penalty') {
               confirmPenaltyCancel().finally(finishSubmit);
               return;
             }
-            requestFullCancel(bookingId).finally(finishSubmit);
+            // free: re-checks then cancels; retry: previews again
+            requestFullCancel(
+              penaltyPreview?.booking_id,
+              action === 'retry',
+            ).finally(finishSubmit);
           }}
           onNo={() => setPenaltyPreview(null)}
         />
@@ -2411,17 +2427,9 @@ New reference: ${activeBooking.ref_code}`
               onCancelBooking={() => requestFullCancel()}
               // Cancel while waiting: confirm, then a full cancel back to a clean
               // Home (it used to drop back to the fare/confirm screen).
-              onBackToConfirm={async () => {
-                const online = await checkIsOnline();
-                if (!online) {
-                  Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
-                  return;
-                }
-                // Use the same designed dialog as Booking History, never the
-                // phone's native confirmation. requestFullCancel replaces it
-                // with the backend-priced dialog when a penalty applies.
-                setPenaltyPreview(freeCancellationPreview(activeBooking?.id));
-              }}
+              // One designed dialog (never the phone's native one), chosen
+              // by the cancel_advance preview: free or with penalty.
+              onBackToConfirm={() => requestFullCancel(undefined, true)}
               onBackToEdit={() => {
                 dispatch(setIsBooked(false));
                 dispatch(setInquireBookingResponse(null));

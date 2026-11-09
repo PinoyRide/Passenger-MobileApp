@@ -9,10 +9,7 @@ import {
 } from 'react-native';
 import { Icon } from 'react-native-paper';
 import { ON_PRIMARY_BUTTON_TEXT } from '@/Theme';
-import {
-  CANCEL_FREE_BODY,
-  cancelWithPenaltyBody,
-} from '@/Utils/cancellationPolicy';
+import { cancelDialogState } from '@/Utils/cancellationDialog';
 
 const formatPeso = amount => {
   const n = Number(amount);
@@ -22,18 +19,28 @@ const formatPeso = amount => {
   return `₱${n.toFixed(2)}`;
 };
 
-// Figma "Frame 2" (node 296-3522).
+// Figma "Frame 2" (node 296-3522). One dialog: checking (preview loading),
+// failed (neutral + Retry/Close), free, or with penalty.
 const CancelPenaltyModal = ({
   visible,
   penaltyAmount,
   prettyPenaltyAmount,
   penaltyApplies = true,
   penaltyPercent,
+  checking = false,
+  failed = false,
   onYes,
   onNo,
   loading = false,
 }) => {
   const amountText = prettyPenaltyAmount || formatPeso(penaltyAmount);
+  const dialog = cancelDialogState({
+    checking,
+    failed,
+    penaltyApplies,
+    penaltyPercent,
+  });
+  const busy = loading || dialog.buttonsDisabled;
   return (
     <Modal
       transparent
@@ -43,35 +50,27 @@ const CancelPenaltyModal = ({
       <View style={styles.overlay}>
         <View style={styles.card} testID="cancel-penalty-modal">
           <Icon source="cancel" size={56} color="#FFC107" />
-          <Text style={styles.title}>
-            {penaltyApplies
-              ? 'Cancel Booking with Penalty?'
-              : 'Cancel Booking?'}
-          </Text>
-          <Text style={styles.body}>
-            {penaltyApplies
-              ? cancelWithPenaltyBody(penaltyPercent)
-              : CANCEL_FREE_BODY}
-          </Text>
-          {penaltyApplies && amountText ? (
+          <Text style={styles.title}>{dialog.title}</Text>
+          <Text style={styles.body}>{dialog.body}</Text>
+          {dialog.showAmount && amountText ? (
             <Text style={styles.amount}>Penalty: {amountText}</Text>
           ) : null}
           <View style={styles.row}>
             <TouchableOpacity
               style={[styles.pill, styles.yes]}
-              disabled={loading}
+              disabled={busy}
               onPress={onYes}>
-              {loading ? (
+              {busy ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <Text style={styles.yesText}>Yes</Text>
+                <Text style={styles.yesText}>{dialog.yesLabel}</Text>
               )}
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.pill, styles.no]}
-              disabled={loading}
+              disabled={busy}
               onPress={onNo}>
-              <Text style={styles.noText}>No</Text>
+              <Text style={styles.noText}>{dialog.noLabel}</Text>
             </TouchableOpacity>
           </View>
         </View>
