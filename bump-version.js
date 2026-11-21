@@ -14,11 +14,22 @@
  *   node bump-version.js 2.0.1             (new version only; the build number stays)
  *
  * Afterwards `node --test src/Utils/__tests__/` checks that every place agrees.
- * Edit the FILES array below if any path doesn't match your project layout.
+ * The places are listed in scripts/version-places.js: edit that list if a path
+ * doesn't match the project layout.
+ *
+ * It also records the version's "native signature" in native-signature.json,
+ * and refuses to keep a version number when the native part of the app changed:
+ * see scripts/native-signature.js.
  */
 
 const fs = require('fs');
 const path = require('path');
+const { places } = require('./scripts/version-places');
+const {
+  nativeSignature,
+  recorded,
+  RECORD,
+} = require('./scripts/native-signature');
 
 const newVersion = process.argv[2];
 const codeArg = process.argv.find(a => a.startsWith('--code'));
@@ -31,6 +42,11 @@ if (!newVersion || !/^\d+\.\d+\.\d+$/.test(newVersion)) {
 }
 
 const ROOT = process.cwd();
+
+const nextPatch = version => {
+  const [major, minor, patch] = version.split('.').map(Number);
+  return `${major}.${minor}.${patch + 1}`;
+};
 
 // The build number after this bump: read from Android, where it lives.
 const GRADLE = 'android/app/build.gradle';
@@ -55,80 +71,36 @@ const newCode = (() => {
   return Number.isInteger(explicit) && explicit > 0 ? explicit : currentCode;
 })();
 
-// ---- Configure these paths for your project ----
-const FILES = [
-  {
-    file: 'package.json',
-    replace: content =>
-      content.replace(/("version"\s*:\s*")[\d.]+(")/, `$1${newVersion}$2`),
-  },
-  // Only the two entries at the top that describe this app itself; every
-  // other "version" in the lock file belongs to a dependency.
-  {
-    file: 'package-lock.json',
-    replace: content =>
-      content
-        .replace(
-          /^(\{\s*"name": "[^"]+",\s*"version": ")[\d.]+(")/,
-          `$1${newVersion}$2`,
-        )
-        .replace(
-          /("packages": \{\s*"": \{\s*"name": "[^"]+",\s*"version": ")[\d.]+(")/,
-          `$1${newVersion}$2`,
-        ),
-    optional: true,
-  },
-  {
-    file: 'app.json',
-    replace: content =>
-      content.replace(/("version"\s*:\s*")[\d.]+(")/, `$1${newVersion}$2`),
-  },
-  {
-    file: 'android/gradle.properties',
-    replace: content =>
-      content.replace(/(MYAPP_VERSION_NAME=)[\d.]+/, `$1${newVersion}`),
-  },
-  {
-    file: 'android/app/build.gradle',
-    replace: content => {
-      let out = content.replace(
-        /(versionName\s+")[\d.]+(")/,
-        `$1${newVersion}$2`,
-      );
-      if (newCode !== null) {
-        out = out.replace(/(versionCode\s+)\d+/, `$1${newCode}`);
-      }
-      return out;
-    },
-  },
-  // iOS keeps the version and the build number once per build configuration.
-  {
-    file: 'ios/pinoyride.xcodeproj/project.pbxproj',
-    replace: content => {
-      let out = content.replace(
-        /(MARKETING_VERSION = )[\d.]+;/g,
-        `$1${newVersion};`,
-      );
-      if (newCode !== null) {
-        out = out.replace(/(CURRENT_PROJECT_VERSION = )\d+;/g, `$1${newCode};`);
-      }
-      return out;
-    },
-  },
-  // The API hook hardcodes app_version as a literal string. Point this at
-  // wherever that file actually lives in your repo.
-  {
-    file: 'src/Services/Api.js',
-    replace: content =>
-      content.replace(/(app_version:\s*')[\d.]+(')/, `$1${newVersion}$2`),
-    optional: true,
-  },
-];
+// Every place the version is written lives in scripts/version-places.js.
+const FILES = places(newVersion, newCode);
+// The same list with numbers no app has, to tell "this file already says so" from "the pattern no longer fits".
+const PROBES = places('999.999.999', 999999);
+
+// ---- Can an installed app of this version still take self-updates? ----
+// A self-update replaces only the JavaScript and the images. When the native part of the app changed, the
+// version number has to change with it, so that apps already installed are not sent JavaScript they cannot
+// run. See scripts/native-signature.js.
+const signature = nativeSignature(ROOT);
+const record = recorded(ROOT);
+if (
+  record &&
+  record.runtimeVersion === newVersion &&
+  record.android !== signature
+) {
+  console.error(
+    `\nThe native part of the app (android/ or the packages it is built with) changed since ${newVersion} was cut.\n` +
+      `Apps already installed as ${newVersion} cannot run JavaScript written for it, so this build needs a new\n` +
+      'version number. Run this again with the next one, for example:\n\n' +
+      `  node bump-version.js ${nextPatch(newVersion)} --code+\n`,
+  );
+  process.exit(1);
+}
 
 let changed = 0;
 let missing = 0;
+let unmatched = 0;
 
-for (const { file, replace, optional } of FILES) {
+FILES.forEach(({ file, replace, optional }, index) => {
   const fullPath = path.join(ROOT, file);
   if (!fs.existsSync(fullPath)) {
     if (!optional) {
@@ -137,31 +109,46 @@ for (const { file, replace, optional } of FILES) {
     } else {
       console.warn(`⚠️  Not found, skipping (optional): ${file}`);
     }
-    continue;
+    return;
   }
 
   const original = fs.readFileSync(fullPath, 'utf8');
   const updated = replace(original);
 
   if (updated === original) {
-    console.warn(
-      `⚠️  No match found in ${file} — check the pattern still fits`,
-    );
-    continue;
+    if (PROBES[index].replace(original) === original) {
+      console.warn(
+        `⚠️  No match found in ${file} — check the pattern still fits`,
+      );
+      unmatched++;
+    } else {
+      console.log(`·  Already says so: ${file}`);
+    }
+    return;
   }
 
   fs.writeFileSync(fullPath, updated, 'utf8');
   console.log(`✅ Updated ${file}`);
   changed++;
-}
+});
+
+// The version's native signature, for the self-updates (scripts/pack-update.mjs checks against it).
+fs.writeFileSync(
+  path.join(ROOT, RECORD),
+  JSON.stringify({ runtimeVersion: newVersion, android: signature }, null, 2) +
+    '\n',
+  'utf8',
+);
+console.log(`✅ Recorded the native signature in ${RECORD}`);
 
 console.log(
   `\nDone. ${changed} file(s) updated${
     missing ? `, ${missing} file(s) not found` : ''
   }. Version ${newVersion}${newCode !== null ? `, build ${newCode}` : ''}.`,
 );
-if (missing) {
+if (missing || unmatched) {
   console.log(
-    'Edit the FILES array at the top of this script to fix any wrong paths.',
+    'Edit scripts/version-places.js to fix any wrong path or pattern.',
   );
+  process.exit(1);
 }

@@ -6,6 +6,7 @@ import { AppButton } from '@/Components';
 import { useNavigation } from '@react-navigation/native';
 import Constants from 'expo-constants';
 import { Constants as AppConstants } from '@/Utils';
+import { runningUpdateLabel } from '@/Utils/selfUpdate';
 
 const LandingScreen = () => {
   const { colors } = useTheme();
@@ -16,6 +17,9 @@ const LandingScreen = () => {
   // A build that talks to the Develop backend says so, to tell it apart
   // from the store app.
   const environment = AppConstants.IS_DEV ? ' · Develop' : '';
+  // When the app is running code it fetched after it was installed, the
+  // commit that code was built from.
+  const update = runningUpdateLabel();
 
   return (
     <Container>
@@ -47,6 +51,7 @@ const LandingScreen = () => {
         <Text style={styles.versionText}>
           v{appVersion}
           {environment}
+          {update ? ` · ${update}` : ''}
         </Text>
       </View>
       <View />
