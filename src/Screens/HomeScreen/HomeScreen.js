@@ -111,6 +111,7 @@ import {
 import { services as SERVICE_OPTIONS } from './Components/ServiceModal';
 import useNoRidersTimer from '@/Hooks/useNoRidersTimer';
 import useRiderEtaPoll from '@/Hooks/useRiderEtaPoll';
+import useRiderLocationPoll from '@/Hooks/useRiderLocationPoll';
 import useAdvanceBookingDiscovery from '@/Hooks/useAdvanceBookingDiscovery';
 import useParkedAdvanceBookingPoll from '@/Hooks/useParkedAdvanceBookingPoll';
 
@@ -211,6 +212,8 @@ const HomeScreen = () => {
 
   // 🆕 Rider real-time location state (transient, not persisted in Redux)
   const [riderLocation, setRiderLocation] = useState(null);
+  // When the fast rider-location poll last delivered a fix (see useRiderLocationPoll).
+  const lastFastFixAtRef = useRef(0);
   const [bookingVehicle, setBookingVehicle] = useState(null);
   const [riderEta, setRiderEta] = useState(null);
   const [riderEtaReceivedAt, setRiderEtaReceivedAt] = useState(0);
@@ -1504,15 +1507,14 @@ const HomeScreen = () => {
         rider_details?.current_lat &&
         rider_details?.current_long
       ) {
-        console.log(
-          '📍 Rider location (from booking details):',
-          rider_details.current_lat,
-          rider_details.current_long,
-        );
-        setRiderLocation({
-          lat: rider_details.current_lat,
-          long: rider_details.current_long,
-        });
+        // The 1 s location poll is the live source; only use this (older,
+        // slower) copy when that poll has gone quiet.
+        if (Date.now() - lastFastFixAtRef.current > 4000) {
+          setRiderLocation({
+            lat: rider_details.current_lat,
+            long: rider_details.current_long,
+          });
+        }
       } else if (statusNum !== 1 && statusNum !== 2) {
         setRiderLocation(null);
       }
@@ -1620,6 +1622,11 @@ const HomeScreen = () => {
     if (updateBookingStatus.loading) {
       return;
     }
+    if (!activeBooking?.id) {
+      // Nothing left to cancel (already cancelled or cleared).
+      setPenaltyPreview(null);
+      return;
+    }
 
     // cancelling is also an explicit user action that must reach the
     // server — block it offline rather than let it silently no-op.
@@ -1641,6 +1648,10 @@ const HomeScreen = () => {
   };
 
   const finishFullCancel = () => {
+    // Close the "Cancel Booking" dialog: left open, a second Yes sent a cancel
+    // with no booking id ("Booking id is required").
+    setPenaltyPreview(null);
+    setCancelPreviewLoading(false);
     dispatch(clearBookingState());
     riderAlertShownRef.current = false;
     setShowWaitingBanner(false);
@@ -1780,6 +1791,7 @@ const HomeScreen = () => {
       // check if this cancel was triggered by "go back to confirm" or a full cancel
       if (isCancellingToConfirmRef.current) {
         console.log('🔄 Cancelled booking to return to confirm screen');
+        setPenaltyPreview(null);
         dispatch(setActiveBooking(null));
         dispatch(setIsConfirmed(false));
         dispatch(setIsBooked(true)); // keep fare breakdown visible
@@ -2005,6 +2017,13 @@ const HomeScreen = () => {
     (Boolean(riderArrivedAt) || riderEta?.state === 'arrived');
   const confirmedBookingView =
     riderArrived || statusNum === 2 || statusNum === 3;
+  // While the rider is on the way, the ETA banner (51) and the Safety Guide
+  // chip (26) float over the map just above the trip sheet (see their `bottom`
+  // styles below). The map counts that strip as covered when framing the rider.
+  const floatingAboveSheet =
+    !confirmedBookingView && (statusNum === 1 || statusNum === 2)
+      ? 15 + (showWaitingBanner ? 59 : 0) + 26
+      : 0;
 
   const etaBannerText = riderArrived
     ? 'Your Rider has arrived'
@@ -2083,6 +2102,26 @@ New reference: ${activeBooking.ref_code}`
           booking_id: booking.id,
           customer_id: userInfo?.id,
         },
+      );
+    },
+  });
+
+  // Live map: the rider's position every second (booking details, polled every
+  // 2 s, only seeds it and covers for this poll if it fails).
+  useRiderLocationPoll({
+    bookingId: activeBooking?.id,
+    customerId: userInfo?.id,
+    enabled: isOnline && (statusNum === 1 || statusNum === 2),
+    onFix: fix => {
+      lastFastFixAtRef.current = Date.now();
+      // Same fix again: keep its first timing, only note the rider's phone
+      // has reported in since (that is how the map knows they are stopped).
+      setRiderLocation(prev =>
+        prev && prev.id === fix.id
+          ? fix.heardAt != null && fix.heardAt > (prev.heardAt || 0)
+            ? { ...prev, heardAt: fix.heardAt }
+            : prev
+          : fix,
       );
     },
   });
@@ -2222,6 +2261,10 @@ New reference: ${activeBooking.ref_code}`
           secondMarkerLong={dropoffLocation?.long}
           riderMarkerLat={riderLocation?.lat}
           riderMarkerLong={riderLocation?.long}
+          riderFixAt={riderLocation?.at}
+          riderFixId={riderLocation?.id}
+          riderHeardAt={riderLocation?.heardAt}
+          bottomInset={modalHeight + floatingAboveSheet}
           bookingStatus={bookingStatus}
           interactive
           style={styles.map}

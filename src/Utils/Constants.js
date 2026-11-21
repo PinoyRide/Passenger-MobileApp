@@ -53,6 +53,7 @@ const BASE_DEV = {
     RETRY_BOOKING: 'booking/retry/',
     CANCEL_ADVANCE: 'booking/cancel_advance/',
     GET_ETA: 'booking/get_eta/',
+    GET_RIDER_LOCATION: 'booking/get_rider_location/',
     //EKYC
     GET_EKYC_URL: 'ekyc/get-ekyc-url/',
     EKYC_CHECK_STATUS: 'ekyc/check_status/',

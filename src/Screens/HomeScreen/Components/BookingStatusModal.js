@@ -270,8 +270,14 @@ const BookingStatusModal = ({
             <TouchableOpacity
               activeOpacity={0.8}
               onPress={toggleExpanded}
+              accessibilityLabel={
+                expanded ? 'Minimize trip details' : 'Show trip details'
+              }
               style={styles.swipeHandleTouch}>
               <View style={styles.swipeMarker} />
+              {!expanded && (
+                <Text style={styles.expandHint}>▲ Show trip details</Text>
+              )}
             </TouchableOpacity>
           </View>
         ) : null}
@@ -291,135 +297,149 @@ const BookingStatusModal = ({
           </View>
         ) : null}
 
-        {/* Fare + Vehicle */}
-        <TouchableOpacity
-          style={styles.rowBetween}
-          onPress={onChangeService}
-          disabled={!(bookingStatus === 0 || bookingStatus === 4)}>
-          <View>
-            <Text style={styles.label}>
-              {selectedService?.title || 'Vehicle'}
-            </Text>
-            {(bookingStatus === 0 || bookingStatus === 4) && (
-              <Text style={styles.changeText}>Tap to change</Text>
-            )}
-          </View>
-          <Text style={styles.price}>{headerFareDisplay}</Text>
-        </TouchableOpacity>
-
-        {showTripDetails ? (
+        {/* Minimized: only the handle and the status line, so the map is clear. */}
+        {(!confirmedBookingView || expanded) && (
           <>
-            <View style={styles.locationColumn}>
-              <View style={styles.locationGroup}>
-                <View style={styles.locationButton}>
-                  <Image
-                    source={require('@/Assets/Common/Pick_Up_Icon.png')}
-                    style={styles.locationIcon}
-                  />
-                  <Text style={styles.locationText} numberOfLines={1}>
-                    {pickup?.description || bookingDetails?.pickup_location}
-                  </Text>
-                </View>
-
-                <View style={styles.dotLine}>
-                  {[...Array(2)].map((_, i) => (
-                    <View key={i} style={styles.dot} />
-                  ))}
-                </View>
-
-                <View style={styles.locationButton}>
-                  <Image
-                    source={require('@/Assets/Common/Drop_Off_Icon.png')}
-                    style={styles.locationIcon}
-                  />
-                  <Text style={styles.locationText} numberOfLines={1}>
-                    {dropoff?.description || bookingDetails?.dropoff_location}
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.fareBreakdown}>
-              <View style={styles.fareRow}>
-                <Text
-                  style={[styles.feeText, { fontFamily: 'Poppins SemiBold' }]}>
-                  {finalFareLabel}
+            {/* Fare + Vehicle */}
+            <TouchableOpacity
+              style={styles.rowBetween}
+              onPress={onChangeService}
+              disabled={!(bookingStatus === 0 || bookingStatus === 4)}>
+              <View>
+                <Text style={styles.label}>
+                  {selectedService?.title || 'Vehicle'}
                 </Text>
-                <Text
-                  style={[styles.feeText, { fontFamily: 'Poppins SemiBold' }]}>
-                  {finalFareDisplay}
+                {(bookingStatus === 0 || bookingStatus === 4) && (
+                  <Text style={styles.changeText}>Tap to change</Text>
+                )}
+              </View>
+              <Text style={styles.price}>{headerFareDisplay}</Text>
+            </TouchableOpacity>
+
+            {showTripDetails ? (
+              <>
+                <View style={styles.locationColumn}>
+                  <View style={styles.locationGroup}>
+                    <View style={styles.locationButton}>
+                      <Image
+                        source={require('@/Assets/Common/Pick_Up_Icon.png')}
+                        style={styles.locationIcon}
+                      />
+                      <Text style={styles.locationText} numberOfLines={1}>
+                        {pickup?.description || bookingDetails?.pickup_location}
+                      </Text>
+                    </View>
+
+                    <View style={styles.dotLine}>
+                      {[...Array(2)].map((_, i) => (
+                        <View key={i} style={styles.dot} />
+                      ))}
+                    </View>
+
+                    <View style={styles.locationButton}>
+                      <Image
+                        source={require('@/Assets/Common/Drop_Off_Icon.png')}
+                        style={styles.locationIcon}
+                      />
+                      <Text style={styles.locationText} numberOfLines={1}>
+                        {dropoff?.description ||
+                          bookingDetails?.dropoff_location}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.fareBreakdown}>
+                  <View style={styles.fareRow}>
+                    <Text
+                      style={[
+                        styles.feeText,
+                        { fontFamily: 'Poppins SemiBold' },
+                      ]}>
+                      {finalFareLabel}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.feeText,
+                        { fontFamily: 'Poppins SemiBold' },
+                      ]}>
+                      {finalFareDisplay}
+                    </Text>
+                  </View>
+                  <View style={styles.fareRow}>
+                    <Text style={styles.feeText}>{totalFareLabel}</Text>
+                    <Text style={styles.feeText}>{totalFareDisplay}</Text>
+                  </View>
+                  <View style={styles.fareRow}>
+                    <Text style={styles.feeText}>Payment Method</Text>
+                    <View style={styles.paymentMethodRow}>
+                      <Image
+                        source={paymentConfig.icon}
+                        style={styles.paymentMethodIcon}
+                      />
+                      <Text style={styles.feeText}>{paymentConfig.label}</Text>
+                    </View>
+                  </View>
+                </View>
+              </>
+            ) : null}
+
+            <View style={styles.separator} />
+
+            {/* Rider Info */}
+            <View style={styles.riderRow}>
+              <Image
+                source={
+                  getRiderPhoto(riderDetails)
+                    ? { uri: getRiderPhoto(riderDetails) }
+                    : riderDetails?.vehicle_details?.[0]?.motorcyle_img
+                    ? { uri: riderDetails.vehicle_details[0].motorcyle_img }
+                    : {
+                        uri:
+                          'https://ui-avatars.com/api/?name=' +
+                          encodeURIComponent(
+                            (ekycDetails?.first_name || '') +
+                              ' ' +
+                              (ekycDetails?.last_name || ''),
+                          ),
+                      }
+                }
+                style={styles.avatar}
+              />
+
+              <View style={{ flex: 1 }}>
+                <Text style={styles.riderName}>
+                  {ekycDetails?.first_name} {ekycDetails?.last_name}
+                </Text>
+                <Text style={styles.plate}>
+                  {resolvedVehicle?.plateNumber || 'N/A'}
+                </Text>
+                <Text style={styles.vehicle}>
+                  {resolvedVehicle?.label || 'N/A'}
                 </Text>
               </View>
-              <View style={styles.fareRow}>
-                <Text style={styles.feeText}>{totalFareLabel}</Text>
-                <Text style={styles.feeText}>{totalFareDisplay}</Text>
-              </View>
-              <View style={styles.fareRow}>
-                <Text style={styles.feeText}>Payment Method</Text>
-                <View style={styles.paymentMethodRow}>
-                  <Image
-                    source={paymentConfig.icon}
-                    style={styles.paymentMethodIcon}
-                  />
-                  <Text style={styles.feeText}>{paymentConfig.label}</Text>
-                </View>
+
+              {/* Action Buttons */}
+              <View style={styles.actions}>
+                <TouchableOpacity
+                  style={styles.circleBtn}
+                  onPress={handleMessage}>
+                  <Text>💬</Text>
+                  {unreadCount > 0 && (
+                    <View style={styles.unreadBadge}>
+                      <Text style={styles.unreadBadgeText}>
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.circleBtn} onPress={handleCall}>
+                  <Text>📞</Text>
+                </TouchableOpacity>
               </View>
             </View>
           </>
-        ) : null}
-
-        <View style={styles.separator} />
-
-        {/* Rider Info */}
-        <View style={styles.riderRow}>
-          <Image
-            source={
-              getRiderPhoto(riderDetails)
-                ? { uri: getRiderPhoto(riderDetails) }
-                : riderDetails?.vehicle_details?.[0]?.motorcyle_img
-                ? { uri: riderDetails.vehicle_details[0].motorcyle_img }
-                : {
-                    uri:
-                      'https://ui-avatars.com/api/?name=' +
-                      encodeURIComponent(
-                        (ekycDetails?.first_name || '') +
-                          ' ' +
-                          (ekycDetails?.last_name || ''),
-                      ),
-                  }
-            }
-            style={styles.avatar}
-          />
-
-          <View style={{ flex: 1 }}>
-            <Text style={styles.riderName}>
-              {ekycDetails?.first_name} {ekycDetails?.last_name}
-            </Text>
-            <Text style={styles.plate}>
-              {resolvedVehicle?.plateNumber || 'N/A'}
-            </Text>
-            <Text style={styles.vehicle}>
-              {resolvedVehicle?.label || 'N/A'}
-            </Text>
-          </View>
-
-          {/* Action Buttons */}
-          <View style={styles.actions}>
-            <TouchableOpacity style={styles.circleBtn} onPress={handleMessage}>
-              <Text>💬</Text>
-              {unreadCount > 0 && (
-                <View style={styles.unreadBadge}>
-                  <Text style={styles.unreadBadgeText}>
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.circleBtn} onPress={handleCall}>
-              <Text>📞</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        )}
 
         {(!confirmedBookingView || expanded) && (
           <AppButton
@@ -464,6 +484,13 @@ const getStyles = ({ colors }) =>
     swipeHandleTouch: {
       paddingVertical: 4,
       paddingHorizontal: 40,
+      alignItems: 'center',
+    },
+    expandHint: {
+      marginTop: 6,
+      fontSize: 12,
+      color: '#084CF7',
+      textAlign: 'center',
     },
     swipeMarker: {
       width: 48,
