@@ -62,9 +62,10 @@
     <!-- Self-updates: every time the app starts it asks the Pinoy Ride backend for newer JavaScript and
          images, so a change that touches nothing native reaches installed apps without a new APK. An update
          is accepted only when that backend signed it (checked against the certificate below) and it was made
-         for this app's version (expo_runtime_version in res/values/strings.xml).
+         for this APK's version (expo_runtime_version in res/values/strings.xml).
          EXPO_UPDATES_LAUNCH_WAIT_MS is how long the start waits for an update to arrive, so that the app
          opens on the new code straight away; one that takes longer is used the next time the app is started.
+         What is on the screen during that wait is LaunchScreen.kt.
          The address and the certificate are the Develop environment's, like DEV_URL in
          src/Utils/Constants.js. See "Self-updates" in the README. -->
     <meta-data android:name="expo.modules.updates.ENABLED" android:value="true"/>

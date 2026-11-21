@@ -1,5 +1,10 @@
 <resources>
   <string name="app_name">Pinoy Ride</string>
-  <!-- The app version: set by bump-version.js. Self-updates made for another version are not taken. -->
+  <!-- What the app says it is doing while it starts (LaunchScreen.kt) -->
+  <string name="launch_checking">Checking for updates…</string>
+  <string name="launch_downloading">Downloading the update…</string>
+  <string name="launch_starting">Starting…</string>
+  <!-- The APK version: set by bump-version.js when the native part changes. Self-updates made for another
+       APK version are not taken. -->
   <string name="expo_runtime_version">2.0.1</string>
 </resources>

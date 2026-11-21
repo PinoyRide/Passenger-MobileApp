@@ -63,6 +63,15 @@ used the next time the app is started. Nothing is installed again.
   is version 2.0.2 from commit `3fa9c1e`; no commit means the code the APK came with.
 - A phone picks an update up when the app starts, not when it comes back from the background: swipe it away
   from the recent apps and open it again.
+- What a person sees meanwhile (from the 2.0.5 APK): from the moment the app is opened until its first
+  screen is ready, the logo, a moving line and one sentence: "Checking for updates…", "Downloading the
+  update…" when one was found, then "Starting…". It is native (`LaunchScreen.kt`,
+  `res/layout/launch_screen.xml`), because no JavaScript runs during that wait, and it looks like the app's
+  own first screen (`SplashScreen.js`), which takes over from it without a jump. It leaves when the view
+  `App.js` marks with `nativeID="app-ready"` is drawn. Changing how it looks needs a new APK.
+- An update that did not arrive within the wait keeps downloading while the app is used. A small line at the
+  bottom says so, and then "Update ready. Close the app and open it again to use it."
+  (`src/Components/UpdateNotice`). That part is JavaScript and travels as an update.
 - Where it is set: `android/app/src/main/AndroidManifest.xml` (the address, the certificate, how long a start
   waits). The app's own code only shows the label (`src/Utils/selfUpdate.js`), and does not restart the app
   to pick an update up sooner: that file says why. The backend's README ("App updates") describes its side.

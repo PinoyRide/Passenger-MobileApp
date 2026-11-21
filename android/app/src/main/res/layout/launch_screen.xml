@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What a person sees from opening the app until its first screen is ready: LaunchScreen.kt.
+     The logo is where, and as large as, the app's own first screen draws it (SplashScreen.js: 243 x 175 in the
+     middle), so nothing jumps when the app takes over. The line and the sentence hang below it. -->
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/launch_screen"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/launch_background"
+    android:clickable="true"
+    android:focusable="true">
+
+  <ImageView
+      android:id="@+id/launch_logo"
+      android:layout_width="243dp"
+      android:layout_height="175dp"
+      android:layout_centerInParent="true"
+      android:contentDescription="@string/app_name"
+      android:scaleType="fitCenter"
+      android:src="@drawable/launch_logo"/>
+
+  <!-- A short line that keeps moving while the app works -->
+  <FrameLayout
+      android:id="@+id/launch_track"
+      android:layout_width="132dp"
+      android:layout_height="3dp"
+      android:layout_below="@id/launch_logo"
+      android:layout_centerHorizontal="true"
+      android:layout_marginTop="36dp"
+      android:background="@drawable/launch_track">
+
+    <View
+        android:id="@+id/launch_bar"
+        android:layout_width="44dp"
+        android:layout_height="match_parent"
+        android:background="@drawable/launch_bar"/>
+  </FrameLayout>
+
+  <!-- What the app is doing, in one sentence -->
+  <TextView
+      android:id="@+id/launch_status"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:layout_below="@id/launch_track"
+      android:layout_centerHorizontal="true"
+      android:layout_marginTop="18dp"
+      android:includeFontPadding="false"
+      android:text="@string/launch_checking"
+      android:textColor="@color/launch_text"
+      android:textSize="13sp"/>
+</RelativeLayout>

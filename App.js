@@ -8,6 +8,7 @@ registerTranslation('en', en);
 import { Provider } from 'react-redux';
 import { PersistGate } from 'redux-persist/integration/react';
 
+import UpdateNotice from '@/Components/UpdateNotice/UpdateNotice';
 import ApplicationNavigator from '@/Navigators/Application';
 import PushNotificationManager from '@/Services/Push/PushNotificationManager';
 import { persistor, store } from '@/Redux/store';
@@ -30,12 +31,15 @@ const App = () => {
   return (
     <Provider store={store}>
       <PersistGate loading={null} persistor={persistor}>
-        <View style={styles.container}>
+        {/* nativeID: how the screen shown while the app starts (android LaunchScreen.kt)
+            learns that the app has drawn its first screen, and leaves. */}
+        <View style={styles.container} nativeID="app-ready">
           {/* Edge to edge (Android 15+, required at target 36): the status bar is transparent over the
               app's light screens, so its icons must be dark or they disappear on dark-mode phones. */}
           <StatusBar style="dark" />
           <ApplicationNavigator />
           <PushNotificationManager />
+          <UpdateNotice />
         </View>
       </PersistGate>
     </Provider>
