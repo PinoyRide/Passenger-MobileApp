@@ -1,5 +1,5 @@
 <resources>
   <string name="app_name">Pinoy Ride</string>
   <!-- The app version: set by bump-version.js. Self-updates made for another version are not taken. -->
-  <string name="expo_runtime_version">2.0.0</string>
+  <string name="expo_runtime_version">2.0.1</string>
 </resources>
