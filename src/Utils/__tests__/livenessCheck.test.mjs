@@ -7,8 +7,8 @@ const {
   faceProblem,
   advance,
   isGoodPortrait,
-  pickPictureSize,
   stepsPassed,
+  PICTURE_SIZE,
   MAX_MISSES,
   STEP_TIMEOUT_MS,
 } = mod;
@@ -52,6 +52,33 @@ test('either side may come first, but the second turn must be the other side', (
   const same = run([...straightTwice, [face(25)], [face(30)], [face(24)]]);
   assert.equal(same.state.step, 'otherTurn');
   assert.equal(same.done, false);
+  // and the person is told at once, not left turning the same way
+  assert.equal(same.problem, 'same_side');
+});
+
+test('no sample that shows a face is left without an answer', () => {
+  // asked to look straight, but turned
+  let r = run([[face(14)]]);
+  assert.equal(r.problem, 'turned');
+  assert.equal(r.state.step, 'straight');
+  // looking straight: no complaint, even before the step is passed
+  r = run([[face(3)]]);
+  assert.equal(r.problem, null);
+  // asked to turn: waiting for it is not a problem, turning too far is
+  r = run([...straightTwice, [face(4)]]);
+  assert.equal(r.problem, null);
+  r = run([...straightTwice, [face(70)]]);
+  assert.equal(r.problem, 'turned_too_far');
+  r = run([...straightTwice, [face(20)], [face(-70)]]);
+  assert.equal(r.problem, 'turned_too_far');
+  // on the way back to the middle between the two turns: just waiting
+  r = run([...straightTwice, [face(20)], [face(5)]]);
+  assert.equal(r.problem, null);
+  assert.equal(r.state.step, 'otherTurn');
+  // asked to look straight again, still turned
+  r = run([...straightTwice, [face(20)], [face(-20)], [face(-18)]]);
+  assert.equal(r.problem, 'turned');
+  assert.equal(r.state.step, 'finish');
 });
 
 test('a still photo never gets past the first turn', () => {
@@ -163,14 +190,12 @@ test('the final picture must show one well-placed face looking at the camera', (
   assert.equal(faceProblem([face(0)]), null);
 });
 
-test('picks a picture size near 1280 on the long side', () => {
-  assert.equal(
-    pickPictureSize(['4000x3000', '1920x1080', '1280x720', '640x480']),
-    '1280x720',
-  );
-  assert.equal(pickPictureSize(['4000x3000', '1600x1200', '320x240']), '1600x1200');
-  assert.equal(pickPictureSize(['1440x1080', '1088x1088']), '1440x1080');
-  // nothing usable: leave the camera's default
-  assert.equal(pickPictureSize(['320x240', 'Photo']), undefined);
-  assert.equal(pickPictureSize(undefined), undefined);
+test('the camera is asked for a modest picture, as width x height', () => {
+  const match = /^(\d+)x(\d+)$/.exec(PICTURE_SIZE);
+  assert.ok(match, PICTURE_SIZE);
+  const [long, short] = [Number(match[1]), Number(match[2])];
+  // wide first, as cameras state their sizes; big enough for a clear
+  // profile photo, small enough to take and scan several times a second
+  assert.ok(long > short);
+  assert.ok(long >= 960 && long <= 1600, PICTURE_SIZE);
 });

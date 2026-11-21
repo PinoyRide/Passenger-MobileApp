@@ -13,8 +13,16 @@
 // the first turn. This is a deterrent, not bank-grade verification: someone
 // determined could still play back a video of a person turning their head.
 //
-// The screen samples the camera about once a second and feeds what the face
-// detector found to `advance`.
+// The screen samples the camera a few times a second and feeds what the face
+// detector found to `advance`. Every sample answers with either progress or
+// a reason, so the person is never left wondering what is being waited for.
+
+// The picture the camera is asked for (Android), set before it first opens.
+// At the camera's full size a sample takes several seconds on a phone with a
+// large front camera; at this size it takes a fraction of one, and the photo
+// that is kept is still clear. A phone that does not have exactly this size
+// uses its nearest one.
+const PICTURE_SIZE = '1280x960';
 
 // |yaw| up to this counts as looking straight at the camera (degrees).
 const STRAIGHT_MAX_YAW = 10;
@@ -114,8 +122,12 @@ function faceProblem(faces) {
  * Folds one camera sample into the check.
  * faces: results of describeFace for every face in the sample.
  * Returns { state, problem, done }:
- *   problem: 'no_face' | 'many_faces' | 'too_far' | 'off_center' |
- *            'eyes_closed' | 'restarted' | null
+ *   problem: why this sample made no progress, for the hint on the screen:
+ *            'no_face' | 'many_faces' | 'too_far' | 'off_center' |
+ *            'turned' (asked to look straight, but turned) |
+ *            'same_side' (the second turn went the same way as the first) |
+ *            'turned_too_far' | 'eyes_closed' | 'restarted' |
+ *            null (progress, or simply waiting for the turn asked for)
  *   done:    true once every step has been passed.
  */
 function advance(state, faces, now) {
@@ -148,7 +160,11 @@ function advance(state, faces, now) {
   switch (state.step) {
     case 'straight': {
       if (turn > STRAIGHT_MAX_YAW) {
-        return { state: { ...present, held: 0 }, problem: null, done: false };
+        return {
+          state: { ...present, held: 0 },
+          problem: 'turned',
+          done: false,
+        };
       }
       const held = state.held + 1;
       return {
@@ -169,7 +185,11 @@ function advance(state, faces, now) {
           done: false,
         };
       }
-      return { state: present, problem: null, done: false };
+      return {
+        state: present,
+        problem: turn > TURN_MAX_YAW ? 'turned_too_far' : null,
+        done: false,
+      };
     case 'otherTurn':
       if (
         turn >= TURN_MIN_YAW &&
@@ -182,10 +202,19 @@ function advance(state, faces, now) {
           done: false,
         };
       }
-      return { state: present, problem: null, done: false };
+      if (turn > TURN_MAX_YAW) {
+        return { state: present, problem: 'turned_too_far', done: false };
+      }
+      return {
+        state: present,
+        // still turned the way of the first turn
+        problem:
+          turn >= TURN_MIN_YAW && side === state.firstSide ? 'same_side' : null,
+        done: false,
+      };
     case 'finish':
       if (turn > STRAIGHT_MAX_YAW) {
-        return { state: present, problem: null, done: false };
+        return { state: present, problem: 'turned', done: false };
       }
       if (eyesOpen != null && eyesOpen < EYES_OPEN_MIN) {
         return { state: present, problem: 'eyes_closed', done: false };
@@ -208,41 +237,13 @@ function isGoodPortrait(faces) {
   );
 }
 
-/**
- * Picks a camera picture size for the check: big enough for a clear profile
- * photo, small enough to capture and scan about once a second.
- * sizes: strings like "1920x1080" from the camera. Returns one of them, or
- * undefined to leave the camera's default.
- */
-function pickPictureSize(sizes, targetLongSide = 1280) {
-  let best;
-  let bestScore = Infinity;
-  (sizes || []).forEach(size => {
-    const match = /^(\d+)x(\d+)$/.exec(String(size));
-    if (!match) {
-      return;
-    }
-    const longSide = Math.max(Number(match[1]), Number(match[2]));
-    if (longSide < 640) {
-      return; // too small for a profile photo
-    }
-    // Prefer the closest to the target; when in doubt, the larger one.
-    const score =
-      Math.abs(longSide - targetLongSide) + (longSide < targetLongSide ? 1 : 0);
-    if (score < bestScore) {
-      bestScore = score;
-      best = size;
-    }
-  });
-  return best;
-}
-
 /** How far through the check the passenger is, 0 to 4 steps passed. */
 const stepsPassed = state =>
   state.step === 'done' ? STEPS.length : STEPS.indexOf(state.step);
 
 module.exports = {
   STEPS,
+  PICTURE_SIZE,
   STRAIGHT_MAX_YAW,
   TURN_MIN_YAW,
   TURN_MAX_YAW,
@@ -254,6 +255,5 @@ module.exports = {
   faceProblem,
   advance,
   isGoodPortrait,
-  pickPictureSize,
   stepsPassed,
 };
