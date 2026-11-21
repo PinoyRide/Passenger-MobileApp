@@ -7,8 +7,10 @@ import {
   clearBookingState,
   clearSavedPlaces,
   clearUserInfo,
+  selectActiveBooking,
   selectUserInfo,
 } from '@/Redux/Slices/userSlice';
+import { askBuildCheck } from '@/Utils/askBuildCheck';
 import { deletePushToken } from '@/Services/Push/pushPlatform';
 import AppUtil from '@/Utils/AppUtil';
 import { needsConsent } from '@/Utils/consent';
@@ -42,13 +44,23 @@ const SplashScreen = () => {
   const navigation = useNavigation();
   const dispatch = useDispatch();
   const userInfo = useSelector(selectUserInfo); // persisted value from redux-persist
+  const activeBooking = useSelector(selectActiveBooking);
 
   useEffect(() => {
     const init = async () => {
-      const [cleared] = await Promise.all([
+      const [cleared, newerBuild] = await Promise.all([
         clearSessionIfUpdated(dispatch),
+        // Is this build still accepted? Asked here, on the first screen, so
+        // an outdated install is sent to the download at once, signed in or
+        // not. A trip under way is left to finish.
+        askBuildCheck('passenger', { tripUnderWay: !!activeBooking }),
         new Promise(resolve => setTimeout(resolve, 1000)),
       ]);
+
+      if (newerBuild) {
+        navigation.replace('UpdateRequiredScreen', newerBuild);
+        return;
+      }
 
       if (userInfo && !cleared) {
         // already logged in; the Terms and Privacy Policy come first when the
