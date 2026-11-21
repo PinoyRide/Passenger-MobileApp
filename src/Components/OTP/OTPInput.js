@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
+import { modern } from '@/Theme/modern';
 
 /**
  * OTPInput component
@@ -22,7 +23,7 @@ import { useTheme } from 'react-native-paper';
  * this regardless of how deeply the component is nested.
  */
 const OTPInput = ({ length = 6, onOTPChange, onOTPComplete, autoFillCode }) => {
-  const { colors } = useTheme();
+  const look = modern(useTheme());
   const inputs = useRef([]);
   const [digits, setDigits] = useState(Array.from({ length }, () => ''));
 
@@ -34,7 +35,7 @@ const OTPInput = ({ length = 6, onOTPChange, onOTPComplete, autoFillCode }) => {
     setContainerWidth(width);
   }, []);
 
-  const styles = getStyles({ colors, length, containerWidth });
+  const styles = getStyles({ look, length, containerWidth });
 
   const update = nextDigits => {
     setDigits(nextDigits);
@@ -112,7 +113,7 @@ const OTPInput = ({ length = 6, onOTPChange, onOTPComplete, autoFillCode }) => {
           <TextInput
             key={i}
             ref={ref => (inputs.current[i] = ref)}
-            style={styles.input}
+            style={[styles.input, value ? styles.inputFilled : null]}
             keyboardType="number-pad"
             value={value}
             onChangeText={t => handleChange(t, i)}
@@ -129,7 +130,7 @@ const OTPInput = ({ length = 6, onOTPChange, onOTPComplete, autoFillCode }) => {
 
 export default OTPInput;
 
-const getStyles = ({ colors, length, containerWidth }) => {
+const getStyles = ({ look, length, containerWidth }) => {
   const minGap = 2;
   const maxGap = 8;
   let gap = maxGap;
@@ -149,10 +150,10 @@ const getStyles = ({ colors, length, containerWidth }) => {
     }
 
     // Ensure minimum and maximum sizes (also keeps things sane on tablets)
-    inputWidth = Math.max(Math.min(inputWidth, 45), 32);
+    inputWidth = Math.max(Math.min(inputWidth, 50), 32);
   }
 
-  const inputHeight = Math.max(Math.min(inputWidth * 1.25, 52), 40);
+  const inputHeight = Math.max(Math.min(inputWidth * 1.2, 58), 40);
 
   return StyleSheet.create({
     wrapper: {
@@ -172,15 +173,23 @@ const getStyles = ({ colors, length, containerWidth }) => {
       maxWidth: 400,
       alignSelf: 'center',
     },
+    // One digit: a quiet box, with a gold edge once it holds its digit
     input: {
       width: inputWidth,
       height: inputHeight,
       borderWidth: 1,
-      borderRadius: 5,
-      borderColor: colors.grey,
+      borderRadius: 14,
+      borderColor: look.hairline,
+      backgroundColor: look.soft,
+      color: look.text,
       textAlign: 'center',
-      fontSize: Math.min(inputWidth * 0.5, 20),
-      fontFamily: 'Poppins Medium',
+      padding: 0,
+      fontSize: Math.min(inputWidth * 0.5, 22),
+      fontFamily: 'Poppins SemiBold',
+    },
+    inputFilled: {
+      borderColor: look.accent,
+      backgroundColor: look.surface,
     },
   });
 };

@@ -79,7 +79,10 @@ const AppButton = ({
           {leftIcon && (
             <Image
               source={leftIcon}
-              style={[styles.icon, { marginLeft: 34, marginRight: 24 }]}
+              style={[
+                styles.icon,
+                { marginLeft: 34, marginRight: 24, tintColor: words },
+              ]}
             />
           )}
         </View>
@@ -106,7 +109,10 @@ const AppButton = ({
           {rightIcon && (
             <Image
               source={rightIcon}
-              style={[styles.icon, { marginRight: 24, marginLeft: 5 }]}
+              style={[
+                styles.icon,
+                { marginRight: 24, marginLeft: 5, tintColor: words },
+              ]}
             />
           )}
         </View>

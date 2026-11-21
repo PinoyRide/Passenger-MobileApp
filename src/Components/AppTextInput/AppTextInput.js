@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
+import { modern } from '@/Theme/modern';
 import AppTextError from '../AppTextError/AppTextError';
 
 // Format phone number with dashes: 927-339-4743
@@ -61,8 +62,10 @@ const AppTextInput = ({
   labelColor,
   onValidationChange,
 }) => {
-  const { colors } = useTheme();
-  const styles = getStyles({ colors });
+  const theme = useTheme();
+  const { colors } = theme;
+  const look = modern(theme);
+  const styles = getStyles({ colors, look });
   const isPhone = inputMode === 'phone';
   const isAmount = inputMode === 'amount';
   const isComment = inputMode === 'comment';
@@ -258,64 +261,74 @@ const AppTextInput = ({
 
 export default AppTextInput;
 
-const getStyles = ({ colors }) =>
+const getStyles = ({ colors, look }) =>
   StyleSheet.create({
     container: {
-      marginBottom: 20,
+      marginBottom: 18,
     },
     label: {
-      fontFamily: 'Poppins Regular',
-      fontSize: 14,
-      color: 'black',
-      marginBottom: 5,
+      fontFamily: 'Poppins Medium',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.muted,
+      marginBottom: 6,
     },
+    // A field is a quiet filled box with a hairline around it.
     input: {
-      borderBottomWidth: 1,
-      borderColor: colors.surfaceVariant,
+      minHeight: 52,
+      borderWidth: 1,
+      borderColor: look.hairline,
+      borderRadius: 14,
+      backgroundColor: look.soft,
+      color: look.text,
+      fontFamily: 'Poppins Regular',
       fontSize: 16,
-      backgroundColor: 'white',
-      paddingVertical: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
     },
     inputError: {
-      borderColor: 'red',
+      borderColor: colors.error,
+    },
+    disabledInput: {
+      opacity: 0.6,
     },
     phoneContainer: {
+      minHeight: 52,
       flexDirection: 'row',
       alignItems: 'center',
-      borderBottomWidth: 1,
-      borderColor: colors.surfaceVariant,
-      backgroundColor: 'white',
-      paddingVertical: 8,
+      borderWidth: 1,
+      borderColor: look.hairline,
+      borderRadius: 14,
+      backgroundColor: look.soft,
+      paddingHorizontal: 14,
     },
     flagEmoji: {
-      fontSize: 24,
+      fontSize: 20,
       marginRight: 8,
     },
     countryCode: {
+      fontFamily: 'Poppins Medium',
       fontSize: 16,
-      color: 'black',
-      fontFamily: 'Poppins Regular',
-      marginRight: 8,
+      color: look.text,
+      marginRight: 10,
     },
     phoneInput: {
       flex: 1,
-      fontSize: 16,
-      color: 'black',
-      padding: 0,
       fontFamily: 'Poppins Regular',
+      fontSize: 16,
+      color: look.text,
+      paddingVertical: 10,
+      paddingHorizontal: 0,
     },
     commentBox: {
-      backgroundColor: '#F9F9F9',
-      borderRadius: 15,
-      padding: 15,
-      fontSize: 16,
-      color: '#333',
-      borderColor: 'transparent',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 5,
-      elevation: 3,
       minHeight: 100,
+      borderWidth: 1,
+      borderColor: look.hairline,
+      borderRadius: 14,
+      backgroundColor: look.soft,
+      color: look.text,
+      fontFamily: 'Poppins Regular',
+      fontSize: 16,
+      padding: 14,
     },
   });
