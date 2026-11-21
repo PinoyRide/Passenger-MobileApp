@@ -3,6 +3,13 @@
 // bump-version.js writes them. scripts/native-signature.js uses the same list to look past them, so that a
 // new version number alone does not count as a change to the native part of the app.
 //
+// Two numbers are kept apart:
+// - The version and build number (places): they go up with every change to the app.
+// - The APK version (runtimeVersionPlace): the version at which the native part of the app last changed,
+//   which is the oldest APK that can run this code. The update library calls it the runtime version. An
+//   installed app takes any self-update made for its APK version, so this number only moves when a change
+//   needs a new APK.
+//
 // Edit this list if a path does not match the project layout.
 
 function places(version, code) {
@@ -52,15 +59,6 @@ function places(version, code) {
         return out;
       },
     },
-    // Which self-updates an installed app accepts: only the ones made for its own version.
-    {
-      file: 'android/app/src/main/res/values/strings.xml',
-      replace: content =>
-        content.replace(
-          /(<string name="expo_runtime_version">)[\d.]+(<\/string>)/,
-          `$1${version}$2`,
-        ),
-    },
     // iOS keeps the version and the build number once per build configuration.
     {
       file: 'ios/pinoyride.xcodeproj/project.pbxproj',
@@ -85,4 +83,17 @@ function places(version, code) {
   ];
 }
 
-module.exports = { places };
+// Which self-updates an APK built from this project accepts: the ones made for this APK version.
+const runtimeVersionPlace = {
+  file: 'android/app/src/main/res/values/strings.xml',
+  replace: (content, runtimeVersion) =>
+    content.replace(
+      /(<string name="expo_runtime_version">)[\d.]+(<\/string>)/,
+      `$1${runtimeVersion}$2`,
+    ),
+  read: content =>
+    (content.match(/<string name="expo_runtime_version">([^<]+)<\/string>/) ||
+      [])[1],
+};
+
+module.exports = { places, runtimeVersionPlace };

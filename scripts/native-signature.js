@@ -2,20 +2,21 @@
 // self-update, which is the Android project and the versions of the packages the app is built with.
 //
 // A self-update only replaces the JavaScript and the images. If any of this changed, the new JavaScript may
-// need native code that the installed app does not have, so it must not be sent to it: the app needs a new
-// version number (bump-version.js records the new signature in native-signature.json) and a new APK.
+// need native code that the installed app does not have, so it must not be sent to it: the change needs a
+// new APK. bump-version.js notices, and records the new signature in native-signature.json together with
+// the version that APK has.
 //
 // The version and build number written inside the Android project are looked past: a new build of the same
 // version, with nothing else changed, has the same signature.
 //
-// Used by bump-version.js (records it, and refuses to keep a version number whose signature changed),
+// Used by bump-version.js (which tells a change that travels as an update from one that needs a new APK),
 // scripts/pack-update.mjs (refuses to pack when it no longer matches) and the version test.
 const { Buffer } = require('buffer');
 const { execFileSync } = require('child_process');
 const { createHash } = require('crypto');
 const { existsSync, readFileSync, readdirSync, statSync } = require('fs');
 const { join } = require('path');
-const { places } = require('./version-places');
+const { places, runtimeVersionPlace } = require('./version-places');
 
 const NATIVE_FOLDER = 'android';
 
@@ -105,6 +106,9 @@ function nativeSignature(root) {
   const lookPast = new Map(
     places('0.0.0', 0).map(({ file, replace }) => [file, replace]),
   );
+  lookPast.set(runtimeVersionPlace.file, content =>
+    runtimeVersionPlace.replace(content, '0.0.0'),
+  );
   const sum = createHash('sha256');
   for (const path of nativeFiles(root)) {
     if (!existsSync(join(root, path))) {
@@ -126,6 +130,7 @@ function nativeSignature(root) {
 const RECORD = 'native-signature.json';
 
 // { runtimeVersion, android } as written by bump-version.js, or null before the first bump that records it.
+// runtimeVersion is the APK version: the version of the last change to the native part.
 function recorded(root) {
   const path = join(root, RECORD);
   return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : null;

@@ -7,8 +7,10 @@
 //   update.json   which build this is, the archive's checksum and size
 //   index.html    a note for anyone who opens the address in a browser
 //
-// It refuses to pack when the native part of the app changed since the version was cut: such a change cannot
-// reach an installed app by itself, and JavaScript that expects it would crash there.
+// The update is packed for the APK version in native-signature.json: every app installed from that APK or a
+// later one takes it, whatever version the code has reached since. It refuses to pack when the native part
+// of the app changed and no version was cut for that: such a change cannot reach an installed app by itself,
+// and JavaScript that expects it would crash there.
 //
 // usage: node scripts/pack-update.mjs <app name>      (passenger | rider)
 import { execFileSync } from 'node:child_process';
@@ -23,6 +25,9 @@ import {
 import { basename, join, resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import native from './native-signature.js';
+import places from './version-places.js';
+
+const { runtimeVersionPlace } = places;
 
 const root = resolve(import.meta.dirname, '..');
 const app = process.argv[2];
@@ -43,23 +48,33 @@ if (!existsSync(join(dist, 'metadata.json'))) {
   stop('there is no export in dist/. Run: npx expo export --platform android');
 }
 
-// ---- The version this update is for, and whether an installed app can take it --------------------------
+// ---- Which installed apps can take this update ---------------------------------------------------------
+// The update carries the app's current version (package.json), which goes up with every change. Which
+// installed apps take it is decided by the APK version in native-signature.json (the update library's
+// "runtime version"): the version at which the native part of the app last changed.
 const version = JSON.parse(
   readFileSync(join(root, 'package.json'), 'utf8'),
 ).version;
 const record = native.recorded(root);
-if (record?.runtimeVersion !== version) {
-  stop(
-    `${native.RECORD} is for ${
-      record?.runtimeVersion ?? 'no version'
-    } but package.json says ${version}. Run bump-version.js, which sets both.`,
-  );
+if (!record) {
+  stop(`${native.RECORD} is missing. Run bump-version.js, which writes it.`);
 }
 if (record.android !== native.nativeSignature(root)) {
   stop(
-    `the native part of the app (android/ or the packages it is built with) changed since ${version} was cut.\n` +
-      'That cannot reach an installed app by itself. Bump the version (node bump-version.js <version> --code+), ' +
-      'land it, and hand out a new APK. Phones keep the update they have until then.',
+    `the native part of the app (android/ or the packages it is built with) changed since the ${record.runtimeVersion} APK,\n` +
+      'and no version was cut for it. Such a change cannot reach an installed app by itself. Give it a version\n' +
+      '(node bump-version.js patch --code+), land it, and hand out a new APK. Phones keep the update they have\n' +
+      'until then.',
+  );
+}
+const runtimeVersion = record.runtimeVersion;
+const builtInto = runtimeVersionPlace.read(
+  readFileSync(join(root, runtimeVersionPlace.file), 'utf8'),
+);
+if (builtInto !== runtimeVersion) {
+  stop(
+    `${runtimeVersionPlace.file} says an APK built here accepts updates for ${builtInto}, but ${native.RECORD} says ${runtimeVersion}.\n` +
+      'Run bump-version.js, which sets both.',
   );
 }
 
@@ -174,7 +189,7 @@ const manifest = {
   platform: 'android',
   id,
   createdAt,
-  runtimeVersion: version,
+  runtimeVersion,
   commit,
   content,
   launchAsset,
@@ -239,7 +254,7 @@ writeFileSync(
         10,
       )}`,
       id,
-      runtimeVersion: version,
+      runtimeVersion,
       commit,
       createdAt,
       content,
@@ -278,7 +293,9 @@ writeFileSync(
 );
 
 console.log(
-  `update-publish/: ${app} ${version}, update ${id.slice(0, 8)}${
-    commit ? ` from commit ${commit.slice(0, 7)}` : ''
-  }, ` + `${files.size} files, ${(archive.length / 1048576).toFixed(1)} MB`,
+  `update-publish/: ${app} ${version} for apps installed from the ${runtimeVersion} APK on, ` +
+    `update ${id.slice(0, 8)}${
+      commit ? ` from commit ${commit.slice(0, 7)}` : ''
+    }, ` +
+    `${files.size} files, ${(archive.length / 1048576).toFixed(1)} MB`,
 );

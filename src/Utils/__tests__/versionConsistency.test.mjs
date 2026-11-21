@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import native from '../../../scripts/native-signature.js';
+import places from '../../../scripts/version-places.js';
 
 // The version is written in several places (bump-version.js sets them all).
 // package.json is the reference: every other place has to say the same.
@@ -34,14 +35,6 @@ test('every place that states the version agrees with package.json', () => {
     all(read('src/Services/Api.js'), /app_version:\s*'([^']+)'/g),
     [version],
   );
-  // which self-updates the installed app accepts: the ones made for its version
-  assert.deepEqual(
-    all(
-      read('android/app/src/main/res/values/strings.xml'),
-      /<string name="expo_runtime_version">([^<]+)<\/string>/g,
-    ),
-    [version],
-  );
 });
 
 test('iOS has the same version and the same build number as Android', () => {
@@ -56,23 +49,43 @@ test('iOS has the same version and the same build number as Android', () => {
   ]);
 });
 
-// A self-update carries JavaScript and images only. When android/ or the
-// packages the app is built with change, the installed apps cannot take the
-// new JavaScript, so the version has to go up (bump-version.js records the
-// signature) and a new APK has to be handed out.
-test('the native part of the app is as it was when this version was cut', () => {
+// The version goes up with every change. A self-update carries JavaScript and
+// images only, so which installed apps take it is decided by a second number:
+// the APK version, the version at which android/ or the packages the app is
+// built with last changed (native-signature.json, and the Android project).
+const numbers = value => value.split('.').map(Number);
+const notHigher = (a, b) => {
+  const [x, y] = [numbers(a), numbers(b)];
+  return (x[0] - y[0] || x[1] - y[1] || x[2] - y[2]) <= 0;
+};
+
+test('the native part of the app is the one the recorded APK version has', () => {
   const root = fileURLToPath(new URL('../../../', import.meta.url));
   const record = native.recorded(root);
   assert.ok(record, `${native.RECORD} is missing: run bump-version.js`);
-  assert.equal(record.runtimeVersion, version);
   assert.equal(
     record.android,
     native.nativeSignature(root),
-    'android/ or a package changed since this version was cut: bump the version (node bump-version.js <next version> --code+)',
+    'android/ or a package changed and no version was cut for it: node bump-version.js patch --code+ (it will say that a new APK is needed)',
   );
 });
 
-test('self-updates are on, signed, and tied to the app version', () => {
+test('an APK built here accepts the updates made for the recorded APK version', () => {
+  const root = fileURLToPath(new URL('../../../', import.meta.url));
+  const record = native.recorded(root);
+  assert.match(record.runtimeVersion, /^\d+\.\d+\.\d+$/);
+  assert.equal(
+    places.runtimeVersionPlace.read(read(places.runtimeVersionPlace.file)),
+    record.runtimeVersion,
+  );
+  // the APK the code needs cannot be newer than the code
+  assert.ok(
+    notHigher(record.runtimeVersion, version),
+    `APK version ${record.runtimeVersion} is higher than the app version ${version}`,
+  );
+});
+
+test('self-updates are on, signed, and tied to the APK version', () => {
   const manifest = read('android/app/src/main/AndroidManifest.xml');
   const setting = name =>
     (manifest.match(
