@@ -15,12 +15,14 @@ import {
   HomeScreen,
   InputLocation,
   LandingScreen,
+  LivenessSelfieScreen,
   LoginScreen,
   MapSelectionScreen,
   OTPScreen,
   OnboardingScreen,
   PaymentOptionScreen,
   PersonalDetailsScreen,
+  PrivacyPolicyScreen,
   ProfileScreen,
   PromoReferralsScreen,
   QRPHScreen,
@@ -129,6 +131,11 @@ const ApplicationNavigator = () => {
               options={{ headerShown: false }}
             />
             <Stack.Screen
+              name="PrivacyPolicyScreen"
+              component={PrivacyPolicyScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
               name="TAC"
               component={TAC}
               options={{ headerShown: false }}
@@ -219,6 +226,11 @@ const ApplicationNavigator = () => {
             <Stack.Screen
               name="CompleteProfileScreen"
               component={CompleteProfileScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="LivenessSelfieScreen"
+              component={LivenessSelfieScreen}
               options={{ headerShown: false }}
             />
           </Stack.Navigator>

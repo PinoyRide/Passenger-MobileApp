@@ -9,3 +9,4 @@ export { default as AdvanceBookingAcceptedModal } from './AlertBox/AdvanceBookin
 export { default as AlertBox } from './AlertBox/AlertBox';
 export { default as AppMap } from './AppMap/AppMap';
 export { default as AppTransactionComplete } from './AppTransactionComplete/AppTransactionComplete';
+export { default as ProfileAvatar } from './ProfileAvatar/ProfileAvatar';

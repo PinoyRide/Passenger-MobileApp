@@ -29,6 +29,10 @@ function toLegacyCustomer(dto) {
     is_login: dto.isLogin,
     selfie: dto.selfie || '',
     profile_complete: !!dto.profileComplete,
+    // when the Terms and the Privacy Policy were accepted, and which policy version
+    terms_accepted_at: dto.termsAcceptedAt || null,
+    privacy_accepted_at: dto.privacyAcceptedAt || null,
+    privacy_version: dto.privacyVersion || null,
     customer_address: (dto.addresses || []).map(a => ({
       id: a.customerAddressId,
       customer_id: a.customerId,

@@ -500,7 +500,7 @@ const BookingDetailsScreen = () => {
               source={
                 getRiderPhoto(bookingDetails.rider_details)
                   ? { uri: getRiderPhoto(bookingDetails.rider_details) }
-                  : require('@/Assets/Common/Sample_Profile.png')
+                  : require('@/Assets/Common/Default_Profile.png')
               }
               style={styles.profileImage}
             />

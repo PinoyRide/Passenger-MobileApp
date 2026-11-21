@@ -15,6 +15,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { AlertBox, Container, OTPInput } from '@/Components';
 import useApiRequest from '@/Services/ApiV2';
 import { toStoredUser } from '@/Utils/customerMapper';
+import { signedInRoutes } from '@/Utils/consent';
 import { Constants } from '@/Utils';
 import DeviceInfo from 'react-native-device-info';
 import { useDispatch, useSelector } from 'react-redux';
@@ -28,7 +29,7 @@ const OTPScreen = () => {
   const styles = getStyles({ colors });
   const navigation = useNavigation();
   const route = useRoute();
-  const { mobileNumber, otpSent, mode } = route.params;
+  const { mobileNumber, otpSent, mode, consent } = route.params;
   const isRegister = mode === 'register';
 
   const getOtpCode = useApiRequest();
@@ -92,6 +93,8 @@ const OTPScreen = () => {
         mobileNo: mobileNumber,
         otpCode: code,
         appVersion: DeviceInfo.getVersion(),
+        // registering: the Terms and Privacy Policy acceptance is recorded with the account
+        ...(isRegister ? consent : {}),
       },
     );
 
@@ -110,20 +113,14 @@ const OTPScreen = () => {
     }
   }, [loginUser.response, loginUser.error]);
 
-  // Redirect after login / registration. An incomplete profile (name + selfie) goes straight to
+  // Redirect after login / registration. An account that has not accepted the current Terms and
+  // Privacy Policy is asked first. An incomplete profile (name + selfie) goes straight to
   // CompleteProfileScreen, with Home underneath so Back still works; booking stays blocked until it is done.
   useEffect(() => {
     if (!userInfo) {
       return;
     }
-    navigation.reset(
-      userInfo.profile_complete
-        ? { index: 0, routes: [{ name: 'HomeScreen' }] }
-        : {
-            index: 1,
-            routes: [{ name: 'HomeScreen' }, { name: 'CompleteProfileScreen' }],
-          },
-    );
+    navigation.reset(signedInRoutes(userInfo));
   }, [userInfo]);
 
   const [resendDisabled, setResendDisabled] = useState(false);

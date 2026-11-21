@@ -71,3 +71,19 @@ test('carries profile completeness and the profile selfie', () => {
     false,
   );
 });
+
+test('carries when the terms and privacy policy were accepted', () => {
+  const user = toStoredUser({
+    ...dto,
+    termsAcceptedAt: '2026-11-21T03:00:00Z',
+    privacyAcceptedAt: '2026-11-21T03:00:00Z',
+    privacyVersion: 'November 21, 2026',
+  });
+  assert.equal(user.terms_accepted_at, '2026-11-21T03:00:00Z');
+  assert.equal(user.privacy_accepted_at, '2026-11-21T03:00:00Z');
+  assert.equal(user.privacy_version, 'November 21, 2026');
+  // an account from before the record existed
+  const older = toStoredUser(dto);
+  assert.equal(older.terms_accepted_at, null);
+  assert.equal(older.privacy_version, null);
+});

@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import Container from '@/Components/Container/Container';
+import ProfileAvatar from '@/Components/ProfileAvatar/ProfileAvatar';
 import { useTheme } from 'react-native-paper';
 import { CommonActions, useNavigation } from '@react-navigation/native';
 import {
@@ -53,22 +54,25 @@ const SettingsScreen = () => {
     return () => backHandler.remove();
   }, [navigation]);
 
-  const getDisplayName = () => {
-    if (userInfo?.ekyc_details) {
-      const { first_name, last_name } = userInfo.ekyc_details;
+  const toTitleCase = str =>
+    String(str || '')
+      .toLowerCase()
+      .split(' ')
+      .filter(Boolean)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
 
-      const toTitleCase = str => {
-        return str
-          .toLowerCase()
-          .split(' ')
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-          .join(' ');
-      };
-
-      return `${toTitleCase(first_name)} ${toTitleCase(last_name)}`;
-    }
-    return 'User';
-  };
+  // A new account has no name or photo yet: say what to do instead of
+  // showing a blank name beside somebody else's picture.
+  const profileComplete = !!userInfo?.profile_complete;
+  const displayName =
+    [
+      toTitleCase(userInfo?.ekyc_details?.first_name || userInfo?.fname),
+      toTitleCase(userInfo?.ekyc_details?.last_name || userInfo?.lname),
+    ]
+      .filter(Boolean)
+      .join(' ') || (profileComplete ? 'User' : 'Complete your profile');
+  const photo = userInfo?.selfie || userInfo?.ekyc_details?.selfie || '';
 
   const buttonList = [
     {
@@ -245,19 +249,18 @@ const SettingsScreen = () => {
 
         <TouchableOpacity
           style={styles.profileButton}
-          onPress={() => navigation.navigate('ProfileScreen')}>
-          <Image
-            source={
-              userInfo?.ekyc_details?.selfie
-                ? { uri: userInfo.ekyc_details.selfie }
-                : require('@/Assets/Common/Sample_Profile.png')
-            }
-            style={styles.profile}
-          />
+          onPress={() =>
+            navigation.navigate(
+              profileComplete ? 'ProfileScreen' : 'CompleteProfileScreen',
+            )
+          }>
+          <ProfileAvatar uri={photo} size={46} />
           <View style={styles.profileTextContainer}>
-            <Text style={styles.name}>{getDisplayName()}</Text>
+            <Text style={styles.name}>{displayName}</Text>
           </View>
-          <Text style={styles.profileLabel}>Profile</Text>
+          <Text style={styles.profileLabel}>
+            {profileComplete ? 'Profile' : 'Set up'}
+          </Text>
         </TouchableOpacity>
 
         {buttonList.map(button => (

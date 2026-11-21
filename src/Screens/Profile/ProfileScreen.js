@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import Container from '@/Components/Container/Container';
+import ProfileAvatar from '@/Components/ProfileAvatar/ProfileAvatar';
 import { useTheme } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { selectUserInfo } from '@/Redux/Slices/userSlice';
@@ -34,7 +35,9 @@ const ProfileScreen = () => {
   }, [navigation]);
 
   const toTitleCase = str => {
-    if (!str) {return '';}
+    if (!str) {
+      return '';
+    }
     return str
       .toLowerCase()
       .split(' ')
@@ -43,13 +46,17 @@ const ProfileScreen = () => {
   };
 
   const formatAddress = address => {
-    if (!address) {return 'N/A';}
+    if (!address) {
+      return 'N/A';
+    }
     // Remove leading dash/hyphen if present
     return address.startsWith('-') ? address.slice(1).trim() : address.trim();
   };
 
   const formatMobile = mobile => {
-    if (!mobile) {return 'N/A';}
+    if (!mobile) {
+      return 'N/A';
+    }
     // Format as +63 • XXXXXXXXXX
     if (mobile.startsWith('63')) {
       return `+63 •  0${mobile.slice(2)}`;
@@ -63,11 +70,14 @@ const ProfileScreen = () => {
   const fields = [
     {
       label: 'Name',
-      value: ekyc
-        ? `${toTitleCase(ekyc.first_name)} ${toTitleCase(
-            ekyc.middle_name,
-          )} ${toTitleCase(ekyc.last_name)}`
-        : 'N/A',
+      value:
+        [
+          toTitleCase(ekyc?.first_name || userInfo?.fname),
+          toTitleCase(ekyc?.middle_name || userInfo?.mname),
+          toTitleCase(ekyc?.last_name || userInfo?.lname),
+        ]
+          .filter(Boolean)
+          .join(' ') || 'Not set yet',
     },
     {
       label: 'Mobile Number',
@@ -120,14 +130,7 @@ const ProfileScreen = () => {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Profile Photo */}
         <View style={styles.avatarContainer}>
-          <Image
-            source={
-              ekyc?.selfie
-                ? { uri: ekyc.selfie }
-                : require('@/Assets/Common/Sample_Profile.png')
-            }
-            style={styles.avatar}
-          />
+          <ProfileAvatar uri={userInfo?.selfie || ekyc?.selfie} size={90} />
           {/* <TouchableOpacity style={styles.cameraButton} onPress={() => {}}>
             <Image
               source={require('@/Assets/Common/Camera.png')}
@@ -136,6 +139,16 @@ const ProfileScreen = () => {
             />
           </TouchableOpacity> */}
         </View>
+
+        <TouchableOpacity
+          style={styles.editButton}
+          onPress={() => navigation.navigate('CompleteProfileScreen')}>
+          <Text style={styles.editButtonText}>
+            {userInfo?.profile_complete
+              ? 'Edit name or photo'
+              : 'Complete your profile'}
+          </Text>
+        </TouchableOpacity>
 
         {/* Profile Fields */}
         <View style={styles.fieldsContainer}>
@@ -167,12 +180,21 @@ const getStyles = ({ colors }) =>
     },
     avatarContainer: {
       alignItems: 'center',
-      marginBottom: 30,
+      marginBottom: 12,
     },
-    avatar: {
-      width: 90,
-      height: 90,
-      borderRadius: 45,
+    editButton: {
+      alignSelf: 'center',
+      paddingVertical: 8,
+      paddingHorizontal: 18,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: colors.primary,
+      marginBottom: 24,
+    },
+    editButtonText: {
+      fontSize: 13,
+      fontFamily: 'Poppins Medium',
+      color: colors.text,
     },
     cameraButton: {
       position: 'absolute',

@@ -149,7 +149,7 @@ const RatingScreen = () => {
               {/* Rider Image + Stars */}
               <View style={styles.riderRatingRow}>
                 <Image
-                  source={require('@/Assets/Common/Sample_Profile.png')}
+                  source={require('@/Assets/Common/Default_Profile.png')}
                   style={styles.profileImage}
                 />
                 <View style={styles.starsContainer}>

@@ -1,4 +1,4 @@
-import { AppButton } from '@/Components';
+import { AppButton, ProfileAvatar } from '@/Components';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -388,22 +388,14 @@ const BookingStatusModal = ({
 
             {/* Rider Info */}
             <View style={styles.riderRow}>
-              <Image
-                source={
-                  getRiderPhoto(riderDetails)
-                    ? { uri: getRiderPhoto(riderDetails) }
-                    : riderDetails?.vehicle_details?.[0]?.motorcyle_img
-                    ? { uri: riderDetails.vehicle_details[0].motorcyle_img }
-                    : {
-                        uri:
-                          'https://ui-avatars.com/api/?name=' +
-                          encodeURIComponent(
-                            (ekycDetails?.first_name || '') +
-                              ' ' +
-                              (ekycDetails?.last_name || ''),
-                          ),
-                      }
+              {/* The rider's photo, else their vehicle's; a plain figure when
+                  there is neither (no name is sent to an outside service). */}
+              <ProfileAvatar
+                uri={
+                  getRiderPhoto(riderDetails) ||
+                  riderDetails?.vehicle_details?.[0]?.motorcyle_img
                 }
+                size={50}
                 style={styles.avatar}
               />
 

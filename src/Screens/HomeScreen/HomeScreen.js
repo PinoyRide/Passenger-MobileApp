@@ -1273,23 +1273,34 @@ const HomeScreen = () => {
     handleInquireBookingRequest();
   }, [inquireBooking.response, inquireBooking.error]);
 
+  // A booking needs a complete profile: first name, last name and a photo of
+  // the passenger (the server refuses it otherwise). It is checked at the
+  // first tap, so nobody picks places and a fare only to be turned away.
+  const profileComplete = !!userInfo?.profile_complete;
+  const requireCompleteProfile = () => {
+    if (profileComplete) {
+      return true;
+    }
+    Alert.alert(
+      'Complete Your Profile',
+      'Add your first name, last name and a photo of yourself before booking.',
+      [
+        { text: 'Later', style: 'cancel' },
+        {
+          text: 'Complete Profile',
+          onPress: () => navigation.navigate('CompleteProfileScreen'),
+        },
+      ],
+    );
+    return false;
+  };
+
   //CREATE BOOKING
   const triggerCreateBooking = async () => {
     if (createBooking.loading) {
       return;
     }
-    if (!userInfo?.profile_complete) {
-      Alert.alert(
-        'Complete Your Profile',
-        'Add your first name, last name and a selfie before booking.',
-        [
-          { text: 'Later', style: 'cancel' },
-          {
-            text: 'Complete Profile',
-            onPress: () => navigation.navigate('CompleteProfileScreen'),
-          },
-        ],
-      );
+    if (!requireCompleteProfile()) {
       return;
     }
 
@@ -2316,6 +2327,18 @@ New reference: ${activeBooking.ref_code}`
           </View>
         )}
 
+        {/* New accounts: a standing reminder of what is needed before booking. */}
+        {!profileComplete && userInfo?.id && statusNum === 0 && (
+          <TouchableOpacity
+            style={[styles.profileBanner, { top: isOnline ? 60 : 104 }]}
+            onPress={() => navigation.navigate('CompleteProfileScreen')}
+            accessibilityRole="button">
+            <Text style={styles.profileBannerText}>
+              Complete your profile to start booking ›
+            </Text>
+          </TouchableOpacity>
+        )}
+
         {showWaitingBanner && !confirmedBookingView && (
           <View style={[styles.banner, { bottom: modalHeight + 15 }]}>
             <Text style={styles.bannerText}>{bannerText}</Text>
@@ -2478,7 +2501,11 @@ New reference: ${activeBooking.ref_code}`
                 dispatch(setDropoffLocation(location))
               }
               onChangeService={() => setShowServiceModal(true)}
-              onInquireBooking={() => triggerInquireBooking()}
+              onInquireBooking={() => {
+                if (requireCompleteProfile()) {
+                  triggerInquireBooking();
+                }
+              }}
               onCreateBooking={triggerCreateBooking}
               onCancelBooking={() => requestFullCancel()}
               // Cancel while waiting: confirm, then a full cancel back to a clean
@@ -2515,7 +2542,11 @@ New reference: ${activeBooking.ref_code}`
               showAdvanceBooking={
                 bookLater.enabled && !scheduledAt && !isBooked && !isConfirmed
               }
-              onAdvanceBooking={handleAdvanceBookingPress}
+              onAdvanceBooking={() => {
+                if (requireCompleteProfile()) {
+                  handleAdvanceBookingPress();
+                }
+              }}
               advanceCashOnlyNote={Boolean(scheduledAt) && !isBooked}
               fareIsEstimate={
                 isBooked &&
@@ -2678,6 +2709,22 @@ const getStyles = ({ colors }) =>
       alignItems: 'center',
       zIndex: 20,
       elevation: 999,
+    },
+    profileBanner: {
+      position: 'absolute',
+      left: 20,
+      right: 100,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      backgroundColor: '#084CF7',
+      zIndex: 20,
+      elevation: 6,
+    },
+    profileBannerText: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 12,
+      color: '#FFFFFF',
     },
     offlineBannerText: {
       fontWeight: '600',

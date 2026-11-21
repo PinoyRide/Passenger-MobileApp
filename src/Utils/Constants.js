@@ -26,6 +26,7 @@ const BASE_DEV = {
     CUSTOMER_REGISTER: 'customers/register',
     CUSTOMER_PROFILE: id => `customers/${id}/profile`,
     CUSTOMER_SELFIE: id => `customers/${id}/selfie`,
+    CUSTOMER_CONSENT: id => `customers/${id}/consent`,
     CUSTOMER: id => `customers/${id}`,
     CUSTOMER_LOGOUT: id => `customers/${id}/logout`,
     CUSTOMER_FIREBASE_TOKEN: id => `customers/${id}/firebase-token`,

@@ -87,6 +87,8 @@ const LoginScreen = () => {
       mobileNumber,
       otpSent: true,
       mode: isRegister ? 'register' : 'login',
+      // what was ticked on the terms screen; recorded with the new account
+      consent: isRegister ? route.params?.consent : undefined,
     });
   };
 

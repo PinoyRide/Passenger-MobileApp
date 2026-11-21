@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   Image,
@@ -9,9 +9,8 @@ import {
   View,
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
-import { launchCamera } from 'react-native-image-picker';
 import { AppButton, AppTextInput, Container } from '@/Components';
 import useApiRequest from '@/Services/ApiV2';
 import { Constants } from '@/Utils';
@@ -20,10 +19,13 @@ import { withCameraPermission } from '@/Utils/Permissions';
 import { selectUserInfo, setUserInfo } from '@/Redux/Slices/userSlice';
 
 // Name + selfie: what a passenger must have before booking (the backend refuses bookings otherwise).
+// The selfie is taken on LivenessSelfieScreen, which checks a real person is taking it of
+// themselves; it comes back here as route.params.capturedSelfie.
 const CompleteProfileScreen = () => {
   const { colors } = useTheme();
   const styles = getStyles({ colors });
   const navigation = useNavigation();
+  const route = useRoute();
   const dispatch = useDispatch();
   const userInfo = useSelector(selectUserInfo);
   const ekyc = userInfo?.ekyc_details || {};
@@ -41,28 +43,21 @@ const CompleteProfileScreen = () => {
 
   const currentSelfie = newSelfie?.uri || userInfo?.selfie || ekyc.selfie || '';
 
+  const capturedSelfie = route.params?.capturedSelfie;
+  useEffect(() => {
+    if (capturedSelfie?.uri) {
+      setNewSelfie(capturedSelfie);
+      setErrors(prev => ({ ...prev, selfie: '' }));
+    }
+  }, [capturedSelfie]);
+
   const takeSelfie = () =>
     withCameraPermission(
       () =>
-        launchCamera(
-          {
-            mediaType: 'photo',
-            cameraType: 'front',
-            quality: 0.7,
-            saveToPhotos: false,
-          },
-          response => {
-            if (response.didCancel || response.errorCode) {
-              return;
-            }
-            const asset = response.assets?.[0];
-            if (asset?.uri) {
-              setNewSelfie(asset);
-              setErrors(prev => ({ ...prev, selfie: '' }));
-            }
-          },
-        ),
-      'Camera access is needed to take your profile selfie.',
+        navigation.navigate('LivenessSelfieScreen', {
+          returnTo: 'CompleteProfileScreen',
+        }),
+      'Camera access is needed to take your profile photo.',
     );
 
   const validate = () => {
@@ -74,7 +69,7 @@ const CompleteProfileScreen = () => {
       next.lname = 'Last name is required';
     }
     if (!currentSelfie) {
-      next.selfie = 'A selfie is required';
+      next.selfie = 'A photo of you is required';
     }
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -138,7 +133,11 @@ const CompleteProfileScreen = () => {
           />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>Complete Your Profile</Text>
+          <Text style={styles.headerTitle}>
+            {userInfo?.profile_complete
+              ? 'Edit Your Profile'
+              : 'Complete Your Profile'}
+          </Text>
         </View>
       </View>
 
@@ -149,7 +148,9 @@ const CompleteProfileScreen = () => {
         <View style={styles.pageContainer}>
           <Text style={styles.sectionSubtitle}>
             Riders see your name and photo so they can find you at pickup. You
-            can book once these are filled in.
+            can book once these are filled in. The photo is taken with the
+            camera: you will be asked to turn your head a little so we know it
+            is really you.
           </Text>
 
           <TouchableOpacity
@@ -165,13 +166,13 @@ const CompleteProfileScreen = () => {
             ) : (
               <View style={styles.selfiePlaceholder}>
                 <Text style={styles.selfieIcon}>🤳</Text>
-                <Text style={styles.selfieHint}>Tap to take a selfie</Text>
+                <Text style={styles.selfieHint}>Tap to take your photo</Text>
               </View>
             )}
           </TouchableOpacity>
           {currentSelfie ? (
             <TouchableOpacity onPress={takeSelfie} style={styles.retakeButton}>
-              <Text style={styles.retakeText}>Retake selfie</Text>
+              <Text style={styles.retakeText}>Retake photo</Text>
             </TouchableOpacity>
           ) : null}
           {errors.selfie ? (

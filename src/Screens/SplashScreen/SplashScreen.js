@@ -11,6 +11,7 @@ import {
 } from '@/Redux/Slices/userSlice';
 import { deletePushToken } from '@/Services/Push/pushPlatform';
 import AppUtil from '@/Utils/AppUtil';
+import { needsConsent } from '@/Utils/consent';
 import {
   LAST_RUN_VERSION_KEY,
   isUpdatedSinceLastRun,
@@ -50,7 +51,13 @@ const SplashScreen = () => {
       ]);
 
       if (userInfo && !cleared) {
-        navigation.replace('HomeScreen'); // user already logged in
+        // already logged in; the Terms and Privacy Policy come first when the
+        // current ones have not been accepted yet
+        if (needsConsent(userInfo)) {
+          navigation.replace('GeneralTermsScreen', { mode: 'accept' });
+        } else {
+          navigation.replace('HomeScreen');
+        }
       } else {
         navigation.replace('OnboardingScreen'); // first time or logged out
       }
