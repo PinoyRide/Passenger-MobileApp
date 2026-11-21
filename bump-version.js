@@ -2,13 +2,18 @@
 /**
  * bump-version.js
  *
- * Bumps the app version across every file that hardcodes it.
+ * Bumps the app version across every file that hardcodes it, Android and iOS.
+ *
+ * A release has a version (2.0.0) and a build number that goes up by one
+ * with every released build. The build number is Android's versionCode and
+ * iOS's CURRENT_PROJECT_VERSION: always the same on both.
  *
  * Usage:
- *   node bump-version.js 1.0.18
- *   node bump-version.js 1.0.18 --code=23   (also set an explicit versionCode)
- *   node bump-version.js 1.0.18 --code+     (auto-increment versionCode by 1)
+ *   node bump-version.js 2.0.1 --code+     (new version, build number + 1: the usual)
+ *   node bump-version.js 2.0.1 --code=23   (new version, explicit build number)
+ *   node bump-version.js 2.0.1             (new version only; the build number stays)
  *
+ * Afterwards `node --test src/Utils/__tests__/` checks that every place agrees.
  * Edit the FILES array below if any path doesn't match your project layout.
  */
 
@@ -20,12 +25,35 @@ const codeArg = process.argv.find(a => a.startsWith('--code'));
 
 if (!newVersion || !/^\d+\.\d+\.\d+$/.test(newVersion)) {
   console.error(
-    'Usage: node bump-version.js <version> e.g. node bump-version.js 1.0.18',
+    'Usage: node bump-version.js <version> [--code+ | --code=N]   e.g. node bump-version.js 2.0.1 --code+',
   );
   process.exit(1);
 }
 
 const ROOT = process.cwd();
+
+// The build number after this bump: read from Android, where it lives.
+const GRADLE = 'android/app/build.gradle';
+const currentCode = (() => {
+  const gradlePath = path.join(ROOT, GRADLE);
+  if (!fs.existsSync(gradlePath)) {
+    return null;
+  }
+  const found = fs
+    .readFileSync(gradlePath, 'utf8')
+    .match(/versionCode\s+(\d+)/);
+  return found ? parseInt(found[1], 10) : null;
+})();
+const newCode = (() => {
+  if (!codeArg || currentCode === null) {
+    return currentCode;
+  }
+  if (codeArg === '--code+') {
+    return currentCode + 1;
+  }
+  const explicit = parseInt(codeArg.split('=')[1], 10);
+  return Number.isInteger(explicit) && explicit > 0 ? explicit : currentCode;
+})();
 
 // ---- Configure these paths for your project ----
 const FILES = [
@@ -33,6 +61,22 @@ const FILES = [
     file: 'package.json',
     replace: content =>
       content.replace(/("version"\s*:\s*")[\d.]+(")/, `$1${newVersion}$2`),
+  },
+  // Only the two entries at the top that describe this app itself; every
+  // other "version" in the lock file belongs to a dependency.
+  {
+    file: 'package-lock.json',
+    replace: content =>
+      content
+        .replace(
+          /^(\{\s*"name": "[^"]+",\s*"version": ")[\d.]+(")/,
+          `$1${newVersion}$2`,
+        )
+        .replace(
+          /("packages": \{\s*"": \{\s*"name": "[^"]+",\s*"version": ")[\d.]+(")/,
+          `$1${newVersion}$2`,
+        ),
+    optional: true,
   },
   {
     file: 'app.json',
@@ -51,12 +95,22 @@ const FILES = [
         /(versionName\s+")[\d.]+(")/,
         `$1${newVersion}$2`,
       );
-      if (codeArg) {
-        out = out.replace(/(versionCode\s+)(\d+)/, (m, prefix, num) => {
-          if (codeArg === '--code+') {return `${prefix}${parseInt(num, 10) + 1}`;}
-          const explicit = codeArg.split('=')[1];
-          return explicit ? `${prefix}${explicit}` : m;
-        });
+      if (newCode !== null) {
+        out = out.replace(/(versionCode\s+)\d+/, `$1${newCode}`);
+      }
+      return out;
+    },
+  },
+  // iOS keeps the version and the build number once per build configuration.
+  {
+    file: 'ios/pinoyride.xcodeproj/project.pbxproj',
+    replace: content => {
+      let out = content.replace(
+        /(MARKETING_VERSION = )[\d.]+;/g,
+        `$1${newVersion};`,
+      );
+      if (newCode !== null) {
+        out = out.replace(/(CURRENT_PROJECT_VERSION = )\d+;/g, `$1${newCode};`);
       }
       return out;
     },
@@ -104,7 +158,7 @@ for (const { file, replace, optional } of FILES) {
 console.log(
   `\nDone. ${changed} file(s) updated${
     missing ? `, ${missing} file(s) not found` : ''
-  }.`,
+  }. Version ${newVersion}${newCode !== null ? `, build ${newCode}` : ''}.`,
 );
 if (missing) {
   console.log(
