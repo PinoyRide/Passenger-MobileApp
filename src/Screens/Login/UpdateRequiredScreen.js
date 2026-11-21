@@ -24,7 +24,9 @@ import {
 } from '@/Redux/Slices/userSlice';
 
 const UpdateRequiredScreen = ({ route }) => {
-  const { updateLink, currentVersion, minimumVersion } = route.params || {};
+  // The backend also names a "current version". It is not shown: the person
+  // is told they are on an older version, not which number.
+  const { updateLink, minimumVersion } = route.params || {};
   const { colors } = useTheme();
   const styles = getStyles({ colors });
   const dispatch = useDispatch();
@@ -92,9 +94,8 @@ const UpdateRequiredScreen = ({ route }) => {
     <View style={styles.container}>
       <Text style={styles.title}>Update Required</Text>
       <Text style={styles.message}>
-        You're using version {currentVersion || '—'}, but the minimum supported
-        version is now {minimumVersion || '—'}. Please update the app to
-        continue.
+        You're using an older version, but the minimum supported version is now{' '}
+        {minimumVersion || '—'}. Please update the app to continue.
       </Text>
       {logoutError ? <Text style={styles.errorText}>{logoutError}</Text> : null}
       <TouchableOpacity
