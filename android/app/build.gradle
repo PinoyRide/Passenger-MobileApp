@@ -44,6 +44,11 @@ def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
  *   PINOYRIDE_UPLOAD_KEY_PASSWORD=...
  * Without them a local release build is signed with the debug key, which Google Play rejects.
  */
+// The chip types to build and pack: gradle.properties lists all four, and a build can narrow them with
+// -PreactNativeArchitectures=armeabi-v7a,arm64-v8a (what phones use; x86 and x86_64 are for emulators).
+def packedArchitectures = (findProperty('reactNativeArchitectures') ?: 'armeabi-v7a,arm64-v8a,x86,x86_64')
+    .split(',').collect { it.trim() }.findAll { it }
+
 def hasUploadKey = ['PINOYRIDE_UPLOAD_STORE_FILE', 'PINOYRIDE_UPLOAD_STORE_PASSWORD',
                     'PINOYRIDE_UPLOAD_KEY_ALIAS', 'PINOYRIDE_UPLOAD_KEY_PASSWORD'].every { project.hasProperty(it) }
 
@@ -59,6 +64,11 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 8
         versionName "2.0.0"
+        // Without this, the ready-made libraries inside dependencies (React Native, Hermes, ML Kit) are packed
+        // for every chip type whatever was asked for, which adds about 50 MB that no phone uses.
+        ndk {
+            abiFilters(*packedArchitectures)
+        }
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
