@@ -1,10 +1,10 @@
 const IS_DEV = true;
 
 const PROD_URL = '';
-// PR CHECK: revert DEV_URL to remote before opening a PR — do not commit localhost/LAN URLs.
-// const DEV_URL = 'https://riderapp.escarez.com/api/';
+// The Develop backend (Render), built from the backend's `Develop` branch.
+// PR CHECK: this is the only DEV_URL to commit — never a localhost/LAN URL.
 // Local only — iOS Simulator: 127.0.0.1 | Android Emulator: 10.0.2.2 | Physical device: Mac LAN IP
-const DEV_URL = 'https://pinoyride-api.lwsdemo.com/api/';
+const DEV_URL = 'https://pinoyride-api-dev.onrender.com/api/';
 
 const BASE_DEV = {
   API_OK: 1,

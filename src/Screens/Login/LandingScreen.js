@@ -5,6 +5,7 @@ import { useTheme } from 'react-native-paper';
 import { AppButton } from '@/Components';
 import { useNavigation } from '@react-navigation/native';
 import Constants from 'expo-constants';
+import { Constants as AppConstants } from '@/Utils';
 
 const LandingScreen = () => {
   const { colors } = useTheme();
@@ -12,6 +13,9 @@ const LandingScreen = () => {
   const navigation = useNavigation();
 
   const appVersion = Constants.expoConfig?.version ?? '1.0.0';
+  // A build that talks to the Develop backend says so, to tell it apart
+  // from the store app.
+  const environment = AppConstants.IS_DEV ? ' · Develop' : '';
 
   return (
     <Container>
@@ -40,7 +44,10 @@ const LandingScreen = () => {
         </View>
       </View>
       <View style={styles.versionTextContainer}>
-        <Text style={styles.versionText}>v{appVersion}</Text>
+        <Text style={styles.versionText}>
+          v{appVersion}
+          {environment}
+        </Text>
       </View>
       <View />
     </Container>
