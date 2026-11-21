@@ -76,3 +76,13 @@ used the next time the app is started. Nothing is installed again.
   waits). The app's own code only shows the label (`src/Utils/selfUpdate.js`), and does not restart the app
   to pick an update up sooner: that file says why. The backend's README ("App updates") describes its side.
 - iOS is not set up for it: `ios/pinoyride/Supporting/Expo.plist` keeps it off.
+
+### APP ICON
+
+Gold, with the riders of the logo in black. The Driver app is the other way round (black, riders in gold), so
+the two are told apart at a glance.
+
+Every icon file (`android/app/src/main/res/mipmap-*`, and the iOS `AppIcon` set) is made from one drawing by
+`PRTC-WBM/design/app-icons/make-icons.js`; nothing in those folders is edited by hand. The 512 px picture for a
+store listing is written to `PRTC-WBM/design/app-icons/store/`. The icon is part of the native app: changing it
+needs a new version and a new APK.
