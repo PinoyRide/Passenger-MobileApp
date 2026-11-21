@@ -16,6 +16,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { AlertBox, AppButton, AppTextInput } from '@/Components';
 import useApiRequest from '@/Services/ApiV2';
 import { Constants } from '@/Utils';
+import { handedCode } from '@/Utils/handedCode';
 
 const OFFLINE_ALERT_TITLE = 'No Internet Connection';
 const OFFLINE_ALERT_MESSAGE =
@@ -86,6 +87,8 @@ const LoginScreen = () => {
     navigation.navigate('OTPScreen', {
       mobileNumber,
       otpSent: true,
+      // a test environment that hands the code to the app instead of texting it
+      handedCode: handedCode(response.data),
       mode: isRegister ? 'register' : 'login',
       // what was ticked on the terms screen; recorded with the new account
       consent: isRegister ? route.params?.consent : undefined,

@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
 
@@ -8,6 +8,9 @@ import { useTheme } from 'react-native-paper';
  * - Handles pasting multiple digits
  * - Prevents crashes for all 6-digit inputs including "000000"
  * - Responsive to screen size
+ * - `autoFillCode`: a code the screen already has (a test environment that
+ *   hands the code to the app instead of texting it). It is shown in the
+ *   boxes and submitted like a typed one, once per code.
  *
  * NOTE: Sizing is now based on the ACTUAL measured width of the row
  * (via onLayout) instead of Dimensions.get('window').width combined with
@@ -18,7 +21,7 @@ import { useTheme } from 'react-native-paper';
  * overflow past the visible card. Measuring the real rendered width fixes
  * this regardless of how deeply the component is nested.
  */
-const OTPInput = ({ length = 6, onOTPChange, onOTPComplete }) => {
+const OTPInput = ({ length = 6, onOTPChange, onOTPComplete, autoFillCode }) => {
   const { colors } = useTheme();
   const inputs = useRef([]);
   const [digits, setDigits] = useState(Array.from({ length }, () => ''));
@@ -47,6 +50,20 @@ const OTPInput = ({ length = 6, onOTPChange, onOTPComplete }) => {
       }
     }
   };
+
+  const filledIn = useRef(null);
+  useEffect(() => {
+    const code = `${autoFillCode ?? ''}`;
+    if (!new RegExp(`^\\d{${length}}$`).test(code)) {
+      return;
+    }
+    if (filledIn.current === code) {
+      return;
+    }
+    filledIn.current = code;
+    update(code.split(''));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoFillCode]);
 
   const handleChange = (text, index) => {
     const clean = text.replace(/\D/g, '');

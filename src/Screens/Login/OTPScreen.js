@@ -17,6 +17,7 @@ import useApiRequest from '@/Services/ApiV2';
 import { toStoredUser } from '@/Utils/customerMapper';
 import { signedInRoutes } from '@/Utils/consent';
 import { Constants } from '@/Utils';
+import { handedCode } from '@/Utils/handedCode';
 import DeviceInfo from 'react-native-device-info';
 import { useDispatch, useSelector } from 'react-redux';
 import { selectUserInfo, setUserInfo } from '@/Redux/Slices/userSlice';
@@ -36,6 +37,11 @@ const OTPScreen = () => {
   const loginUser = useApiRequest();
 
   const [, setOtpCode] = useState('');
+  // A code the backend handed over instead of texting it (a test environment
+  // without working SMS): filled in and submitted for the person.
+  const [codeFromBackend, setCodeFromBackend] = useState(
+    route.params.handedCode ?? null,
+  );
   const [alertMessage, setAlertMessage] = useState('');
   const [showAlert, setShowAlert] = useState(false);
 
@@ -78,6 +84,11 @@ const OTPScreen = () => {
 
       setAlertMessage(getOtpCode.error);
       setShowAlert(true);
+      return;
+    }
+    const handed = handedCode(getOtpCode.response?.data);
+    if (handed) {
+      setCodeFromBackend(handed);
     }
   }, [getOtpCode.response, getOtpCode.error]);
 
@@ -178,12 +189,17 @@ const OTPScreen = () => {
           <View style={styles.pageContainer}>
             <Text style={styles.title}>Enter One-Time PIN</Text>
             <Text style={styles.subtitle}>
-              A One-Time PIN was sent to +63 ******{mobileNumber.slice(-4)}
+              {codeFromBackend
+                ? 'Test environment: no text message is sent. The PIN is filled in for you.'
+                : `A One-Time PIN was sent to +63 ******${mobileNumber.slice(
+                    -4,
+                  )}`}
             </Text>
             <OTPInput
               length={6}
               onOTPChange={setOtpCode}
               onOTPComplete={verifyOtp}
+              autoFillCode={codeFromBackend}
             />
 
             <View style={styles.imageContainer}>
