@@ -1,9 +1,13 @@
 import React from 'react';
-import { ON_PRIMARY_BUTTON_TEXT } from '@/Theme';
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { modern } from '@/Theme/modern';
 
+// A short message the person has to answer before going on: a title, one
+// or two sentences, one button.
+//   icon         a MaterialCommunityIcons name, shown above the title
+//   dismissable  false when the back button must not close it
 const AlertBox = ({
   title,
   message,
@@ -14,8 +18,8 @@ const AlertBox = ({
   dismissable = true,
   icon,
 }) => {
-  const { colors } = useTheme();
-  const styles = getStyles({ colors });
+  const look = modern(useTheme());
+  const styles = getStyles(look);
 
   const handleConfirm = () => {
     setVisible(false);
@@ -29,6 +33,7 @@ const AlertBox = ({
       transparent
       visible={visible}
       animationType="fade"
+      statusBarTranslucent
       onRequestClose={() => {
         if (dismissable) {
           setVisible(false);
@@ -37,18 +42,17 @@ const AlertBox = ({
       <View style={styles.overlay}>
         <View style={styles.container}>
           {icon ? (
-            <Icon
-              name={icon}
-              size={56}
-              color={colors.primary}
-              style={styles.icon}
-            />
+            <View style={styles.iconPatch}>
+              <Icon name={icon} size={28} color={look.chipInk} />
+            </View>
           ) : null}
           {title ? <Text style={styles.title}>{title}</Text> : null}
           <Text style={styles.message}>{message}</Text>
           <TouchableOpacity
             onPress={handleConfirm}
-            style={styles.confirmButton}>
+            style={styles.confirmButton}
+            activeOpacity={0.85}
+            accessibilityRole="button">
             <Text style={styles.confirmText}>{confirmText}</Text>
           </TouchableOpacity>
         </View>
@@ -59,54 +63,66 @@ const AlertBox = ({
 
 export default AlertBox;
 
-const getStyles = ({ colors }) =>
+const getStyles = look =>
   StyleSheet.create({
     overlay: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.5)', // semi-transparent background
+      backgroundColor: 'rgba(0, 0, 0, 0.45)',
       justifyContent: 'center',
       alignItems: 'center',
+      paddingHorizontal: 28,
     },
     container: {
-      width: '80%',
-      backgroundColor: '#fff',
-      borderRadius: 12,
-      padding: 20,
-      elevation: 5, // Android shadow
-      shadowColor: '#000', // iOS shadow
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.25,
-      shadowRadius: 4,
+      width: '100%',
+      maxWidth: 360,
+      backgroundColor: look.surface,
+      borderRadius: 22,
+      paddingHorizontal: 22,
+      paddingTop: 24,
+      paddingBottom: 18,
+      elevation: 8,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.18,
+      shadowRadius: 16,
     },
-    icon: {
+    iconPatch: {
       alignSelf: 'center',
-      marginBottom: 8,
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 14,
+      backgroundColor: look.chip,
     },
     title: {
-      fontSize: 24,
-      fontWeight: 'bold',
-      marginBottom: 8,
       fontFamily: 'Poppins SemiBold',
-      color: colors.primary,
+      fontSize: 18,
+      lineHeight: 25,
+      color: look.text,
       textAlign: 'center',
+      marginBottom: 6,
     },
     message: {
-      fontSize: 14,
       fontFamily: 'Poppins Regular',
-      color: '#333',
+      fontSize: 14,
+      lineHeight: 21,
+      color: look.muted,
       textAlign: 'center',
-      marginBottom: 16,
+      marginBottom: 20,
     },
     confirmButton: {
-      backgroundColor: colors.primary,
-      paddingHorizontal: 16,
-      paddingVertical: 10,
-      borderRadius: 8,
-      alignSelf: 'center',
+      height: 48,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: look.accent,
     },
     confirmText: {
-      fontSize: 14,
-      fontFamily: 'Poppins Medium',
-      color: ON_PRIMARY_BUTTON_TEXT,
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 15,
+      lineHeight: 21,
+      color: look.onAccent,
     },
   });
