@@ -12,8 +12,9 @@ const GeneralTermsScreen = () => {
   const [checked, setChecked] = useState(false);
   const navigation = useNavigation();
 
+  // Registration: number → OTP → account, then the profile (name + selfie) before the first booking
   const handleNext = () => {
-    navigation.replace('PersonalDetailsScreen');
+    navigation.replace('LoginScreen', { mode: 'register' });
   };
 
   const handleBack = () => {

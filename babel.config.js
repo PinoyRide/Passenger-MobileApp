@@ -1,26 +1,24 @@
-module.exports = {
-  presets: ['module:@react-native/babel-preset'],
-  plugins: [
-    [
-      'module-resolver',
-      {
-        root: ['./src'],
-        extensions: ['.js', '.json'],
-        alias: {
-          '@': './src',
+module.exports = function (api) {
+  api.cache(true);
+  return {
+    // babel-preset-expo (Expo SDK 54) also adds the react-native-reanimated plugin.
+    presets: ['babel-preset-expo'],
+    plugins: [
+      [
+        'module-resolver',
+        {
+          root: ['./src'],
+          extensions: ['.js', '.json'],
+          alias: {
+            '@': './src',
+          },
         },
-      },
+      ],
     ],
-    [
-      'react-native-reanimated/plugin',
-      {
-        relativeSourceLocation: true,
+    env: {
+      production: {
+        plugins: ['react-native-paper/babel'],
       },
-    ],
-  ],
-  env: {
-    production: {
-      plugins: ['react-native-paper/babel', 'react-native-reanimated/plugin'],
     },
-  },
+  };
 };

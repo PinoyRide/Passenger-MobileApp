@@ -15,6 +15,7 @@ import { useTheme } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { AlertBox, AppButton } from '@/Components';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
+import { withCameraPermission } from '@/Utils/Permissions';
 
 const TOTAL_STEPS = 5;
 const CURRENT_STEP = 2;
@@ -39,7 +40,7 @@ const UploadIDScreen = () => {
   const [frontPhoto, setFrontPhoto] = useState(null);
   const [backPhoto, setBackPhoto] = useState(null);
   const [showAlert, setShowAlert] = useState(false);
-  const [alertMessage, setAlertMessage] = useState('');
+  const [alertMessage] = useState('');
   const [errors, setErrors] = useState({});
 
   const imagePickerOptions = {
@@ -56,8 +57,12 @@ const UploadIDScreen = () => {
           cancelButtonIndex: 0,
         },
         buttonIndex => {
-          if (buttonIndex === 1) {openCamera(onPick);}
-          if (buttonIndex === 2) {openGallery(onPick);}
+          if (buttonIndex === 1) {
+            openCamera(onPick);
+          }
+          if (buttonIndex === 2) {
+            openGallery(onPick);
+          }
         },
       );
     } else {
@@ -70,19 +75,30 @@ const UploadIDScreen = () => {
     }
   };
 
-  const openCamera = onPick => {
-    launchCamera(imagePickerOptions, response => {
-      if (response.didCancel || response.errorCode) {return;}
-      const uri = response.assets?.[0]?.uri;
-      if (uri) {onPick(uri);}
-    });
-  };
+  const openCamera = onPick =>
+    withCameraPermission(
+      () =>
+        launchCamera(imagePickerOptions, response => {
+          if (response.didCancel || response.errorCode) {
+            return;
+          }
+          const uri = response.assets?.[0]?.uri;
+          if (uri) {
+            onPick(uri);
+          }
+        }),
+      'Camera access is needed to photograph your ID for identity verification.',
+    );
 
   const openGallery = onPick => {
     launchImageLibrary(imagePickerOptions, response => {
-      if (response.didCancel || response.errorCode) {return;}
+      if (response.didCancel || response.errorCode) {
+        return;
+      }
       const uri = response.assets?.[0]?.uri;
-      if (uri) {onPick(uri);}
+      if (uri) {
+        onPick(uri);
+      }
     });
   };
 
@@ -102,8 +118,12 @@ const UploadIDScreen = () => {
 
   const handleNext = () => {
     const newErrors = {};
-    if (!selectedIDType) {newErrors.idType = 'Please select an ID type';}
-    if (!frontPhoto) {newErrors.front = 'Please upload the front of your ID';}
+    if (!selectedIDType) {
+      newErrors.idType = 'Please select an ID type';
+    }
+    if (!frontPhoto) {
+      newErrors.front = 'Please upload the front of your ID';
+    }
     if (!backPhoto && selectedIDType !== 'passport') {
       newErrors.back = 'Please upload the back of your ID';
     }

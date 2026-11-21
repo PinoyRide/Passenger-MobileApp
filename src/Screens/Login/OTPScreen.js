@@ -13,17 +13,14 @@ import {
 import { useTheme } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { AlertBox, Container, OTPInput } from '@/Components';
-import usePostRequest from '@/Services/Api';
-import { AppUtil, Constants } from '@/Utils';
+import useApiRequest from '@/Services/ApiV2';
+import { toStoredUser } from '@/Utils/customerMapper';
+import { Constants } from '@/Utils';
+import DeviceInfo from 'react-native-device-info';
 import { useDispatch, useSelector } from 'react-redux';
 import { selectUserInfo, setUserInfo } from '@/Redux/Slices/userSlice';
 
-// ⚠️ Unconfirmed for this app's backend — carried over from the rider
-// app where GENERATE_LOGIN returns this exact text for an unregistered
-// number. In the normal flow LoginScreen already gates this (via its own
-// LOGIN call) before we ever get here, so this is just a defense-in-depth
-// fallback. If this app's backend uses different wording, update the
-// pattern (or drop the check) accordingly.
+// The backend's message for an unregistered number ("Customer with this mobile number does not exist").
 const NOT_REGISTERED_ERROR_PATTERN = /does not exist/i;
 
 const OTPScreen = () => {
@@ -31,29 +28,35 @@ const OTPScreen = () => {
   const styles = getStyles({ colors });
   const navigation = useNavigation();
   const route = useRoute();
-  const { mobileNumber, pendingUserData } = route.params;
+  const { mobileNumber, otpSent, mode } = route.params;
+  const isRegister = mode === 'register';
 
-  const getOtpCode = usePostRequest();
-  const verifyOtpCode = usePostRequest();
-  const loginUser = usePostRequest();
+  const getOtpCode = useApiRequest();
+  const loginUser = useApiRequest();
 
-  const [otpCode, setOtpCode] = useState('');
+  const [, setOtpCode] = useState('');
   const [alertMessage, setAlertMessage] = useState('');
   const [showAlert, setShowAlert] = useState(false);
 
   const dispatch = useDispatch();
   const userInfo = useSelector(selectUserInfo);
 
-  // Fetch OTP on mount
+  // LoginScreen already sent the OTP; only send one here if we arrived some other way
   useEffect(() => {
-    fetchOtp(mobileNumber);
+    if (!otpSent) {
+      fetchOtp(mobileNumber);
+    }
   }, [mobileNumber]);
 
-  const fetchOtp = mobileNumber => {
-    getOtpCode.makePostRequest(Constants.ENDPOINT.GENERATE_LOGIN, {
-      mobile_no: mobileNumber,
-    });
-  };
+  const fetchOtp = number =>
+    getOtpCode.request(
+      'POST',
+      isRegister ? Constants.API.OTP_REGISTER : Constants.API.OTP_LOGIN,
+      {
+        mobileNo: number,
+        userType: 'customer',
+      },
+    );
 
   // Handle OTP generation response
   useEffect(() => {
@@ -74,87 +77,53 @@ const OTPScreen = () => {
 
       setAlertMessage(getOtpCode.error);
       setShowAlert(true);
-      return;
     }
-    const results = getOtpCode.response?.data;
-    AppUtil.debugDeep(results?.code);
   }, [getOtpCode.response, getOtpCode.error]);
 
-  // Verify OTP when 6 digits entered
-  const verifyOtp = code => {
-    verifyOtpCode.makePostRequest(Constants.ENDPOINT.VERIFY_LOGIN, {
-      mobile_no: mobileNumber,
-      code,
-    });
-  };
+  // Log in with the OTP once 6 digits are entered: the backend checks and uses up the code,
+  // then returns the customer.
+  const verifyOtp = code =>
+    loginUser.request(
+      'POST',
+      isRegister
+        ? Constants.API.CUSTOMER_REGISTER
+        : Constants.API.CUSTOMER_LOGIN,
+      {
+        mobileNo: mobileNumber,
+        otpCode: code,
+        appVersion: DeviceInfo.getVersion(),
+      },
+    );
 
-  const flattenAndSetUser = userData => {
-    const flattenedUser = {
-      ...userData,
-      ...(userData.customer_address?.[0] || {}),
-    };
-    delete flattenedUser.customer_address;
-
-    dispatch(setUserInfo(flattenedUser));
-  };
-
-  // Handle OTP verification response
-  useEffect(() => {
-    if (verifyOtpCode.error) {
-      setAlertMessage(verifyOtpCode.error);
-      setShowAlert(true);
-      return;
-    }
-    const results = verifyOtpCode.response;
-    AppUtil.debugDeep(results);
-
-    if (results?.code === 200) {
-      // ✅ NEW: no second LOGIN call — LoginScreen already fetched this
-      // data (before OTP was even sent) and held it here via route
-      // params. It only gets committed to Redux now, after OTP
-      // verification has actually passed.
-      if (pendingUserData) {
-        flattenAndSetUser(pendingUserData);
-      } else {
-        // Fallback safety net — shouldn't normally happen, since
-        // LoginScreen always passes this along before navigating here.
-        login();
-      }
-    } else if (otpCode.length === 6) {
-      setAlertMessage('Invalid OTP, please try again.');
-      setShowAlert(true);
-    }
-  }, [verifyOtpCode.response, verifyOtpCode.error]);
-
-  // Fallback-only path — see the `else` branch above.
-  const login = () => {
-    loginUser.makePostRequest(Constants.ENDPOINT.LOGIN, {
-      mobile_no: mobileNumber,
-    });
-  };
-
-  // Handle fallback login response
   useEffect(() => {
     if (loginUser.error) {
-      setAlertMessage(loginUser.error);
+      setAlertMessage(
+        /invalid otp/i.test(loginUser.error)
+          ? 'Invalid OTP, please try again.'
+          : loginUser.error,
+      );
       setShowAlert(true);
       return;
     }
-    const results = loginUser.response;
-
-    if (results?.code === 200 && results.data) {
-      flattenAndSetUser(results.data);
+    if (loginUser.response?.code === 200 && loginUser.response.data) {
+      dispatch(setUserInfo(toStoredUser(loginUser.response.data)));
     }
   }, [loginUser.response, loginUser.error]);
 
-  // Redirect after login
+  // Redirect after login / registration. An incomplete profile (name + selfie) goes straight to
+  // CompleteProfileScreen, with Home underneath so Back still works; booking stays blocked until it is done.
   useEffect(() => {
-    if (userInfo) {
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'HomeScreen' }],
-      });
+    if (!userInfo) {
+      return;
     }
+    navigation.reset(
+      userInfo.profile_complete
+        ? { index: 0, routes: [{ name: 'HomeScreen' }] }
+        : {
+            index: 1,
+            routes: [{ name: 'HomeScreen' }, { name: 'CompleteProfileScreen' }],
+          },
+    );
   }, [userInfo]);
 
   const [resendDisabled, setResendDisabled] = useState(false);
@@ -168,9 +137,7 @@ const OTPScreen = () => {
     setTimeout(() => setResendDisabled(false), 60000); // 60s cooldown
 
     try {
-      await getOtpCode.makePostRequest(Constants.ENDPOINT.GENERATE_LOGIN, {
-        mobile_no: mobileNumber,
-      });
+      await fetchOtp(mobileNumber);
     } catch (error) {
       setAlertMessage(error || 'Failed to resend OTP.');
       setShowAlert(true);

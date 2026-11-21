@@ -17,20 +17,24 @@ const BASE_DEV = {
   GOOGLE_MAP_API_KEY: 'AIzaSyAlpSoXuJzvo8uR1qbdtbbbk1sx4MHKIQk',
   BASE_URI: IS_DEV ? DEV_URL : PROD_URL,
 
+  // Endpoints served by the .NET backend (Services/ApiV2.js). BASE_URI points at the .NET API,
+  // which forwards every route it has not ported yet (ENDPOINT below) to Django unchanged.
+  API: {
+    OTP_LOGIN: 'otp/login',
+    OTP_REGISTER: 'otp/register',
+    CUSTOMER_LOGIN: 'customers/login',
+    CUSTOMER_REGISTER: 'customers/register',
+    CUSTOMER_PROFILE: id => `customers/${id}/profile`,
+    CUSTOMER_SELFIE: id => `customers/${id}/selfie`,
+    CUSTOMER: id => `customers/${id}`,
+    CUSTOMER_LOGOUT: id => `customers/${id}/logout`,
+    CUSTOMER_FIREBASE_TOKEN: id => `customers/${id}/firebase-token`,
+    PLACE_SEARCH: query => `places/search?query=${encodeURIComponent(query)}`,
+  },
+
+  // Django endpoints (reached through the .NET proxy)
   ENDPOINT: {
-    //AUTH
-    LOGIN: 'customers/login/',
-    SIGN_UP: 'customers/sign_up/',
-    LOGOUT: 'customers/logout/',
-    UPDATE_FIREBASE_TOKEN: 'customers/update_firebase_token/',
-    GET_CUSTOMER_DETAILS: 'customers/get_customer_details/',
-    //OTP
-    GENERATE_LOGIN: 'otp/generate-login/',
-    VERIFY_LOGIN: 'otp/verify-login/',
-    GENERATE_OTP: 'otp/generate/',
-    VERIFY_OTP: 'otp/verify/',
     //BOOKING
-    SEARCH_LOCATION: 'booking/search_location/',
     INQUIRE_BOOKING: 'booking/inquire/',
     CREATE_BOOKING: 'booking/create/',
     UPDATE_BOOKING_STATUS: 'booking/update_status_for_customer/',
@@ -44,7 +48,6 @@ const BASE_DEV = {
     RATE_BOOKING: 'booking/rate/',
     GET_PROMO_LIST: 'booking/get_promo_list/',
     CHECK_PROMO_CODE: 'booking/check_promo_code/',
-    GET_RIDER_LOCATION: 'customers/get_rider_location',
 
     ADD_TIP: 'booking/add_tip/',
     RETRY_BOOKING: 'booking/retry/',

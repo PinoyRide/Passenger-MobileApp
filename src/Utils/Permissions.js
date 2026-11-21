@@ -1,5 +1,11 @@
-import { Platform } from 'react-native';
-import { PERMISSIONS, RESULTS, check, request } from 'react-native-permissions';
+import { Alert, Platform } from 'react-native';
+import {
+  PERMISSIONS,
+  RESULTS,
+  check,
+  openSettings,
+  request,
+} from 'react-native-permissions';
 
 export const LOCATION_PERMISSION = Platform.select({
   ios: PERMISSIONS.IOS.LOCATION_WHEN_IN_USE,
@@ -113,4 +119,29 @@ export async function ensureCameraPermission() {
     default:
       return 'unavailable';
   }
+}
+
+// Ask for the camera at the moment it is needed (Google Play expects permission requests in
+// context, not at app start), then run `onGranted`. Explains and offers Settings otherwise.
+export async function withCameraPermission(onGranted, reason) {
+  const status = await ensureCameraPermission();
+  if (status === 'granted') {
+    onGranted();
+    return;
+  }
+  const message =
+    reason ||
+    'Camera access is needed to take this photo for identity verification.';
+  if (status === 'blocked') {
+    Alert.alert(
+      'Camera Access Blocked',
+      `${message} Please enable it in Settings.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Open Settings', onPress: () => openSettings() },
+      ],
+    );
+    return;
+  }
+  Alert.alert('Camera Access Needed', message);
 }

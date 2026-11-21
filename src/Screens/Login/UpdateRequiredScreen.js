@@ -13,7 +13,7 @@ import { useTheme } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 
-import usePostRequest from '@/Services/Api';
+import useApiRequest from '@/Services/ApiV2';
 import { Constants } from '@/Utils';
 import { logoutErrorText, shouldCallLogout } from '@/Utils/updateLogout';
 import {
@@ -30,7 +30,7 @@ const UpdateRequiredScreen = ({ route }) => {
   const dispatch = useDispatch();
   const userInfo = useSelector(selectUserInfo);
 
-  const { makePostRequest } = usePostRequest();
+  const { request } = useApiRequest();
   const [isProcessing, setIsProcessing] = useState(false);
   const [logoutError, setLogoutError] = useState('');
 
@@ -61,9 +61,9 @@ const UpdateRequiredScreen = ({ route }) => {
         // Logout must succeed before we open the store. If it fails, the
         // server keeps is_login=1 and the account gets stuck after the
         // update, so stay here and let the passenger retry.
-        const { response, error } = await makePostRequest(
-          Constants.ENDPOINT.LOGOUT,
-          {},
+        const { response, error } = await request(
+          'POST',
+          Constants.API.CUSTOMER_LOGOUT(userInfo.id),
         );
         loggedOut = !error && !!response;
         errorText = logoutErrorText(error);

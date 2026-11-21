@@ -75,7 +75,7 @@ const AppUtil = {
   },
 
   getHash: async function (modeType, string) {
-    if (string == '') {
+    if (string === '') {
       string = this.getRandomWords(256) + this.getUnixTimestamp();
     }
 
@@ -84,12 +84,12 @@ const AppUtil = {
 
     let hash = '';
 
-    if (modeType == 256) {
+    if (Number(modeType) === 256) {
       hash = await Crypto.digestStringAsync(
         Crypto.CryptoDigestAlgorithm.SHA256,
         string,
       );
-    } else if (modeType == 512) {
+    } else if (Number(modeType) === 512) {
       hash = await Crypto.digestStringAsync(
         Crypto.CryptoDigestAlgorithm.SHA512,
         string,

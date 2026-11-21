@@ -1,16 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  Platform,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSelector } from 'react-redux';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { initialWindowMetrics } from 'react-native-safe-area-context';
 
-import usePostRequest from '@/Services/Api';
+import useApiRequest from '@/Services/ApiV2';
 import { Constants } from '@/Utils';
 import { selectUserInfo } from '@/Redux/Slices/userSlice';
 import { navigationRef } from '@/Utils/NavigationService';
@@ -58,7 +52,7 @@ const currentRouteName = () =>
 const PushNotificationManager = () => {
   const userInfo = useSelector(selectUserInfo);
   const customerId = userInfo?.id;
-  const tokenRequest = usePostRequest();
+  const tokenRequest = useApiRequest();
 
   const [routeName, setRouteName] = useState(currentRouteName());
   const [permission, setPermission] = useState(null);
@@ -102,13 +96,10 @@ const PushNotificationManager = () => {
       if (lastSent.current === key) {
         return;
       }
-      const { error } = await tokenRequest.makePostRequest(
-        Constants.ENDPOINT.UPDATE_FIREBASE_TOKEN,
-        {
-          customer_id: customerId,
-          firebase_token: token,
-          platform: Platform.OS,
-        },
+      const { error } = await tokenRequest.request(
+        'PUT',
+        Constants.API.CUSTOMER_FIREBASE_TOKEN(customerId),
+        { firebaseToken: token },
       );
       if (error) {
         console.warn('[push] token registration failed:', error);

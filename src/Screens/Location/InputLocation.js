@@ -13,7 +13,7 @@ import {
 import { Portal, useTheme } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
-import usePostRequest from '@/Services/Api';
+import useApiRequest from '@/Services/ApiV2';
 import { Constants } from '@/Utils';
 import { fetchWithTimeout } from '@/Utils/Network';
 import Geolocation from 'react-native-geolocation-service';
@@ -77,7 +77,7 @@ const InputLocation = () => {
   const [isLocatingCurrentPosition, setIsLocatingCurrentPosition] =
     useState(false);
 
-  const searchLocationRequest = usePostRequest();
+  const searchLocationRequest = useApiRequest();
   const debounceRef = useRef(null);
   const pickupInputRef = useRef(null);
   const dropoffInputRef = useRef(null);
@@ -114,9 +114,7 @@ const InputLocation = () => {
       setSearchResults([]);
       return;
     }
-    searchLocationRequest.makePostRequest(Constants.ENDPOINT.SEARCH_LOCATION, {
-      location_search_key: query,
-    });
+    searchLocationRequest.request('GET', Constants.API.PLACE_SEARCH(query));
   };
 
   const handleSearchLocationRequest = async () => {
@@ -126,7 +124,15 @@ const InputLocation = () => {
       setSearchResults([]);
       return;
     }
-    const results = searchLocationRequest.response?.data || [];
+    // Same item shape the screens used with Django's booking/search_location
+    const results = (searchLocationRequest.response?.data || []).map(place => ({
+      display_name: place.displayName,
+      description: place.description,
+      address: place.address,
+      lat: place.lat,
+      long: place.long,
+      place_id: place.placeId,
+    }));
     // BUG-2: ignore late responses once no field is being edited
     setSearchResults(focusedField ? results : []);
   };

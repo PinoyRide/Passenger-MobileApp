@@ -1,6 +1,5 @@
 import { DarkTheme as NavigationDarkTheme } from '@react-navigation/native';
 import { MD3DarkTheme as PaperDarkTheme } from 'react-native-paper';
-import { AppUtil } from '@/Utils';
 
 const DarkTheme = {
   ...NavigationDarkTheme,

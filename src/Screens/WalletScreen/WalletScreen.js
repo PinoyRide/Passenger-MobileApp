@@ -11,7 +11,8 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from 'react-native-paper';
-import usePostRequest from '@/Services/Api';
+import useApiRequest from '@/Services/ApiV2';
+import { toLegacyCustomer } from '@/Utils/customerMapper';
 import { AppUtil, Constants } from '@/Utils';
 import { useSelector } from 'react-redux';
 import { selectUserInfo } from '@/Redux/Slices/userSlice';
@@ -26,16 +27,11 @@ const WalletScreen = () => {
   const { width } = useWindowDimensions();
   const isSmallScreen = width <= 400;
 
-  const getWalletDetails = usePostRequest();
+  const getWalletDetails = useApiRequest();
 
   useEffect(() => {
     if (userInfo?.id) {
-      getWalletDetails.makePostRequest(
-        Constants.ENDPOINT.GET_CUSTOMER_DETAILS,
-        {
-          customer_id: userInfo.id,
-        },
-      );
+      getWalletDetails.request('GET', Constants.API.CUSTOMER(userInfo.id));
     }
   }, [userInfo?.id]);
 
@@ -49,7 +45,9 @@ const WalletScreen = () => {
       getWalletDetails.response &&
       Object.keys(getWalletDetails.response).length > 0
     ) {
-      const result = getWalletDetails.response?.data.wallet_details;
+      const result = toLegacyCustomer(
+        getWalletDetails.response?.data,
+      )?.wallet_details;
       AppUtil.debugDeep(result);
       setWalletDetails(result);
     }

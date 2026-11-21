@@ -13,6 +13,7 @@ import { useTheme } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { AppButton } from '@/Components';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
+import { withCameraPermission } from '@/Utils/Permissions';
 
 const TOTAL_STEPS = 5;
 const CURRENT_STEP = 3;
@@ -28,7 +29,13 @@ const SelfieScreen = () => {
   const [error, setError] = useState('');
 
   // On emulator: camera may not work, so we offer gallery as fallback
-  const handleTakeSelfie = () => {
+  const handleTakeSelfie = () =>
+    withCameraPermission(
+      openSelfieCamera,
+      'Camera access is needed to take your selfie for identity verification.',
+    );
+
+  const openSelfieCamera = () => {
     launchCamera(
       {
         mediaType: 'photo',
@@ -49,7 +56,9 @@ const SelfieScreen = () => {
           );
           return;
         }
-        if (response.didCancel || response.errorCode) {return;}
+        if (response.didCancel || response.errorCode) {
+          return;
+        }
         const uri = response.assets?.[0]?.uri;
         if (uri) {
           setSelfiePhoto(uri);
@@ -61,7 +70,9 @@ const SelfieScreen = () => {
 
   const handlePickFromGallery = () => {
     launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, response => {
-      if (response.didCancel || response.errorCode) {return;}
+      if (response.didCancel || response.errorCode) {
+        return;
+      }
       const uri = response.assets?.[0]?.uri;
       if (uri) {
         setSelfiePhoto(uri);

@@ -4,7 +4,6 @@ import {
   DeviceEventEmitter,
   Dimensions,
   Image,
-  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -1274,6 +1273,20 @@ const HomeScreen = () => {
   //CREATE BOOKING
   const triggerCreateBooking = async () => {
     if (createBooking.loading) {
+      return;
+    }
+    if (!userInfo?.profile_complete) {
+      Alert.alert(
+        'Complete Your Profile',
+        'Add your first name, last name and a selfie before booking.',
+        [
+          { text: 'Later', style: 'cancel' },
+          {
+            text: 'Complete Profile',
+            onPress: () => navigation.navigate('CompleteProfileScreen'),
+          },
+        ],
+      );
       return;
     }
 

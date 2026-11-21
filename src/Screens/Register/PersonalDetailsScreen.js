@@ -30,18 +30,25 @@ const PersonalDetailsScreen = () => {
   const [address, setAddress] = useState('');
 
   const [errors, setErrors] = useState({});
-  const [isEmailValid, setIsEmailValid] = useState(false);
+  const [, setIsEmailValid] = useState(false);
 
   const validate = () => {
     const newErrors = {};
-    if (!firstName.trim()) {newErrors.firstName = 'First name is required';}
-    if (!lastName.trim()) {newErrors.lastName = 'Last name is required';}
+    if (!firstName.trim()) {
+      newErrors.firstName = 'First name is required';
+    }
+    if (!lastName.trim()) {
+      newErrors.lastName = 'Last name is required';
+    }
     if (!email.trim()) {
       newErrors.email = 'Email is required';
     }
-    if (!dateOfBirth.trim())
-      {newErrors.dateOfBirth = 'Date of birth is required';}
-    if (!address.trim()) {newErrors.address = 'Address is required';}
+    if (!dateOfBirth.trim()) {
+      newErrors.dateOfBirth = 'Date of birth is required';
+    }
+    if (!address.trim()) {
+      newErrors.address = 'Address is required';
+    }
     return newErrors;
   };
 

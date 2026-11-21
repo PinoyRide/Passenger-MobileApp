@@ -22,7 +22,7 @@ import {
   selectUserInfo,
 } from '@/Redux/Slices/userSlice';
 import { useDispatch, useSelector } from 'react-redux';
-import usePostRequest from '@/Services/Api';
+import useApiRequest from '@/Services/ApiV2';
 import { AppUtil, Constants } from '@/Utils';
 import { checkIsOnline } from '@/Utils/Network';
 
@@ -34,7 +34,8 @@ const SettingsScreen = () => {
   const userInfo = useSelector(selectUserInfo);
   const activeBooking = useSelector(selectActiveBooking);
   const bookingStatus = useSelector(selectBookingStatus);
-  const { makePostRequest, loading: loggingOut } = usePostRequest();
+  const { request: logoutRequest, loading: loggingOut } = useApiRequest();
+  const { request: deleteRequest, loading: deletingAccount } = useApiRequest();
 
   useEffect(() => {
     AppUtil.debugDeep(userInfo);
@@ -106,9 +107,9 @@ const SettingsScreen = () => {
       return;
     }
 
-    const { response, error, offline } = await makePostRequest(
-      Constants.ENDPOINT.LOGOUT,
-      {},
+    const { response, error, offline } = await logoutRequest(
+      'POST',
+      Constants.API.CUSTOMER_LOGOUT(userInfo.id),
     );
 
     if (error || !response || response?.code !== 200) {
@@ -119,6 +120,10 @@ const SettingsScreen = () => {
       return;
     }
 
+    await clearSessionAndGoToLanding();
+  };
+
+  const clearSessionAndGoToLanding = async () => {
     // stop pushes to this phone (backend also clears the saved token)
     await deletePushToken();
     dispatch(clearUserInfo());
@@ -131,6 +136,67 @@ const SettingsScreen = () => {
         routes: [{ name: 'LandingScreen' }],
       }),
     );
+  };
+
+  // Google Play requires apps that create accounts to let users delete them in the app.
+  const performDeleteAccount = async () => {
+    const online = await checkIsOnline();
+    if (!online) {
+      Alert.alert(
+        'No Internet Connection',
+        'Deleting your account requires an internet connection. Please reconnect and try again.',
+      );
+      return;
+    }
+
+    const { response, error } = await deleteRequest(
+      'DELETE',
+      Constants.API.CUSTOMER(userInfo.id),
+    );
+
+    if (error || !response || response?.code !== 200) {
+      Alert.alert(
+        'Unable to Delete Account',
+        error ||
+          response?.message ||
+          'Failed to delete your account. Please try again.',
+      );
+      return;
+    }
+
+    await clearSessionAndGoToLanding();
+    Alert.alert('Account Deleted', 'Your Pinoy Ride account has been deleted.');
+  };
+
+  const handleDeleteAccount = () => {
+    if (activeBooking?.id && [0, 1, 2, 5].includes(Number(bookingStatus))) {
+      Alert.alert(
+        'Active Booking',
+        'You have an active or scheduled booking. Please complete or cancel it before deleting your account.',
+      );
+      return;
+    }
+
+    const message =
+      'This permanently deletes your Pinoy Ride account. You will be logged out, your saved places ' +
+      'will be removed, and any remaining wallet balance can no longer be used. Completed trip and ' +
+      'payment records are kept as required for transactions. This cannot be undone.';
+
+    if (Platform.OS === 'web') {
+      // Alert.alert buttons are no-ops on react-native-web.
+      if (window.confirm(`Delete Account?\n\n${message}`)) {
+        performDeleteAccount();
+      }
+      return;
+    }
+    Alert.alert('Delete Account?', message, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: performDeleteAccount,
+      },
+    ]);
   };
 
   const handleLogout = async () => {
@@ -210,6 +276,14 @@ const SettingsScreen = () => {
             {loggingOut ? 'Logging Out...' : 'Log Out'}
           </Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.deleteAccountButton}
+          onPress={handleDeleteAccount}
+          disabled={deletingAccount || loggingOut}>
+          <Text style={styles.deleteAccountLabel}>
+            {deletingAccount ? 'Deleting Account...' : 'Delete Account'}
+          </Text>
+        </TouchableOpacity>
       </View>
     </Container>
   );
@@ -284,5 +358,17 @@ const getStyles = ({ colors }) =>
       fontWeight: 400,
       fontSize: 16,
       color: colors.grey3,
+    },
+    deleteAccountButton: {
+      alignSelf: 'center',
+      marginTop: 24,
+      paddingVertical: 8,
+      paddingHorizontal: 16,
+    },
+    deleteAccountLabel: {
+      fontFamily: 'Poppins Regular',
+      fontSize: 14,
+      color: colors.error,
+      textDecorationLine: 'underline',
     },
   });

@@ -1,64 +1,44 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
+// SDK levels (compile/target 36, min 24), NDK and build tools come from the expo-root-project plugin (Expo SDK 54).
 
 buildscript {
-    ext {
-        buildToolsVersion = findProperty('android.buildToolsVersion') ?: '35.0.0'
-        minSdkVersion = Integer.parseInt(findProperty('android.minSdkVersion') ?: '24')
-        compileSdkVersion = Integer.parseInt(findProperty('android.compileSdkVersion') ?: '35')
-        targetSdkVersion = Integer.parseInt(findProperty('android.targetSdkVersion') ?: '35')
-        kotlinVersion = findProperty('android.kotlinVersion') ?: '1.9.24'
-        ndkVersion = "26.1.10909125"
-    }
-    repositories {
-        google()
-        mavenCentral()
-    }
-    dependencies {
-        classpath('com.android.tools.build:gradle')
-        classpath('com.facebook.react:react-native-gradle-plugin')
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:${kotlinVersion}")
-        classpath('com.google.gms:google-services:4.4.2')
-    }
+  repositories {
+    google()
+    mavenCentral()
+  }
+  dependencies {
+    classpath('com.android.tools.build:gradle')
+    classpath('com.facebook.react:react-native-gradle-plugin')
+    classpath('org.jetbrains.kotlin:kotlin-gradle-plugin')
+    classpath('com.google.gms:google-services:4.4.2')
+  }
 }
-
-apply plugin: "com.facebook.react.rootproject"
 
 allprojects {
-    repositories {
-        maven {
-            url(new File(['node', '--print', "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim(), '../android'))
-        }
-        maven {
-            url(new File(['node', '--print', "require.resolve('jsc-android/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim(), '../dist'))
-        }
-        google()
-        mavenCentral()
-        maven { url 'https://www.jitpack.io' }
+  repositories {
+    google()
+    mavenCentral()
+    maven { url 'https://www.jitpack.io' }
+  }
+  configurations.all {
+    resolutionStrategy {
+      // react-native-geolocation-service is built against the play-services-location 21 API
+      force 'com.google.android.gms:play-services-location:21.0.1'
+      force 'androidx.browser:browser:1.8.0'
     }
-    configurations.all {
-        resolutionStrategy {
-            force 'com.google.android.gms:play-services-location:21.0.1'
-            force 'androidx.browser:browser:1.8.0'
-            force 'org.jetbrains.kotlin:kotlin-stdlib:1.9.24'
-            force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.24'
-            force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.24'
-            force 'org.jetbrains.kotlin:kotlin-annotations-jvm:1.9.24'
-            force 'androidx.annotation:annotation-jvm:1.8.1'
-        }
-    }
+  }
 }
 
-// --- ADDED: Workaround for react-native-gradle-plugin unconditionally
-// adding the oss.sonatype.org snapshots repo (see DependencyUtils.kt in
-// @react-native/gradle-plugin). That repo is slow/flaky; when it times out
-// with a 504, Gradle disables it and cascades into unrelated dependency
-// resolution failures (kotlin-stdlib, etc). This strips it out after the
-// RN plugin has finished configuring every subproject.
+apply plugin: "expo-root-project"
+apply plugin: "com.facebook.react.rootproject"
+
+// The React Native Gradle plugin adds the oss.sonatype.org snapshots repo to every subproject. It is slow
+// and flaky; a 504 there cascades into unrelated resolution failures, so it is removed after configuration.
 gradle.projectsEvaluated {
-    allprojects {
-        repositories.removeAll { repo ->
-            repo instanceof MavenArtifactRepository &&
-                repo.url.toString().contains("oss.sonatype.org")
-        }
+  allprojects {
+    repositories.removeAll { repo ->
+      repo instanceof MavenArtifactRepository &&
+        repo.url.toString().contains("oss.sonatype.org")
     }
+  }
 }

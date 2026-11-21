@@ -36,3 +36,8 @@ yarn-error.*
 *.tsbuildinfo
 
 yarn.lock
+# Signing keys never go in the repo (EAS Build stores the upload key; local builds read
+# PINOYRIDE_UPLOAD_* from ~/.gradle/gradle.properties). The debug keystore is public and stays.
+*.keystore
+*.jks
+!android/app/debug.keystore

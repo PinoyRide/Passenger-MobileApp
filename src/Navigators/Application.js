@@ -7,6 +7,7 @@ import {
   BookingHistoryScreen,
   CashInScreen,
   ChatScreen,
+  CompleteProfileScreen,
   ConfirmDetailsScreen,
   CongratsScreen,
   EKYCScreen,
@@ -213,6 +214,11 @@ const ApplicationNavigator = () => {
             <Stack.Screen
               name="ProfileScreen"
               component={ProfileScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="CompleteProfileScreen"
+              component={CompleteProfileScreen}
               options={{ headerShown: false }}
             />
           </Stack.Navigator>

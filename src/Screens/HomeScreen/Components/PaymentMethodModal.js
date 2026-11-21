@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
-import { AlertBox, AppButton } from '@/Components';
+import { AlertBox } from '@/Components';
 import TopUpAmountModal from './TopUpAmountModal';
 
 const PaymentMethodModal = ({
@@ -24,10 +24,6 @@ const PaymentMethodModal = ({
   const [showTopUpModal, setShowTopUpModal] = React.useState(false);
   const [alertMessage, setAlertMessage] = React.useState('');
   const [showAlert, setShowAlert] = React.useState(false);
-
-  const handleNext = () => {
-    setShowTopUpModal(true);
-  };
 
   const handleTopUpError = errorMessage => {
     setAlertMessage(errorMessage);

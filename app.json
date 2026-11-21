@@ -18,18 +18,31 @@
       [
         "react-native-permissions",
         {
-          "iosPermissions": ["Camera", "Microphone", "Notifications"]
+          "iosPermissions": [
+            "Camera",
+            "Microphone",
+            "Notifications"
+          ]
         }
       ],
       "@react-native-firebase/app",
-      "@react-native-firebase/messaging"
+      "@react-native-firebase/messaging",
+      "expo-web-browser"
     ],
     "android": {
       "package": "com.pinoyride.customer",
       "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO",
         "android.permission.POST_NOTIFICATIONS"
+      ],
+      "blockedPermissions": [
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
       ]
     },
     "ios": {
@@ -37,7 +50,9 @@
       "infoPlist": {
         "NSCameraUsageDescription": "[REASON]",
         "NSMicrophoneUsageDescription": "[REASON]",
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
       },
       "entitlements": {
         "aps-environment": "development"

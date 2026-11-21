@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useFonts } from 'expo-font';
+import { StatusBar } from 'expo-status-bar';
 import { en, registerTranslation } from 'react-native-paper-dates';
 
 registerTranslation('en', en);
@@ -8,7 +9,6 @@ import { Provider } from 'react-redux';
 import { PersistGate } from 'redux-persist/integration/react';
 
 import ApplicationNavigator from '@/Navigators/Application';
-import { AuthProvider } from '@/Services/AuthProvider';
 import PushNotificationManager from '@/Services/Push/PushNotificationManager';
 import { persistor, store } from '@/Redux/store';
 
@@ -30,12 +30,13 @@ const App = () => {
   return (
     <Provider store={store}>
       <PersistGate loading={null} persistor={persistor}>
-        <AuthProvider>
-          <View style={styles.container}>
-            <ApplicationNavigator />
-            <PushNotificationManager />
-          </View>
-        </AuthProvider>
+        <View style={styles.container}>
+          {/* Edge to edge (Android 15+, required at target 36): the status bar is transparent over the
+              app's light screens, so its icons must be dark or they disappear on dark-mode phones. */}
+          <StatusBar style="dark" />
+          <ApplicationNavigator />
+          <PushNotificationManager />
+        </View>
       </PersistGate>
     </Provider>
   );

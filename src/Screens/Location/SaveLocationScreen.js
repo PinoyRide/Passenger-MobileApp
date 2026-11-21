@@ -46,8 +46,7 @@ const SaveLocationScreen = () => {
   const { locationType, existingPlace } = route.params || {};
 
   // Use location hook
-  const { location, loading, error, permissionStatus, requestLocation } =
-    useLocation();
+  const { location, permissionStatus } = useLocation();
 
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [selectedAddress, setSelectedAddress] = useState('');

@@ -19,9 +19,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useTheme } from 'react-native-paper';
 import { AlertBox, AppButton } from '@/Components';
 import {
-  ensureCameraPermission,
   ensureLocationPermission,
-  requestCameraPermission,
   requestLocationPermission,
 } from '@/Utils/Permissions';
 import { openSettings } from 'react-native-permissions';
@@ -74,52 +72,21 @@ const OnboardingScreen = () => {
   const insets = useSafeAreaInsets();
 
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [showCameraAlert, setShowCameraAlert] = useState(false);
   const [showLocationAlert, setShowLocationAlert] = useState(false);
 
   const appState = useRef(AppState.currentState);
 
-  // ✅ Initial permission checks (camera + location)
+  // Location is the app's core feature, so it is asked for here. The camera is asked for only when
+  // the passenger takes their selfie or ID photo (Google Play: request permissions in context).
   useEffect(() => {
     checkPermissions();
   }, []);
 
   const checkPermissions = async () => {
-    // Check camera permission
-    const cam = await ensureCameraPermission();
-    if (cam !== 'granted') {
-      setShowCameraAlert(true);
-    }
-
     // Check location permission
     const loc = await ensureLocationPermission();
     if (loc !== 'granted') {
       setShowLocationAlert(true);
-    }
-  };
-
-  // ✅ Retry camera permission
-  const handleRetryCameraPermission = async () => {
-    const result = await requestCameraPermission();
-
-    if (result === 'granted') {
-      setShowCameraAlert(false);
-    } else if (result === 'blocked') {
-      Alert.alert(
-        'Camera Access Blocked',
-        'Please enable camera access in Settings to verify your identity.',
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel',
-            onPress: () => setShowCameraAlert(false),
-          },
-          { text: 'Open Settings', onPress: () => openSettings() },
-        ],
-      );
-    } else {
-      // User denied, keep alert showing
-      setShowCameraAlert(true);
     }
   };
 
@@ -157,13 +124,8 @@ const OnboardingScreen = () => {
           appState.current.match(/inactive|background/) &&
           nextAppState === 'active'
         ) {
-          // Re-check both permissions
-          const cam = await ensureCameraPermission();
           const loc = await ensureLocationPermission();
 
-          if (cam !== 'granted') {
-            setShowCameraAlert(true);
-          }
           if (loc !== 'granted') {
             setShowLocationAlert(true);
           }
@@ -199,23 +161,8 @@ const OnboardingScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* ✅ Camera Permission Alert */}
-      {showCameraAlert && (
-        <AlertBox
-          title="Camera Required"
-          message="Camera access is required to verify your identity. Please enable it."
-          visible={showCameraAlert}
-          setVisible={setShowCameraAlert}
-          confirmText="Enable Camera"
-          cancelText="Later"
-          onConfirm={handleRetryCameraPermission}
-          onCancel={() => setShowCameraAlert(false)}
-          dismissable={true}
-        />
-      )}
-
       {/* ✅ Location Permission Alert */}
-      {showLocationAlert && !showCameraAlert && (
+      {showLocationAlert && (
         <AlertBox
           title="Location Required"
           message="Location access is required to accept bookings and track rides. Please enable it."

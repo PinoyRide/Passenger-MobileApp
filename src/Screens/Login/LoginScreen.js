@@ -14,7 +14,7 @@ import Container from '@/Components/Container/Container';
 import { useTheme } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { AlertBox, AppButton, AppTextInput } from '@/Components';
-import usePostRequest from '@/Services/Api';
+import useApiRequest from '@/Services/ApiV2';
 import { Constants } from '@/Utils';
 
 const OFFLINE_ALERT_TITLE = 'No Internet Connection';
@@ -35,12 +35,11 @@ const LoginScreen = () => {
   const [alertMessage, setAlertMessage] = useState('');
   const [showAlert, setShowAlert] = useState(false);
 
-  // ✅ NEW: this is the one and only LOGIN call for the whole sign-in
-  // flow. Its response is held (passed to OTPScreen via route params)
-  // and NOT dispatched to Redux here — the user isn't treated as signed
-  // in until OTP verification succeeds in OTPScreen, which is what
-  // actually commits this data to userInfo.
-  const loginCheck = usePostRequest();
+  // Sends the login OTP. The backend answers "does not exist" for an unregistered
+  // number, so this also checks registration. Nothing about the account is returned
+  // until OTPScreen logs in with the code.
+  const loginCheck = useApiRequest();
+  const isRegister = route.params?.mode === 'register';
 
   useEffect(() => {
     if (route.params?.registrationComplete) {
@@ -65,9 +64,10 @@ const LoginScreen = () => {
 
     setErrorMessage('');
 
-    const { response, error, offline } = await loginCheck.makePostRequest(
-      Constants.ENDPOINT.LOGIN,
-      { mobile_no: mobileNumber },
+    const { response, error, offline } = await loginCheck.request(
+      'POST',
+      isRegister ? Constants.API.OTP_REGISTER : Constants.API.OTP_LOGIN,
+      { mobileNo: mobileNumber, userType: 'customer' },
     );
 
     if (offline) {
@@ -75,23 +75,18 @@ const LoginScreen = () => {
       return;
     }
 
-    if (error || !response || response?.code !== 200 || !response?.data) {
-      // Not registered (or some other LOGIN failure) — stay on this
-      // screen and surface why, instead of proceeding to OTP.
-      setAlertMessage(
-        response?.message ||
-          error ||
-          'No account was found for this mobile number.',
-      );
+    if (error || !response) {
+      // Not registered (login), already registered (register), or the OTP could not be sent
+      setAlertMessage(error || 'Unable to send the code. Please try again.');
       setShowAlert(true);
       return;
     }
 
-    // ✅ Registered — carry the LOGIN response forward. OTPScreen holds
-    // it until OTP verification passes, then dispatches it.
+    // OTP sent; OTPScreen logs in with it.
     navigation.navigate('OTPScreen', {
       mobileNumber,
-      pendingUserData: response.data,
+      otpSent: true,
+      mode: isRegister ? 'register' : 'login',
     });
   };
 
@@ -126,7 +121,9 @@ const LoginScreen = () => {
         </TouchableOpacity>
 
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>Get Started</Text>
+          <Text style={styles.headerTitle}>
+            {isRegister ? 'Register' : 'Get Started'}
+          </Text>
         </View>
       </View>
 

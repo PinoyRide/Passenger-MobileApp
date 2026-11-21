@@ -34,7 +34,7 @@ const ConfirmDetailsScreen = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [showAlert, setShowAlert] = useState(false);
-  const [alertMessage, setAlertMessage] = useState('');
+  const [alertMessage] = useState('');
 
   const handleSubmit = () => {
     // TODO: Wire up your submit API call here
