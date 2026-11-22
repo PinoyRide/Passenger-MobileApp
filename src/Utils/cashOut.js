@@ -21,6 +21,7 @@ const GCASH = {
   name: 'GCash',
   payMethod: 'EWALLET',
   isBank: false,
+  logo: null,
 };
 
 const clean = text =>
@@ -74,6 +75,14 @@ function accountNameError(name) {
   return value.length > MAX_NAME ? `At most ${MAX_NAME} characters` : '';
 }
 
+// A channel's logo is a web address on the API (logo_url: the company's own
+// icon, the owner 2026-11-23: "are we not including the logos of the payment
+// method?"); anything else is no logo.
+function logoOf(url) {
+  const text = typeof url === 'string' ? url.trim() : '';
+  return /^https?:\/\/\S+$/i.test(text) ? text : null;
+}
+
 // The channels to choose from, from cash_out/get-banks/: e-wallets in
 // PayCools' order (GCash first), banks by name; none under maintenance.
 function channelsFrom(list) {
@@ -84,6 +93,7 @@ function channelsFrom(list) {
       name: String(c.name || c.code),
       payMethod: c.pay_method || (c.is_bank ? 'BANK' : 'EWALLET'),
       isBank: Boolean(c.is_bank),
+      logo: logoOf(c.logo_url),
     }));
   return {
     ewallets: all.filter(c => !c.isBank),
@@ -91,6 +101,21 @@ function channelsFrom(list) {
       .filter(c => c.isBank)
       .sort((a, b) => a.name.localeCompare(b.name)),
   };
+}
+
+// The chosen channel as the loaded list has it (with its logo), or as it was.
+function freshChannel(channels, channel) {
+  if (!channel) {
+    return channel;
+  }
+  const all = [...(channels?.ewallets || []), ...(channels?.banks || [])];
+  return all.find(c => c.code === channel.code) || channel;
+}
+
+// The letter on the tile of a channel without a logo.
+function markLetter(name) {
+  const first = String(name || '').match(/[A-Za-z0-9]/);
+  return first ? first[0].toUpperCase() : '•';
 }
 
 // The request body for cash_out/cash-out/.
@@ -154,6 +179,8 @@ module.exports = {
   accountName,
   accountNameError,
   channelsFrom,
+  freshChannel,
+  markLetter,
   cashOutRequest,
   maskedAccount,
   afterCashOut,

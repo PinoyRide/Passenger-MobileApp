@@ -9,6 +9,8 @@ const {
   accountName,
   accountNameError,
   channelsFrom,
+  freshChannel,
+  markLetter,
   cashOutRequest,
   maskedAccount,
   afterCashOut,
@@ -19,8 +21,9 @@ const answered = data => ({
   error: null,
 });
 
-const MAYA = { code: 'PAYMAYA', name: 'Maya', payMethod: 'EWALLET', isBank: false };
-const BPI = { code: 'BPI', name: 'BPI', payMethod: 'BANK', isBank: true };
+const MAYA = { code: 'PAYMAYA', name: 'Maya', payMethod: 'EWALLET', isBank: false, logo: null };
+const BPI = { code: 'BPI', name: 'BPI', payMethod: 'BANK', isBank: true, logo: null };
+const LOGO = 'https://pinoyride-api-dev.onrender.com/payout-logos/gcash.png';
 
 test('an e-wallet account is its mobile number, read as 09XXXXXXXXX', () => {
   assert.equal(mobileNumber('0917 123 4567'), '09171234567');
@@ -58,6 +61,30 @@ test("the channels: PayCools' e-wallets in order, banks by name, none under main
   assert.deepEqual(banks.map(c => c.code), ['BDO', 'BPI']);
   assert.deepEqual(banks[1], BPI);
   assert.deepEqual(channelsFrom(null), { ewallets: [], banks: [] });
+});
+
+test('a channel shows its logo when the list names a web address for it, a lettered tile otherwise', () => {
+  const { ewallets, banks } = channelsFrom([
+    { code: 'GCASH', name: 'GCash', pay_method: 'EWALLET', is_bank: false, logo_url: LOGO },
+    { code: 'PAYMONGO', name: 'PayMongo', pay_method: 'EWALLET', is_bank: false, logo_url: null },
+    { code: 'BDO', name: 'Banco de Oro', pay_method: 'BANK', is_bank: true, logo_url: 'javascript:alert(1)' },
+  ]);
+  assert.equal(ewallets[0].logo, LOGO);
+  assert.equal(ewallets[1].logo, null);
+  assert.equal(banks[0].logo, null);
+  assert.equal(GCASH.logo, null);
+  assert.equal(markLetter('Banco de Oro'), 'B');
+  assert.equal(markLetter('(Cotabato) Rural Bank'), 'C');
+  assert.equal(markLetter(''), '•');
+});
+
+test('the chosen channel takes its logo once the list is in', () => {
+  const channels = channelsFrom([
+    { code: 'GCASH', name: 'GCash', pay_method: 'EWALLET', is_bank: false, logo_url: LOGO },
+  ]);
+  assert.equal(freshChannel(channels, GCASH).logo, LOGO);
+  assert.equal(freshChannel(channels, BPI), BPI);
+  assert.equal(freshChannel(channels, null), null);
 });
 
 test('the request carries the channel and the account in the fields the backend reads', () => {

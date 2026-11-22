@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
+  Image,
   Keyboard,
   Modal,
   Pressable,
@@ -28,6 +30,8 @@ import {
   afterCashOut,
   cashOutRequest,
   channelsFrom,
+  freshChannel,
+  markLetter,
   maskedAccount,
 } from '@/Utils/cashOut';
 import { modern } from '@/Theme/modern';
@@ -39,6 +43,49 @@ const pesos = value =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+
+// A channel's logo (the company's own icon, served by the API), or a lettered
+// tile when it has none or it does not load.
+const ChannelMark = ({ channel, size }) => {
+  const look = modern(useTheme());
+  const [failed, setFailed] = useState(null);
+  const box = {
+    width: size,
+    height: size,
+    borderRadius: Math.round(size * 0.28),
+  };
+  if (channel?.logo && failed !== channel.logo) {
+    return (
+      <Image
+        source={{ uri: channel.logo }}
+        onError={() => setFailed(channel.logo)}
+        style={[box, { borderWidth: 1, borderColor: look.hairline }]}
+        accessibilityIgnoresInvertColors
+      />
+    );
+  }
+  return (
+    <View
+      style={[
+        box,
+        {
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: look.tile,
+        },
+      ]}>
+      <Text
+        style={{
+          fontFamily: 'Poppins SemiBold',
+          fontSize: Math.round(size * 0.46),
+          lineHeight: Math.round(size * 0.62),
+          color: look.inkSoft,
+        }}>
+        {markLetter(channel?.name)}
+      </Text>
+    </View>
+  );
+};
 
 // Cash out, the same page in both apps (sharedUi.test.mjs): to any e-wallet
 // or bank PayCools pays out to (the owner, 2026-11-23: "are we not using
@@ -63,30 +110,6 @@ const CashOutScreen = ({ route }) => {
       : Math.max(0, total);
   const notCashable = Math.max(0, total - available);
 
-  const banksRequest = usePostRequest();
-  const cashOut = usePostRequest();
-  const [channels, setChannels] = useState({ ewallets: [GCASH], banks: [] });
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      const { response } = await banksRequest.makePostRequest(
-        Constants.ENDPOINT.GET_BANKS,
-        {},
-      );
-      const got = channelsFrom(response?.data);
-      if (active && (got.ewallets.length || got.banks.length)) {
-        setChannels({
-          ewallets: got.ewallets.length ? got.ewallets : [GCASH],
-          banks: got.banks,
-        });
-      }
-    })();
-    return () => {
-      active = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const firstName =
     userInfo?.ekyc_details?.first_name ||
     userInfo?.first_name ||
@@ -105,6 +128,37 @@ const CashOutScreen = ({ route }) => {
   const [search, setSearch] = useState('');
   const [alertMessage, setAlertMessage] = useState('');
   const [alertVisible, setAlertVisible] = useState(false);
+
+  const banksRequest = usePostRequest();
+  const cashOut = usePostRequest();
+  const [channels, setChannels] = useState({ ewallets: [GCASH], banks: [] });
+  const [listIn, setListIn] = useState(false);
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const answer = await banksRequest.makePostRequest(
+        Constants.ENDPOINT.GET_BANKS,
+        {},
+      );
+      if (!active) {
+        return;
+      }
+      const got = channelsFrom(answer?.response?.data);
+      if (got.ewallets.length || got.banks.length) {
+        const next = {
+          ewallets: got.ewallets.length ? got.ewallets : [GCASH],
+          banks: got.banks,
+        };
+        setChannels(next);
+        setChannel(current => freshChannel(next, current));
+      }
+      setListIn(true);
+    })();
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const value = parseFloat(String(amount).replace(/,/g, '')) || 0;
 
@@ -235,7 +289,15 @@ const CashOutScreen = ({ route }) => {
 
         {confirming ? (
           <View style={styles.card}>
-            {row('Send to', channel?.name)}
+            <View style={styles.confirmRow}>
+              <Text style={styles.confirmLabel}>Send to</Text>
+              <View style={styles.confirmChannel}>
+                <ChannelMark channel={channel} size={22} />
+                <Text style={styles.confirmValue} numberOfLines={1}>
+                  {channel?.name}
+                </Text>
+              </View>
+            </View>
             {row(
               channel?.isBank ? 'Account number' : 'Mobile number',
               maskedAccount(channel, account),
@@ -275,7 +337,12 @@ const CashOutScreen = ({ route }) => {
               })}
             </View>
 
-            {kind === 'ewallet' ? (
+            {kind === 'ewallet' && !listIn ? (
+              <ActivityIndicator
+                style={styles.chipsLoading}
+                color={look.muted}
+              />
+            ) : kind === 'ewallet' ? (
               <View style={styles.chips}>
                 {channels.ewallets.map(e => {
                   const on = channel?.code === e.code;
@@ -286,6 +353,7 @@ const CashOutScreen = ({ route }) => {
                       accessibilityRole="radio"
                       accessibilityState={{ checked: on }}
                       style={[styles.chip, on && styles.chipOn]}>
+                      <ChannelMark channel={e} size={22} />
                       <Text style={[styles.chipText, on && styles.chipTextOn]}>
                         {e.name}
                       </Text>
@@ -302,7 +370,11 @@ const CashOutScreen = ({ route }) => {
                     styles.bankButton,
                     errors.channel && styles.bankButtonError,
                   ]}>
-                  <Icon name="bank-outline" size={20} color={look.chipInk} />
+                  {channel ? (
+                    <ChannelMark channel={channel} size={28} />
+                  ) : (
+                    <Icon name="bank-outline" size={20} color={look.chipInk} />
+                  )}
                   <Text
                     style={[styles.bankText, !channel && styles.bankHint]}
                     numberOfLines={1}>
@@ -425,7 +497,9 @@ const CashOutScreen = ({ route }) => {
                 <Text style={styles.empty}>
                   {channels.banks.length
                     ? 'No bank matches.'
-                    : 'The banks could not be loaded. Please try again later.'}
+                    : listIn
+                    ? 'The banks could not be loaded. Please try again later.'
+                    : 'Loading the banks…'}
                 </Text>
               }
               renderItem={({ item }) => (
@@ -438,6 +512,7 @@ const CashOutScreen = ({ route }) => {
                   }}
                   style={styles.bankRow}
                   accessibilityRole="button">
+                  <ChannelMark channel={item} size={32} />
                   <Text style={styles.bankRowText}>{item.name}</Text>
                   {channel?.code === item.code ? (
                     <Icon name="check" size={20} color={look.chipInk} />
@@ -559,11 +634,15 @@ const getStyles = look =>
       marginTop: 12,
       marginBottom: 16,
     },
+    chipsLoading: { height: 36, marginTop: 12, marginBottom: 16 },
     chip: {
-      paddingHorizontal: 14,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingLeft: 6,
+      paddingRight: 14,
       height: 36,
       borderRadius: 18,
-      justifyContent: 'center',
       borderWidth: 1,
       borderColor: look.hairline,
       backgroundColor: look.card,
@@ -637,6 +716,12 @@ const getStyles = look =>
       lineHeight: 20,
       color: look.ink,
     },
+    confirmChannel: {
+      flexShrink: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
     confirmTotal: {
       marginTop: 8,
       paddingTop: 12,
@@ -704,10 +789,10 @@ const getStyles = look =>
     },
     separator: { height: 1, backgroundColor: look.hairline },
     bankRow: {
-      minHeight: 50,
+      minHeight: 56,
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
+      gap: 12,
       paddingVertical: 10,
     },
     bankRowText: {
