@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -35,6 +36,13 @@ import { modern } from '@/Theme/modern';
 // owner, 2026-11-23: "fix also this in message"): a quiet header, my messages
 // in dark ink on gold (they were white on yellow, hard to read), theirs on a
 // white card.
+//
+// The keyboard (the owner, 2026-11-23: "when the keyboard pops the chat box
+// was overlapped and i cannot see what i am typing"): `androidKeyboard` says
+// how this app's Android window meets it. 'padding' where the window is drawn
+// edge to edge and does not shrink for the keyboard (the Passenger app): the
+// screen lifts the message box above it. Left out where the window pans up to
+// the field by itself (the Rider app's adjustPan). iOS always lifts it.
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -44,13 +52,21 @@ const OTHER_SIDE = {
   rider: { type: 'customer', name: 'Passenger', whom: 'your passenger' },
 };
 
-const ChatThread = ({ me = 'customer' }) => {
+const ChatThread = ({ me = 'customer', androidKeyboard }) => {
   const look = modern(useTheme());
   const navigation = useNavigation();
   const route = useRoute();
   const isFocused = useIsFocused();
   const { top: topInset, bottom: bottomInset } = useSafeAreaInsets();
-  const styles = getStyles(look, topInset, bottomInset);
+  const lifts = Platform.OS === 'ios' || androidKeyboard === 'padding';
+  const [keyboardUp, setKeyboardUp] = useState(false);
+  // with the box lifted onto the keyboard, the room kept for the navigation
+  // bar below it is not needed
+  const styles = getStyles(
+    look,
+    topInset,
+    lifts && keyboardUp ? 0 : bottomInset,
+  );
   const side = OTHER_SIDE[me] || OTHER_SIDE.customer;
 
   const userInfo = useSelector(selectUserInfo);
@@ -76,6 +92,21 @@ const ChatThread = ({ me = 'customer' }) => {
   const pollRef = useRef(null);
   const hasLoadedOnceRef = useRef(false);
   const listRef = useRef(null);
+
+  // The newest message stays in view when the keyboard comes up.
+  useEffect(() => {
+    const shown = Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardUp(true);
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50);
+    });
+    const hidden = Keyboard.addListener('keyboardDidHide', () =>
+      setKeyboardUp(false),
+    );
+    return () => {
+      shown.remove();
+      hidden.remove();
+    };
+  }, []);
 
   // The same signed request (user_type, id, app_version, signature) as every
   // other screen.
@@ -255,8 +286,8 @@ const ChatThread = ({ me = 'customer' }) => {
   return (
     <KeyboardAvoidingView
       style={styles.page}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? topInset : 0}>
+      behavior={lifts ? 'padding' : undefined}
+      keyboardVerticalOffset={0}>
       <View style={styles.header}>
         <Pressable
           onPress={() => navigation.goBack()}
