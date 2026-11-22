@@ -135,9 +135,15 @@ const BottomModal = ({
       visible: !isBooked,
       title: ride?.short ? `Book ${ride.short}` : 'Book',
       onPress: onInquireBooking,
-      // no ride picked yet: Book waits, as it did when the rides were a modal
+      // no ride picked yet: Book waits, as it did when the rides were a modal;
+      // a ride coming soon is never booked
       disabled:
-        !pickup || !dropoff || isLoading || !isOnline || !selectedService,
+        !pickup ||
+        !dropoff ||
+        isLoading ||
+        !isOnline ||
+        !selectedService ||
+        Boolean(ride?.soon),
     },
     {
       visible: confirming,

@@ -11,6 +11,11 @@ const { formatPeso } = require('./formatPeso');
 const { tripLengthText } = require('./tripText');
 
 const NO_FARE = '—';
+// A ride not offered yet (`soon`; the owner, 2026-11-23: "make the car 4
+// seats and 6 seats coming soon") is listed but cannot be chosen: never
+// selected, no fare, this under its name. A booking placed for it before
+// still shows it as booked.
+const COMING_SOON = 'Coming soon';
 
 const sameId = (a, b) => a != null && b != null && String(a) === String(b);
 
@@ -38,9 +43,10 @@ function pricedFor(service, fare) {
   };
 }
 
-// One row per ride: { service, selected, meta, fare, label }. `label` is what
-// a screen reader says. `selectedOnly` keeps just the chosen ride, for a
-// booking that is already placed.
+// One row per ride: { service, selected, soon, meta, fare, label }. `label`
+// is what a screen reader says; `fare` is '' on a ride coming soon.
+// `selectedOnly` keeps just the chosen ride, for a booking that is already
+// placed.
 function serviceRows({
   services = [],
   selectedId,
@@ -49,20 +55,22 @@ function serviceRows({
 }) {
   return services
     .map(service => {
-      const selected = sameId(service.id, selectedId);
+      const soon = Boolean(service.soon) && !selectedOnly;
+      const selected = !soon && sameId(service.id, selectedId);
       const priced = selected ? pricedFor(service, fare) : null;
-      const meta = [priced && priced.tripTime, service.meta]
-        .filter(Boolean)
-        .join(' · ');
+      const meta = soon
+        ? COMING_SOON
+        : [priced && priced.tripTime, service.meta].filter(Boolean).join(' · ');
       return {
         service,
         selected,
+        soon,
         meta,
-        fare: priced ? priced.amount : NO_FARE,
+        fare: soon ? '' : priced ? priced.amount : NO_FARE,
         label: [
           service.title,
           service.badge && service.badge.toLowerCase(),
-          meta,
+          soon ? COMING_SOON.toLowerCase() : meta,
           priced && priced.amount,
         ]
           .filter(Boolean)
@@ -74,6 +82,7 @@ function serviceRows({
 
 module.exports = {
   NO_FARE,
+  COMING_SOON,
   serviceRows,
   tripTimeText,
 };

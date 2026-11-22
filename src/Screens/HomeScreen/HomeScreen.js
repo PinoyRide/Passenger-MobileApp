@@ -120,7 +120,10 @@ import {
   shouldShowRiderFoundAlert,
   transformBooking,
 } from '@/Hooks/bookingTransform';
-import { services as SERVICE_OPTIONS } from './Components/ServiceList';
+import {
+  services as SERVICE_OPTIONS,
+  serviceById,
+} from './Components/ServiceList';
 import useNoRidersTimer from '@/Hooks/useNoRidersTimer';
 import useSearchReach from '@/Hooks/useSearchReach';
 import useNearbyRiders from '@/Hooks/useNearbyRiders';
@@ -750,6 +753,20 @@ const HomeScreen = () => {
     }
     dispatch(setSelectedService(service));
   };
+
+  // A ride coming soon cannot be chosen: one kept on the phone from before,
+  // or from a past trip booked again, is let go while nothing is booked, and
+  // the passenger picks a ride on offer. A booking placed for it keeps it.
+  useEffect(() => {
+    if (
+      serviceById(selectedService?.id)?.soon &&
+      !isBooked &&
+      !isConfirmed &&
+      activeBooking?.id == null
+    ) {
+      dispatch(setSelectedService(null));
+    }
+  }, [dispatch, selectedService?.id, isBooked, isConfirmed, activeBooking?.id]);
 
   const handleTopRightPress = () => {
     navigation.navigate('SettingsScreen');

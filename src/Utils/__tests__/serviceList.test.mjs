@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import mod from '../serviceList.js';
-const { NO_FARE, serviceRows, tripTimeText } = mod;
+const { COMING_SOON, NO_FARE, serviceRows, tripTimeText } = mod;
 
 const services = [
   { id: 1, title: 'Motorcycle', meta: '1 seat', badge: 'FASTEST' },
@@ -72,6 +72,30 @@ test('a placed booking keeps only the chosen ride', () => {
   const rows = serviceRows({ services, selectedId: 1, fare: fareFor(1), selectedOnly: true });
   assert.deepEqual(rows.map(r => r.service.id), [1]);
   assert.deepEqual(serviceRows({ services, selectedId: null, selectedOnly: true }), []);
+});
+
+test('a ride coming soon is listed but cannot be chosen, and shows no fare', () => {
+  const withSoon = [services[0], { ...services[1], soon: true }, { ...services[2], soon: true }];
+  const rows = serviceRows({ services: withSoon, selectedId: 2, fare: fareFor(2) });
+  assert.deepEqual(
+    rows.map(r => [r.service.id, r.selected, r.soon, r.meta, r.fare]),
+    [
+      [1, false, false, '1 seat', NO_FARE],
+      // chosen before it was coming soon: not chosen now, and not priced
+      [2, false, true, COMING_SOON, ''],
+      [3, false, true, COMING_SOON, ''],
+    ],
+  );
+  assert.equal(rows[1].label, 'Car (4 Seaters), coming soon');
+});
+
+test('a booking placed for a ride now coming soon still shows it as booked', () => {
+  const withSoon = [services[0], { ...services[1], soon: true }];
+  const rows = serviceRows({ services: withSoon, selectedId: 2, fare: fareFor(2), selectedOnly: true });
+  assert.deepEqual(
+    rows.map(r => [r.service.id, r.selected, r.soon, r.fare]),
+    [[2, true, false, '₱128.00']],
+  );
 });
 
 test('a screen reader hears the name, badge, meta and fare, never the dash', () => {

@@ -8,7 +8,9 @@ import { NO_FARE, serviceRows } from '@/Utils/serviceList';
 // The ride types, named as on the design canvas. `icon` is a line icon
 // (MaterialCommunityIcons), `short` the name on the Book button, `meta` the
 // line under the name and `badge` an optional tag beside it. The cars carry
-// their seats in the name, so their meta line is the trip time alone.
+// their seats in the name, so their meta line is the trip time alone. `soon`:
+// listed, not bookable yet (the owner, 2026-11-23: "make the car 4 seats and
+// 6 seats coming soon"); drop it to open the ride.
 export const services = [
   {
     id: 1,
@@ -23,12 +25,14 @@ export const services = [
     icon: 'car-side',
     title: 'Car · 4 seats',
     short: 'Car',
+    soon: true,
   },
   {
     id: 3,
     icon: 'car-estate',
     title: 'Car · 6 seats',
     short: 'Car',
+    soon: true,
   },
 ];
 
@@ -65,15 +69,19 @@ const ServiceList = ({
         <Pressable
           key={row.service.id}
           onPress={() => onSelect?.(row.service)}
-          disabled={locked}
+          disabled={locked || row.soon}
           accessibilityRole="radio"
-          accessibilityState={{ selected: row.selected, disabled: locked }}
+          accessibilityState={{
+            selected: row.selected,
+            disabled: locked || row.soon,
+          }}
           accessibilityLabel={row.label}
           style={({ pressed }) => [
             styles.card,
             row.selected ? styles.cardSelected : styles.cardResting,
             index < rows.length - 1 && styles.gap,
             pressed && styles.pressed,
+            row.soon && styles.soon,
           ]}>
           <View
             style={[
@@ -101,9 +109,11 @@ const ServiceList = ({
               {row.meta}
             </Text>
           </View>
-          <Text style={[styles.fare, row.fare === NO_FARE && styles.noFare]}>
-            {row.fare}
-          </Text>
+          {row.fare ? (
+            <Text style={[styles.fare, row.fare === NO_FARE && styles.noFare]}>
+              {row.fare}
+            </Text>
+          ) : null}
         </Pressable>
       ))}
     </View>
@@ -140,6 +150,10 @@ const getStyles = look =>
     },
     pressed: {
       opacity: 0.85,
+    },
+    // coming soon: there, but plainly not on offer
+    soon: {
+      opacity: 0.5,
     },
     tile: {
       width: 50,
