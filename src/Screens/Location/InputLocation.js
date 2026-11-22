@@ -28,6 +28,12 @@ import {
 } from '@/Redux/Slices/userSlice';
 import { bottomSpace } from '@/Utils/bottomSpace';
 import { distanceKm, distanceText } from '@/Utils/tripText';
+import {
+  nearOf,
+  placeFrom,
+  sessionFor,
+  suggestionsFrom,
+} from '@/Utils/placeSession';
 import { modern } from '@/Theme/modern';
 
 // Manila, while neither point is known.
@@ -97,6 +103,10 @@ const InputLocation = () => {
   const [sheetHeight, setSheetHeight] = useState(0);
 
   const searchLocationRequest = useApiRequest();
+  const placeDetailsRequest = useApiRequest();
+  // This search's Google session (placeSession.js): ended by the place picked
+  const placeSessionRef = useRef(null);
+  const pickingRef = useRef(false);
   const debounceRef = useRef(null);
   const pickupInputRef = useRef(null);
   const dropoffInputRef = useRef(null);
@@ -156,12 +166,23 @@ const InputLocation = () => {
     return () => clearTimeout(t);
   }, [route.params?.focusDropoff]);
 
-  const searchLocation = query => {
+  // Suggestions only: the place picked is looked up alone (handleSelectItem),
+  // and each suggestion says how far it is from the trip's other point.
+  const searchLocation = (query, field) => {
     if (!query) {
       setSearchResults([]);
       return;
     }
-    searchLocationRequest.request('GET', Constants.API.PLACE_SEARCH(query));
+    placeSessionRef.current = sessionFor(placeSessionRef.current, Date.now());
+    const other = field === 'pickup' ? dropoffLocation : pickupLocation;
+    searchLocationRequest.request(
+      'GET',
+      Constants.API.PLACE_AUTOCOMPLETE(
+        query,
+        placeSessionRef.current.token,
+        nearOf(other),
+      ),
+    );
   };
 
   const handleSearchLocationRequest = async () => {
@@ -171,15 +192,7 @@ const InputLocation = () => {
       setSearchResults([]);
       return;
     }
-    // Same item shape the screens used with Django's booking/search_location
-    const results = (searchLocationRequest.response?.data || []).map(place => ({
-      display_name: place.displayName,
-      description: place.description,
-      address: place.address,
-      lat: place.lat,
-      long: place.long,
-      place_id: place.placeId,
-    }));
+    const results = suggestionsFrom(searchLocationRequest.response?.data);
     // BUG-2: ignore late responses once no field is being edited
     setSearchResults(focusedField ? results : []);
   };
@@ -204,7 +217,7 @@ const InputLocation = () => {
     }
     debounceRef.current = setTimeout(() => {
       if (text) {
-        searchLocation(text);
+        searchLocation(text, field);
       }
     }, 300);
   };
@@ -310,8 +323,34 @@ const InputLocation = () => {
     focusField(field);
   };
 
-  const handleSelectItem = item => {
-    choosePoint(focusedField || activeField, item, fieldTextOf(item));
+  // The picked suggestion's location, the one paid lookup of the search; it
+  // ends the search's Google session.
+  const handleSelectItem = async item => {
+    const field = focusedField || activeField;
+    if (item.lat != null && item.long != null) {
+      choosePoint(field, item, fieldTextOf(item));
+      return;
+    }
+    if (pickingRef.current) {
+      return;
+    }
+    pickingRef.current = true;
+    const session = placeSessionRef.current;
+    placeSessionRef.current = null;
+    try {
+      const { response, error } = await placeDetailsRequest.request(
+        'GET',
+        Constants.API.PLACE_DETAILS(item.place_id, session?.token),
+      );
+      const place = error ? null : placeFrom(response?.data, item);
+      if (place) {
+        choosePoint(field, place, fieldTextOf(item));
+      } else {
+        alert('Unable to get that place. Please try again.');
+      }
+    } finally {
+      pickingRef.current = false;
+    }
   };
 
   const handleSwap = () => {
@@ -553,7 +592,7 @@ const InputLocation = () => {
     <>
       <Text style={styles.sectionLabel}>SUGGESTIONS</Text>
       {searchResults.map((item, index) => {
-        const km = distanceText(distanceKm(origin, item));
+        const km = distanceText(item.distance_km ?? distanceKm(origin, item));
         return renderRow({
           key: item.place_id || String(index),
           icon: 'map-marker-outline',

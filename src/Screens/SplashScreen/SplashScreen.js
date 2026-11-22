@@ -1,55 +1,24 @@
 import { Image, StyleSheet, View } from 'react-native';
 import React, { useEffect } from 'react';
 import { useNavigation } from '@react-navigation/native';
-import { useDispatch, useSelector } from 'react-redux';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import {
-  clearBookingState,
-  clearSavedPlaces,
-  clearUserInfo,
-  selectActiveBooking,
-  selectUserInfo,
-} from '@/Redux/Slices/userSlice';
+import { useSelector } from 'react-redux';
+import { selectActiveBooking, selectUserInfo } from '@/Redux/Slices/userSlice';
 import { askBuildCheck } from '@/Utils/askBuildCheck';
-import { deletePushToken } from '@/Services/Push/pushPlatform';
-import AppUtil from '@/Utils/AppUtil';
 import { needsConsent } from '@/Utils/consent';
-import {
-  LAST_RUN_VERSION_KEY,
-  isUpdatedSinceLastRun,
-} from '@/Utils/appVersionChange';
 
-// First launch after an app update: drop the old login and push token so
-// the passenger logs in fresh (the backend lets a newer version replace
-// the stale session). Returns true when the session was cleared.
-const clearSessionIfUpdated = async dispatch => {
-  try {
-    const current = AppUtil.getAppVersionNo();
-    const lastRun = await AsyncStorage.getItem(LAST_RUN_VERSION_KEY);
-    await AsyncStorage.setItem(LAST_RUN_VERSION_KEY, String(current));
-    if (isUpdatedSinceLastRun(lastRun, current)) {
-      await deletePushToken();
-      dispatch(clearUserInfo());
-      dispatch(clearBookingState());
-      dispatch(clearSavedPlaces());
-      return true;
-    }
-  } catch (err) {
-    console.warn('Version check on launch failed:', err);
-  }
-  return false;
-};
+// A new APK keeps the sign-in (the owner, 2026-11-23: reduce cost; every new
+// sign-in is a paid code text): Android keeps the app's data on an update,
+// and the backend lets a newer version take over its session anyway
+// (LoginSession), so nothing is cleared here.
 
 const SplashScreen = () => {
   const navigation = useNavigation();
-  const dispatch = useDispatch();
   const userInfo = useSelector(selectUserInfo); // persisted value from redux-persist
   const activeBooking = useSelector(selectActiveBooking);
 
   useEffect(() => {
     const init = async () => {
-      const [cleared, newerBuild] = await Promise.all([
-        clearSessionIfUpdated(dispatch),
+      const [newerBuild] = await Promise.all([
         // Is this build still accepted? Asked here, on the first screen, so
         // an outdated install is sent to the download at once, signed in or
         // not. A trip under way is left to finish.
@@ -62,7 +31,7 @@ const SplashScreen = () => {
         return;
       }
 
-      if (userInfo && !cleared) {
+      if (userInfo) {
         // already logged in; the Terms and Privacy Policy come first when the
         // current ones have not been accepted yet
         if (needsConsent(userInfo)) {

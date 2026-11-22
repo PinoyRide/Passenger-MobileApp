@@ -1,5 +1,4 @@
 import React, { useCallback, useState } from 'react';
-import { deletePushToken } from '@/Services/Push/pushPlatform';
 import {
   ActivityIndicator,
   BackHandler,
@@ -11,17 +10,6 @@ import {
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
-import { useDispatch, useSelector } from 'react-redux';
-
-import useApiRequest from '@/Services/ApiV2';
-import { Constants } from '@/Utils';
-import { logoutErrorText, shouldCallLogout } from '@/Utils/updateLogout';
-import {
-  clearBookingState,
-  clearSavedPlaces,
-  clearUserInfo,
-  selectUserInfo,
-} from '@/Redux/Slices/userSlice';
 
 const UpdateRequiredScreen = ({ route }) => {
   // The backend also names a "current version". It is not shown: the person
@@ -29,12 +17,8 @@ const UpdateRequiredScreen = ({ route }) => {
   const { updateLink, minimumVersion } = route.params || {};
   const { colors } = useTheme();
   const styles = getStyles({ colors });
-  const dispatch = useDispatch();
-  const userInfo = useSelector(selectUserInfo);
 
-  const { request } = useApiRequest();
   const [isProcessing, setIsProcessing] = useState(false);
-  const [logoutError, setLogoutError] = useState('');
 
   // Block the hardware back button — nowhere to go back to, the app is outdated.
   useFocusEffect(
@@ -48,46 +32,22 @@ const UpdateRequiredScreen = ({ route }) => {
     }, []),
   );
 
+  // Off to the download, still signed in (the owner, 2026-11-23: reduce
+  // cost): installing the new APK keeps the app's data, so no new sign-in,
+  // no paid code text. Should the sign-in be lost all the same, the backend
+  // lets a newer version take over the old session (LoginSession).
   const handleUpdatePress = async () => {
     if (isProcessing) {
       return;
     }
     setIsProcessing(true);
-    setLogoutError('');
-
-    // Already logged out: nothing to clear on the server, go to the store.
-    let loggedOut = !shouldCallLogout(userInfo);
-    let errorText = '';
-    if (!loggedOut) {
-      try {
-        // Logout must succeed before we open the store. If it fails, the
-        // server keeps is_login=1 and the account gets stuck after the
-        // update, so stay here and let the passenger retry.
-        const { response, error } = await request(
-          'POST',
-          Constants.API.CUSTOMER_LOGOUT(userInfo.id),
-        );
-        loggedOut = !error && !!response;
-        errorText = logoutErrorText(error);
-      } catch (err) {
-        errorText = logoutErrorText(null);
+    try {
+      if (updateLink) {
+        await Linking.openURL(updateLink);
       }
-    }
-
-    if (!loggedOut) {
-      setLogoutError(errorText);
+    } finally {
       setIsProcessing(false);
-      return;
     }
-
-    await deletePushToken();
-    dispatch(clearUserInfo());
-    dispatch(clearBookingState());
-    dispatch(clearSavedPlaces());
-    if (updateLink) {
-      await Linking.openURL(updateLink);
-    }
-    setIsProcessing(false);
   };
 
   return (
@@ -97,7 +57,6 @@ const UpdateRequiredScreen = ({ route }) => {
         You're using an older version, but the minimum supported version is now{' '}
         {minimumVersion || '—'}. Please update the app to continue.
       </Text>
-      {logoutError ? <Text style={styles.errorText}>{logoutError}</Text> : null}
       <TouchableOpacity
         style={[styles.button, isProcessing && styles.buttonDisabled]}
         onPress={handleUpdatePress}
@@ -105,9 +64,7 @@ const UpdateRequiredScreen = ({ route }) => {
         {isProcessing ? (
           <ActivityIndicator size="small" color="#fff" />
         ) : (
-          <Text style={styles.buttonText}>
-            {logoutError ? 'Retry' : 'Update Now'}
-          </Text>
+          <Text style={styles.buttonText}>Update Now</Text>
         )}
       </TouchableOpacity>
     </View>
@@ -148,13 +105,6 @@ const getStyles = ({ colors }) =>
       minWidth: 140,
       alignItems: 'center',
       justifyContent: 'center',
-    },
-    errorText: {
-      fontSize: 12,
-      fontFamily: 'Poppins Regular',
-      color: '#D32F2F',
-      textAlign: 'center',
-      marginBottom: 12,
     },
     buttonDisabled: {
       opacity: 0.6,

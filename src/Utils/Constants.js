@@ -40,7 +40,15 @@ const BASE_DEV = {
     CUSTOMER_DELETION: id => `customers/${id}/deletion`,
     CUSTOMER_LOGOUT: id => `customers/${id}/logout`,
     CUSTOMER_FIREBASE_TOKEN: id => `customers/${id}/firebase-token`,
-    PLACE_SEARCH: query => `places/search?query=${encodeURIComponent(query)}`,
+    // One Google session per search (placeSession.js): the suggestions, then
+    // the one place picked
+    PLACE_AUTOCOMPLETE: (query, session, near) =>
+      `places/autocomplete?query=${encodeURIComponent(query)}` +
+      `&session=${encodeURIComponent(session || '')}` +
+      (near ? `&near=${encodeURIComponent(near)}` : ''),
+    PLACE_DETAILS: (placeId, session) =>
+      `places/details?place_id=${encodeURIComponent(placeId)}` +
+      `&session=${encodeURIComponent(session || '')}`,
     // the "Riders nearby" button: riders within 4 km of a point (Hooks/useNearbyRiders.js)
     NEARBY_RIDERS: ({ lat, long }) => `nearby-riders?lat=${lat}&lng=${long}`,
   },

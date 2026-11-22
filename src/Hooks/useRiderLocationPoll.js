@@ -2,10 +2,13 @@ import { useEffect, useRef } from 'react';
 import usePostRequest from '@/Services/Api';
 import { Constants } from '@/Utils';
 
-const POLL_MS = 1000;
+// Every 2 s, as the Rider app reports (the owner, 2026-11-23: reduce cost,
+// keep the best service): the map's tracker runs the rider forward along the
+// route between reports (up to 5 s), so the marker still glides.
+const POLL_MS = 2000;
 
 /**
- * Polls POST booking/get_rider_location every second while a rider is heading
+ * Polls POST booking/get_rider_location every 2 seconds while a rider is heading
  * to pickup (status 1) or the trip is under way (status 2), for the live map.
  *
  * Each fix is reported as { lat, long, at, id, heardAt }:
