@@ -4,6 +4,7 @@ import {
   Image,
   ImageBackground,
   Keyboard,
+  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -56,6 +57,29 @@ const CashInScreen = () => {
 
   const [alertMessage, setAlertMessage] = React.useState('');
   const [showAlert, setShowAlert] = React.useState(false);
+
+  // The passenger's permanent top-up number (PayCools), as the Rider app's
+  // Remit cash shows the rider's: pay any amount to it from GCash, any time,
+  // and it lands in the wallet. Shown only once PayCools has issued one (the
+  // owner, 2026-11-22: "turn them on now in all repo that will use it").
+  const topUpNumberRequest = usePostRequest();
+  const [topUpNumber, setTopUpNumber] = React.useState(null);
+  useEffect(() => {
+    let active = true;
+    topUpNumberRequest
+      .makePostRequest(Constants.ENDPOINT.TOP_UP_NUMBER, {}, {}, 'json')
+      .then(answer => {
+        const data = answer?.response?.data;
+        if (active && data?.reference_number) {
+          setTopUpNumber(data);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleBack = () => {
     navigation.goBack();
@@ -227,6 +251,34 @@ const CashInScreen = () => {
                       ))}
                     </View>
                   </View>
+
+                  {topUpNumber ? (
+                    <View style={styles.numberCard}>
+                      <Text style={styles.numberLabel}>Your top-up number</Text>
+                      <Text style={styles.number} selectable>
+                        {topUpNumber.reference_number}
+                      </Text>
+                      <Text style={styles.numberHint}>
+                        Pay any amount to this number through{' '}
+                        {String(topUpNumber.channel_code || '').startsWith(
+                          'GCASH',
+                        )
+                          ? 'GCash'
+                          : 'the payment channel'}
+                        . It goes to your PinoyRide Wallet. Press and hold the
+                        number to copy it.
+                      </Text>
+                      {topUpNumber.guide_url ? (
+                        <Text
+                          style={styles.numberLink}
+                          onPress={() =>
+                            Linking.openURL(topUpNumber.guide_url)
+                          }>
+                          How to pay
+                        </Text>
+                      ) : null}
+                    </View>
+                  ) : null}
                 </View>
 
                 {/* Proceed Button */}
@@ -263,6 +315,36 @@ export default CashInScreen;
 
 const getStyles = ({ colors }) =>
   StyleSheet.create({
+    numberCard: {
+      marginTop: 20,
+      padding: 14,
+      borderRadius: 12,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.grey3,
+    },
+    numberLabel: {
+      fontFamily: 'Poppins Regular',
+      fontSize: 12,
+      color: colors.grey3,
+    },
+    number: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 20,
+      letterSpacing: 1,
+      color: colors.primary,
+      marginVertical: 4,
+    },
+    numberHint: {
+      fontFamily: 'Poppins Regular',
+      fontSize: 12,
+      color: colors.grey3,
+    },
+    numberLink: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 12,
+      color: colors.primary,
+      marginTop: 8,
+    },
     container: {
       flex: 1,
       backgroundColor: colors.background,

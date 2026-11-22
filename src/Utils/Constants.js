@@ -73,6 +73,8 @@ const BASE_DEV = {
     EKYC_CHECK_STATUS: 'ekyc/check_status/',
     //PAYMENT
     QRPH_REQUEST_TO_PAY: 'qrph/request-to-pay/',
+    // the passenger's permanent top-up number (PayCools), shown on Cash In
+    TOP_UP_NUMBER: 'wallet/top-up-number/',
     QRPH_CHECK_STATUS: 'qrph/check_status/',
 
     //MESSAGES (in-app booking chat)
