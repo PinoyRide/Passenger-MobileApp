@@ -50,8 +50,8 @@ const UNKNOWN_FIX_AGE_MS = 1500;
 
 // A rider from the "Riders nearby" button: a dark disc with a gold motorbike,
 // in a white ring, drawn above the route (the owner, 2026-11-22: "can we make
-// the riders be seen more"; it was a small dot). Painted once the icon font
-// has drawn, then left alone (tracksViewChanges).
+// the riders be seen more", it was a small dot; then "down size a little").
+// Painted once the icon font has drawn, then left alone (tracksViewChanges).
 const NearbyDot = ({ coordinate }) => {
   const [tracks, setTracks] = useState(true);
   useEffect(() => {
@@ -67,7 +67,7 @@ const NearbyDot = ({ coordinate }) => {
       {/* room around the disc, so its shadow is not cut off */}
       <View style={dotStyles.room}>
         <View style={dotStyles.disc}>
-          <Icon name="motorbike" size={20} color="#FEC107" />
+          <Icon name="motorbike" size={16} color="#FEC107" />
         </View>
       </View>
     </Marker>
@@ -131,18 +131,18 @@ const RadarPing = ({ center, radiusM }) => {
 
 const dotStyles = StyleSheet.create({
   room: {
-    padding: 4,
+    padding: 3,
   },
   disc: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#17171C',
-    borderWidth: 3,
+    borderWidth: 2,
     borderColor: '#FFFFFF',
-    elevation: 5,
+    elevation: 4,
   },
 });
 
