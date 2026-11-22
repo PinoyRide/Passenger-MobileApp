@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Image,
   Modal,
@@ -9,25 +9,68 @@ import {
   View,
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
-import { AlertBox } from '@/Components';
+import { useSelector } from 'react-redux';
+import { AlertBox, AppButton } from '@/Components';
 import TopUpAmountModal from './TopUpAmountModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { bottomSpace } from '@/Utils/bottomSpace';
+import useApiRequest from '@/Services/ApiV2';
+import { toLegacyCustomer } from '@/Utils/customerMapper';
+import { AppUtil, Constants } from '@/Utils';
+import { selectUserInfo } from '@/Redux/Slices/userSlice';
 
+// Cash, or the Pinoy Ride Wallet with its balance (back at the owner's request,
+// 2026-11-22; hidden since the TOP PH days). The server checks the balance when
+// the ride is booked and takes the fare when the trip ends. Advance bookings
+// stay cash (the app switches them to cash). Top up opens the top-up page,
+// which works once PayCools is switched on.
 const PaymentMethodModal = ({
   visible,
   onClose,
   onSelect,
   selectedPayment = 'cash',
+  cashOnly = false,
 }) => {
   // The navigation bar may cover the bottom of the screen: keep the bottom content clear of it
   const { bottom: bottomInset } = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = getStyles({ colors });
+  const userInfo = useSelector(selectUserInfo);
+  const getCustomer = useApiRequest();
 
-  const [showTopUpModal, setShowTopUpModal] = React.useState(false);
-  const [alertMessage, setAlertMessage] = React.useState('');
-  const [showAlert, setShowAlert] = React.useState(false);
+  const [showTopUpModal, setShowTopUpModal] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+  const [showAlert, setShowAlert] = useState(false);
+  const [balance, setBalance] = useState(null);
+
+  // the wallet's balance, read again each time the sheet opens
+  useEffect(() => {
+    if (!visible || !userInfo?.id) {
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { response } = await getCustomer.request(
+        'GET',
+        Constants.API.CUSTOMER(userInfo.id),
+      );
+      const wallet = toLegacyCustomer(response?.data)?.wallet_details;
+      if (!cancelled && wallet?.avail_balance !== undefined) {
+        setBalance(wallet.avail_balance);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, userInfo?.id]);
+
+  let walletNote = 'Balance …';
+  if (cashOnly) {
+    walletNote = 'Advance bookings are paid in cash';
+  } else if (balance !== null) {
+    walletNote = `Balance ₱${AppUtil.fn(balance)}`;
+  }
 
   const handleTopUpError = errorMessage => {
     setAlertMessage(errorMessage);
@@ -90,10 +133,16 @@ const PaymentMethodModal = ({
           </TouchableOpacity>
 
           {/* wallet option */}
-          {/* <TouchableOpacity
+          <TouchableOpacity
+            disabled={cashOnly}
+            accessibilityState={{
+              disabled: cashOnly,
+              selected: selectedPayment === 'wallet',
+            }}
             style={[
               styles.option,
               selectedPayment === 'wallet' && styles.optionSelected,
+              cashOnly && styles.optionDisabled,
             ]}
             onPress={() => {
               onSelect?.('wallet');
@@ -103,15 +152,23 @@ const PaymentMethodModal = ({
               source={require('@/Assets/Common/HomeScreen/PaymentMethodModal/Wallet.png')}
               style={styles.icon}
             />
-            <Text style={styles.optionText}>Pinoy Ride Wallet</Text>
+            <View style={styles.optionBody}>
+              <Text style={styles.optionName}>Pinoy Ride Wallet</Text>
+              <Text style={styles.optionNote}>{walletNote}</Text>
+            </View>
             {selectedPayment === 'wallet' && (
               <View style={styles.radioCircle}>
                 <View style={styles.radioInner} />
               </View>
             )}
-          </TouchableOpacity> */}
+          </TouchableOpacity>
 
-          {/* <AppButton title="Top Up" onPress={handleNext} isBold /> */}
+          <AppButton
+            title="Top up the wallet"
+            mode="outlined"
+            noSpacing
+            onPress={() => setShowTopUpModal(true)}
+          />
         </View>
       </Modal>
 
@@ -170,6 +227,23 @@ const getStyles = ({ colors }) =>
       fontSize: 15,
       fontFamily: 'Poppins Regular',
       color: colors.text,
+    },
+    optionDisabled: {
+      opacity: 0.5,
+    },
+    optionBody: {
+      flex: 1,
+    },
+    optionName: {
+      fontSize: 15,
+      fontFamily: 'Poppins Regular',
+      color: colors.text,
+    },
+    optionNote: {
+      fontSize: 12,
+      lineHeight: 16,
+      fontFamily: 'Poppins Regular',
+      color: colors.grey4 ?? colors.text,
     },
     radioCircle: {
       width: 16,

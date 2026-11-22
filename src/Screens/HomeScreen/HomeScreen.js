@@ -1471,7 +1471,12 @@ const HomeScreen = () => {
   const handleCreateBookingRequest = () => {
     if (createBooking.error) {
       bookingInFlightRef.current = false;
-      setAlertMessage(createBooking.error);
+      // the server's "Insufficient balance!" for a ride paid with the wallet
+      setAlertMessage(
+        /insufficient balance/i.test(String(createBooking.error))
+          ? "Your Pinoy Ride Wallet doesn't have enough for this ride. Top it up, or pay with cash."
+          : createBooking.error,
+      );
       setShowAlert(true);
       return;
     }
@@ -3003,6 +3008,7 @@ New reference: ${activeBooking.ref_code}`
           visible={showPaymentModal}
           onClose={() => setShowPaymentModal(false)}
           selectedPayment={selectedPayment}
+          cashOnly={advanceBookingFlow || Boolean(scheduledAt)}
           onSelect={method => {
             setSelectedPayment(method);
           }}

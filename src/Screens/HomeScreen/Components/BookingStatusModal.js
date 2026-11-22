@@ -274,6 +274,8 @@ const BookingStatusModal = ({
     fareCaption = 'Estimated — final fare may change';
   } else if (paymentType === 'cash') {
     fareCaption = 'Hand the exact fare to your rider';
+  } else if (paymentType === 'wallet') {
+    fareCaption = 'Taken from your wallet when the trip ends';
   }
 
   const actions = [
