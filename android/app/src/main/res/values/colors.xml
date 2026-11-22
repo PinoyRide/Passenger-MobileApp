@@ -3,7 +3,7 @@
   <color name="colorPrimary">#023c69</color>
   <color name="colorPrimaryDark">#ffffff</color>
   <!-- Behind the launcher icon (mipmap-anydpi-v26/ic_launcher.xml) -->
-  <color name="ic_launcher_background">#FEC107</color>
+  <color name="ic_launcher_background">#FAD204</color>
   <!-- The screen shown while the app starts (LaunchScreen.kt). The app's own screens are light. -->
   <color name="launch_background">#FFFFFF</color>
   <color name="launch_text">#6F6A60</color>
