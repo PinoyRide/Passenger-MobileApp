@@ -24,6 +24,8 @@ const SHARED = [
   'src/Components/ProfileAvatar/ProfileAvatar.js',
   'src/Utils/personName.js',
   'src/Utils/cashOut.js',
+  'src/Screens/WalletScreen/CashOutScreen.js',
+  'src/Utils/__tests__/cashOut.test.mjs',
   'src/Utils/codeChannel.js',
   'src/Utils/accountDeletion.js',
   'src/Utils/bottomSpace.js',

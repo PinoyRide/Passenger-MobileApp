@@ -112,8 +112,9 @@ const WalletScreen = () => {
           'Sending money from your wallet to someone else is coming soon.',
         ),
     },
-    // Cash out to the passenger's GCash (the owner, 2026-11-23: "since they
-    // can cash in they can also cash out"); it needs the sign-in token
+    // Cash out (the owner, 2026-11-23: "since they can cash in they can also
+    // cash out"): through PayCools to any e-wallet or bank it pays out to, at
+    // most the cashable part; it needs the sign-in token
     {
       id: 'cash-out',
       label: 'Cash out',
@@ -121,6 +122,7 @@ const WalletScreen = () => {
       onPress: () =>
         navigation.navigate('CashOutScreen', {
           walletDetails: { avail_balance: balance, cashable_balance: cashable },
+          fromLabel: 'PinoyRide Wallet',
         }),
     },
   ];

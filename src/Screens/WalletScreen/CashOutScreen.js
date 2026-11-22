@@ -1,123 +1,163 @@
-import { AlertBox, AppButton, AppTextInput, Container } from '@/Components';
-import { AppUtil, Constants } from '@/Utils';
-import usePostRequest from '@/Services/Api';
-import { selectUserInfo } from '@/Redux/Slices/userSlice';
-import { useNavigation } from '@react-navigation/native';
-import React, { useEffect, useState } from 'react';
-import { useSelector } from 'react-redux';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Image,
+  FlatList,
   Keyboard,
+  Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
+  TextInput,
   View,
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
-
-const {
+import { useNavigation } from '@react-navigation/native';
+import { useSelector } from 'react-redux';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { AlertBox, AppButton, AppTextInput, Container } from '@/Components';
+import usePostRequest from '@/Services/Api';
+import { Constants } from '@/Utils';
+import { selectUserInfo } from '@/Redux/Slices/userSlice';
+import { bottomSpace } from '@/Utils/bottomSpace';
+import {
+  GCASH,
+  accountError,
+  accountName,
+  accountNameError,
   afterCashOut,
   cashOutRequest,
-  gcashNumber,
-  gcashNumberError,
-} = require('@/Utils/cashOut');
+  channelsFrom,
+  maskedAccount,
+} from '@/Utils/cashOut';
+import { modern } from '@/Theme/modern';
 
+const MINIMUM = 10;
+
+const pesos = value =>
+  `₱${Number(value || 0).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+
+// Cash out, the same page in both apps (sharedUi.test.mjs): to any e-wallet
+// or bank PayCools pays out to (the owner, 2026-11-23: "are we not using
+// paycool?", "same with rider"). At most the cashable part of the wallet:
+// money added by Pinoy Ride can be used in the app but not cashed out. The
+// opener passes walletDetails ({ avail_balance, cashable_balance }) and
+// fromLabel, what the app calls the wallet.
 const CashOutScreen = ({ route }) => {
-  const { colors } = useTheme();
-  const walletDetails = route?.params?.walletDetails;
-  const styles = getStyles({ colors });
+  const look = modern(useTheme());
+  const styles = getStyles(look);
   const navigation = useNavigation();
-
+  const { bottom } = useSafeAreaInsets();
   const userInfo = useSelector(selectUserInfo);
-  const cashOut = usePostRequest();
+  const walletDetails = route?.params?.walletDetails;
+  const fromLabel = route?.params?.fromLabel || 'Your wallet';
 
+  const total = Number(walletDetails?.avail_balance) || 0;
+  const cashableRaw = walletDetails?.cashable_balance;
+  const available =
+    cashableRaw !== undefined && cashableRaw !== null
+      ? Math.max(0, Number(cashableRaw) || 0)
+      : Math.max(0, total);
+  const notCashable = Math.max(0, total - available);
+
+  const banksRequest = usePostRequest();
+  const cashOut = usePostRequest();
+  const [channels, setChannels] = useState({ ewallets: [GCASH], banks: [] });
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { response } = await banksRequest.makePostRequest(
+        Constants.ENDPOINT.GET_BANKS,
+        {},
+      );
+      const got = channelsFrom(response?.data);
+      if (active && (got.ewallets.length || got.banks.length)) {
+        setChannels({
+          ewallets: got.ewallets.length ? got.ewallets : [GCASH],
+          banks: got.banks,
+        });
+      }
+    })();
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const firstName =
+    userInfo?.ekyc_details?.first_name ||
+    userInfo?.first_name ||
+    userInfo?.fname;
+  const lastName =
+    userInfo?.ekyc_details?.last_name || userInfo?.last_name || userInfo?.lname;
+
+  const [kind, setKind] = useState('ewallet'); // 'ewallet' | 'bank'
+  const [channel, setChannel] = useState(GCASH);
+  const [account, setAccount] = useState('');
+  const [name, setName] = useState(() => accountName(firstName, lastName));
   const [amount, setAmount] = useState('');
-  const [amountError, setAmountError] = useState('');
-  const [gcash, setGcash] = useState('');
-  const [gcashError, setGcashError] = useState('');
-  const [isFirstSlide, setIsFirstSlide] = useState(true);
+  const [errors, setErrors] = useState({});
+  const [confirming, setConfirming] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [search, setSearch] = useState('');
   const [alertMessage, setAlertMessage] = useState('');
   const [alertVisible, setAlertVisible] = useState(false);
-  const isSecondSlide = !isFirstSlide;
 
-  // Only the cashable part can leave (the owner, 2026-11-23): money added by
-  // Pinoy Ride in the Admin Portal pays for rides but is not cashed out. The
-  // backend says how much is cashable; without it (an older backend), the
-  // balance.
-  const totalBalance = Number(walletDetails?.avail_balance) || 0;
-  const cashable = walletDetails?.cashable_balance;
-  const availableBalance =
-    cashable !== undefined && cashable !== null
-      ? Math.max(0, Number(cashable) || 0)
-      : totalBalance;
-  const notCashable = Math.max(0, totalBalance - availableBalance);
-  const minimumAmount = 10.0;
+  const value = parseFloat(String(amount).replace(/,/g, '')) || 0;
 
-  useEffect(() => {
-    AppUtil.debugDeep(walletDetails?.avail_balance);
-  });
+  const chooseKind = next => {
+    if (next === kind) {
+      return;
+    }
+    setKind(next);
+    setChannel(next === 'bank' ? null : channels.ewallets[0] || GCASH);
+    setAccount('');
+    setErrors({});
+  };
 
-  const handleBack = () => {
-    if (isSecondSlide) {
-      setIsFirstSlide(true);
+  const filteredBanks = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return q
+      ? channels.banks.filter(
+          b =>
+            b.name.toLowerCase().includes(q) ||
+            b.code.toLowerCase().includes(q),
+        )
+      : channels.banks;
+  }, [channels.banks, search]);
+
+  const check = () => {
+    const next = {};
+    if (!(value > 0)) {
+      next.amount = 'Enter the amount';
+    } else if (value < MINIMUM) {
+      next.amount = `The minimum cash out is ${pesos(MINIMUM)}`;
+    } else if (value > available) {
+      next.amount = `You can cash out up to ${pesos(available)}`;
+    }
+    if (!channel) {
+      next.channel = 'Choose your bank';
     } else {
-      navigation.goBack();
+      const problem = accountError(channel, account);
+      if (problem) {
+        next.account = problem;
+      }
     }
-  };
-
-  const formatAmount = val => {
-    if (!val || val === '') {
-      return '';
+    const nameProblem = accountNameError(name);
+    if (nameProblem) {
+      next.name = nameProblem;
     }
-    const number = parseFloat(val.replace(/,/g, ''));
-    if (isNaN(number)) {
-      return '';
-    }
-
-    const formatted = number.toFixed(2);
-    const parts = formatted.split('.');
-    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-    return parts.join('.');
-  };
-
-  const validateAmount = () => {
-    const numericAmount = parseFloat(amount.replace(/,/g, ''));
-
-    if (!amount || amount === '') {
-      setAmountError('Please enter an amount');
-      return false;
-    }
-
-    if (isNaN(numericAmount) || numericAmount <= 0) {
-      setAmountError('Please enter a valid amount');
-      return false;
-    }
-
-    if (numericAmount < minimumAmount) {
-      setAmountError(`Minimum amount is ₱${minimumAmount.toFixed(2)}`);
-      return false;
-    }
-
-    if (numericAmount > availableBalance) {
-      setAmountError(`You can cash out up to ₱${availableBalance.toFixed(2)}`);
-      return false;
-    }
-
-    setAmountError('');
-    return true;
+    setErrors(next);
+    return Object.keys(next).length === 0;
   };
 
   const handleNext = () => {
-    const amountOk = validateAmount();
-    const problem = gcashNumberError(gcash);
-    setGcashError(problem);
-    if (amountOk && !problem) {
-      const formattedAmount = formatAmount(amount);
-      setAmount(formattedAmount);
-      setGcash(gcashNumber(gcash));
-      setIsFirstSlide(false);
+    Keyboard.dismiss();
+    if (check()) {
+      setConfirming(true);
     }
   };
 
@@ -126,15 +166,9 @@ const CashOutScreen = ({ route }) => {
     if (cashOut.loading) {
       return;
     }
-    const value = parseFloat(amount.replace(/,/g, ''));
     const answer = await cashOut.makePostRequest(
       Constants.ENDPOINT.CASH_OUT,
-      cashOutRequest({
-        amount: value,
-        number: gcash,
-        firstName: userInfo?.ekyc_details?.first_name || userInfo?.fname,
-        lastName: userInfo?.ekyc_details?.last_name || userInfo?.lname,
-      }),
+      cashOutRequest({ amount: value, channel, account, name }),
       {},
       'json',
     );
@@ -156,144 +190,268 @@ const CashOutScreen = ({ route }) => {
     }
   };
 
-  const handleGcashChange = value => {
-    setGcash(value);
-    if (gcashError) {
-      setGcashError('');
-    }
-  };
+  const back = () => (confirming ? setConfirming(false) : navigation.goBack());
 
-  const handleAmountChange = value => {
-    setAmount(value);
-    if (amountError) {
-      setAmountError('');
-    }
-  };
+  const row = (label, text) => (
+    <View style={styles.confirmRow} key={label}>
+      <Text style={styles.confirmLabel}>{label}</Text>
+      <Text style={styles.confirmValue} numberOfLines={1}>
+        {text}
+      </Text>
+    </View>
+  );
 
   return (
-    <Container style={styles.container}>
+    <Container style={styles.container} background={look.page}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-          <Image
-            source={require('@/Assets/Common/Back.png')}
-            style={styles.backIcon}
-            resizeMode="contain"
-          />
-        </TouchableOpacity>
-        <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>Cash Out</Text>
-        </View>
+        <Pressable
+          onPress={back}
+          hitSlop={8}
+          style={styles.back}
+          accessibilityRole="button"
+          accessibilityLabel="Back">
+          <Icon name="chevron-left" size={28} color={look.ink} />
+        </Pressable>
+        <Text style={styles.title} accessibilityRole="header">
+          {confirming ? 'Check and send' : 'Cash out'}
+        </Text>
       </View>
 
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}>
-          <View style={styles.lowerPart}>
-            <View
-              style={[
-                styles.balanceContainer,
-                isSecondSlide && { alignItems: 'flex-start' },
-              ]}>
-              <Text
-                style={[
-                  styles.availableText,
-                  isSecondSlide && styles.confirmationTitle,
-                ]}>
-                {isFirstSlide ? 'Available for Cash out' : 'Confirmation'}
-              </Text>
-              <Text
-                style={[
-                  styles.balance,
-                  isSecondSlide && styles.confirmationSubtitle,
-                ]}>
-                {isFirstSlide
-                  ? `₱${availableBalance.toFixed(2)}`
-                  : 'Check if your transaction is correct before clicking Cash-out.'}
-              </Text>
-              {isFirstSlide && notCashable > 0 ? (
-                <Text style={styles.notCashable}>
-                  ₱{notCashable.toFixed(2)} of your balance was added by Pinoy
-                  Ride. It can pay for your rides but cannot be cashed out.
-                </Text>
-              ) : null}
+      <ScrollView
+        style={styles.scrollArea}
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}>
+        <View style={styles.availableCard}>
+          <Text style={styles.availableLabel}>AVAILABLE TO CASH OUT</Text>
+          <Text style={styles.availableAmount}>{pesos(available)}</Text>
+          {notCashable > 0 ? (
+            <Text style={styles.availableNote}>
+              {pesos(notCashable)} of your balance was added by Pinoy Ride. It
+              can be used in the app but cannot be cashed out.
+            </Text>
+          ) : null}
+        </View>
+
+        {confirming ? (
+          <View style={styles.card}>
+            {row('Send to', channel?.name)}
+            {row(
+              channel?.isBank ? 'Account number' : 'Mobile number',
+              maskedAccount(channel, account),
+            )}
+            {row('Account name', name.trim())}
+            {row('From', fromLabel)}
+            <View style={styles.confirmTotal}>
+              <Text style={styles.confirmTotalLabel}>Amount</Text>
+              <Text style={styles.confirmTotalValue}>{pesos(value)}</Text>
+            </View>
+            <Text style={styles.confirmNote}>
+              Check the account before you send: money sent to a wrong account
+              may not come back.
+            </Text>
+          </View>
+        ) : (
+          <>
+            <Text style={styles.sectionLabel}>SEND TO</Text>
+            <View style={styles.tabs} accessibilityRole="tablist">
+              {[
+                ['ewallet', 'E-wallet'],
+                ['bank', 'Bank'],
+              ].map(([key, label]) => {
+                const on = kind === key;
+                return (
+                  <Pressable
+                    key={key}
+                    onPress={() => chooseKind(key)}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: on }}
+                    style={[styles.tab, on && styles.tabOn]}>
+                    <Text style={[styles.tabText, on && styles.tabTextOn]}>
+                      {label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
 
-            {isFirstSlide && (
-              <>
-                <View style={styles.transaction}>
-                  <Text style={styles.amountTitle}>Enter Amount</Text>
-                  <AppTextInput
-                    value={amount}
-                    onChangeText={handleAmountChange}
-                    placeholder="Amount"
-                    inputMode="amount"
-                    error={amountError}
-                  />
-                </View>
-                <Text style={styles.minimum}>
-                  ₱{minimumAmount.toFixed(2)} is the minimum amount you can Cash
-                  out
-                </Text>
-                <View style={styles.transaction}>
-                  <Text style={styles.amountTitle}>GCash number</Text>
-                  <AppTextInput
-                    value={gcash}
-                    onChangeText={handleGcashChange}
-                    placeholder="09XXXXXXXXX"
-                    inputMode="numeric"
-                    error={gcashError}
-                  />
-                </View>
-              </>
+            {kind === 'ewallet' ? (
+              <View style={styles.chips}>
+                {channels.ewallets.map(e => {
+                  const on = channel?.code === e.code;
+                  return (
+                    <Pressable
+                      key={e.code}
+                      onPress={() => setChannel(e)}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: on }}
+                      style={[styles.chip, on && styles.chipOn]}>
+                      <Text style={[styles.chipText, on && styles.chipTextOn]}>
+                        {e.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : (
+              <View style={styles.bankField}>
+                <Pressable
+                  onPress={() => setPicking(true)}
+                  accessibilityRole="button"
+                  style={[
+                    styles.bankButton,
+                    errors.channel && styles.bankButtonError,
+                  ]}>
+                  <Icon name="bank-outline" size={20} color={look.chipInk} />
+                  <Text
+                    style={[styles.bankText, !channel && styles.bankHint]}
+                    numberOfLines={1}>
+                    {channel ? channel.name : 'Choose your bank'}
+                  </Text>
+                  <Icon name="chevron-down" size={20} color={look.muted} />
+                </Pressable>
+                {errors.channel ? (
+                  <Text style={styles.error}>{errors.channel}</Text>
+                ) : null}
+              </View>
             )}
 
-            {isSecondSlide && (
-              <>
-                <Text style={styles.cashOutLabel}>Cash Out</Text>
-                <View style={styles.divider} />
-                <View style={styles.rowBetween}>
-                  <Text style={styles.label}>From</Text>
-                  <Text style={styles.value}>PinoyRide Wallet</Text>
-                </View>
-                <View style={styles.divider} />
-                <View style={styles.rowBetween}>
-                  <Text style={styles.label}>To e-Wallet</Text>
-                  <Text style={styles.value}>
-                    GCash{'\n'}
-                    {gcash}
-                  </Text>
-                </View>
-                <View style={styles.divider} />
-                <View style={styles.rowBetween}>
-                  <Text style={styles.label}>Amount</Text>
-                  <Text style={[styles.icon, { color: colors.primary }]}>
-                    ₱{amount}
-                  </Text>
-                </View>
-              </>
-            )}
-          </View>
+            <AppTextInput
+              label={kind === 'bank' ? 'Account number' : 'Mobile number'}
+              value={account}
+              onChangeText={text => {
+                setAccount(text);
+                if (errors.account) {
+                  setErrors(e => ({ ...e, account: '' }));
+                }
+              }}
+              placeholder={kind === 'bank' ? 'Digits only' : '09XXXXXXXXX'}
+              inputMode="numeric"
+              error={errors.account}
+            />
+            <AppTextInput
+              label="Account name"
+              value={name}
+              onChangeText={text => {
+                setName(text);
+                if (errors.name) {
+                  setErrors(e => ({ ...e, name: '' }));
+                }
+              }}
+              placeholder="As the account has it"
+              autoCapitalize="words"
+              error={errors.name}
+            />
+            <AppTextInput
+              label="Amount"
+              value={amount}
+              onChangeText={text => {
+                setAmount(text);
+                if (errors.amount) {
+                  setErrors(e => ({ ...e, amount: '' }));
+                }
+              }}
+              placeholder="0.00"
+              inputMode="amount"
+              error={errors.amount}
+            />
+            <Text style={styles.hint}>The minimum is {pesos(MINIMUM)}.</Text>
+          </>
+        )}
+      </ScrollView>
 
-          <View style={styles.buttonWrapper}>
+      <View style={styles.footer}>
+        {confirming ? (
+          <>
             <AppButton
-              title={
-                isFirstSlide
-                  ? 'Confirm'
-                  : cashOut.loading
-                  ? 'Sending…'
-                  : 'Submit'
-              }
-              onPress={isFirstSlide ? handleNext : handleSubmit}
-              disabled={isSecondSlide && cashOut.loading}
+              title={cashOut.loading ? 'Sending…' : `Cash out ${pesos(value)}`}
+              onPress={handleSubmit}
+              disabled={cashOut.loading}
               isBold
+              noSpacing
+            />
+            <View style={styles.footerGap} />
+            <AppButton
+              title="Change details"
+              mode="outlined"
+              onPress={() => setConfirming(false)}
+              disabled={cashOut.loading}
+              noSpacing
+            />
+          </>
+        ) : (
+          <AppButton
+            title="Next"
+            onPress={handleNext}
+            disabled={available <= 0}
+            isBold
+            noSpacing
+          />
+        )}
+      </View>
+
+      <Modal
+        visible={picking}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setPicking(false)}>
+        <View style={styles.backdrop}>
+          <View
+            style={[styles.sheet, { paddingBottom: bottomSpace(bottom, 16) }]}>
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>Choose your bank</Text>
+              <Pressable
+                onPress={() => setPicking(false)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Close">
+                <Icon name="close" size={22} color={look.ink} />
+              </Pressable>
+            </View>
+            <TextInput
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Search banks"
+              placeholderTextColor={look.muted}
+              style={styles.search}
+            />
+            <FlatList
+              data={filteredBanks}
+              keyExtractor={b => b.code}
+              keyboardShouldPersistTaps="handled"
+              ItemSeparatorComponent={() => <View style={styles.separator} />}
+              ListEmptyComponent={
+                <Text style={styles.empty}>
+                  {channels.banks.length
+                    ? 'No bank matches.'
+                    : 'The banks could not be loaded. Please try again later.'}
+                </Text>
+              }
+              renderItem={({ item }) => (
+                <Pressable
+                  onPress={() => {
+                    setChannel(item);
+                    setPicking(false);
+                    setSearch('');
+                    setErrors(e => ({ ...e, channel: '' }));
+                  }}
+                  style={styles.bankRow}
+                  accessibilityRole="button">
+                  <Text style={styles.bankRowText}>{item.name}</Text>
+                  {channel?.code === item.code ? (
+                    <Icon name="check" size={20} color={look.chipInk} />
+                  ) : null}
+                </Pressable>
+              )}
             />
           </View>
-        </ScrollView>
-      </TouchableWithoutFeedback>
+        </View>
+      </Modal>
+
       <AlertBox
         title="Cash out"
+        confirmText="OK"
         message={alertMessage}
         visible={alertVisible}
         setVisible={setAlertVisible}
@@ -304,136 +462,267 @@ const CashOutScreen = ({ route }) => {
 
 export default CashOutScreen;
 
-const getStyles = ({ colors }) =>
+const getStyles = look =>
   StyleSheet.create({
-    container: {
-      flex: 1,
-    },
+    container: { flex: 1, paddingHorizontal: 0 },
     header: {
       height: 52,
-      justifyContent: 'center',
-      marginBottom: 20,
-    },
-    backButton: {
-      position: 'absolute',
-      left: 0,
-      width: 52,
-      height: 52,
-      justifyContent: 'center',
+      flexDirection: 'row',
       alignItems: 'center',
-      zIndex: 2,
+      marginLeft: -14,
+      marginBottom: 6,
     },
-    backIcon: {
-      width: 23,
-      height: 23,
-    },
-    headerTitleContainer: {
-      position: 'absolute',
-      left: 0,
-      right: 0,
+    back: {
+      width: 44,
+      height: 44,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    headerTitle: {
-      fontSize: 16,
-      fontFamily: 'Poppins Medium',
-      color: colors.primary,
+    title: {
+      marginLeft: 10,
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 20,
+      lineHeight: 26,
+      letterSpacing: -0.3,
+      color: look.ink,
     },
-    scrollContent: {
-      flexGrow: 1,
-      justifyContent: 'space-between',
+    scrollArea: { marginHorizontal: -4 },
+    scroll: { flexGrow: 1, paddingBottom: 16 },
+    availableCard: {
+      padding: 16,
+      borderRadius: look.radiusCard,
+      backgroundColor: look.gold,
     },
-    lowerPart: {
-      paddingHorizontal: 16,
+    availableLabel: {
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 11.5,
+      lineHeight: 15,
+      letterSpacing: 1.2,
+      color: look.onGoldSoft,
+    },
+    availableAmount: {
+      marginTop: 4,
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 30,
+      lineHeight: 38,
+      letterSpacing: -0.7,
+      color: look.onGold,
+    },
+    availableNote: {
+      marginTop: 6,
+      fontFamily: 'Poppins Regular',
+      fontSize: 12.5,
+      lineHeight: 17,
+      color: look.onGoldSoft,
+    },
+    sectionLabel: {
+      marginTop: 22,
+      marginBottom: 10,
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 11.5,
+      lineHeight: 15,
+      letterSpacing: 1.2,
+      color: look.muted,
+    },
+    tabs: {
+      flexDirection: 'row',
+      padding: 4,
+      borderRadius: 14,
+      backgroundColor: look.tile,
+    },
+    tab: {
       flex: 1,
+      height: 36,
+      borderRadius: 11,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
-    transaction: {
-      marginTop: 20,
+    tabOn: {
+      backgroundColor: look.card,
+      shadowColor: '#000',
+      shadowOpacity: 0.08,
+      shadowRadius: 4,
+      shadowOffset: { width: 0, height: 1 },
+      elevation: 2,
     },
-    notCashable: {
-      marginTop: 8,
+    tabText: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 14,
+      lineHeight: 19,
+      color: look.muted,
+    },
+    tabTextOn: { fontFamily: 'Poppins SemiBold', color: look.ink },
+    chips: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginTop: 12,
+      marginBottom: 16,
+    },
+    chip: {
+      paddingHorizontal: 14,
+      height: 36,
+      borderRadius: 18,
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: look.hairline,
+      backgroundColor: look.card,
+    },
+    chipOn: { backgroundColor: look.chip, borderColor: look.chipInk },
+    chipText: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 13.5,
+      lineHeight: 18,
+      color: look.inkSoft,
+    },
+    chipTextOn: { fontFamily: 'Poppins SemiBold', color: look.chipInk },
+    bankField: { marginTop: 12, marginBottom: 16 },
+    bankButton: {
+      height: 52,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingHorizontal: 14,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: look.hairline,
+      backgroundColor: look.card,
+    },
+    bankButtonError: { borderColor: look.danger },
+    bankText: {
+      flex: 1,
+      fontFamily: 'Poppins Medium',
+      fontSize: 15,
+      lineHeight: 20,
+      color: look.ink,
+    },
+    bankHint: { color: look.muted, fontFamily: 'Poppins Regular' },
+    error: {
+      marginTop: 6,
+      fontFamily: 'Poppins Regular',
+      fontSize: 12,
+      lineHeight: 16,
+      color: look.danger,
+    },
+    hint: {
+      marginTop: -8,
       fontFamily: 'Poppins Regular',
       fontSize: 12,
       lineHeight: 17,
-      textAlign: 'center',
-      color: colors.grey3,
+      color: look.muted,
     },
-    balanceContainer: {
+    card: {
+      marginTop: 12,
+      padding: 16,
+      borderRadius: look.radiusCard,
+      backgroundColor: look.card,
+    },
+    confirmRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: 12,
+      paddingVertical: 6,
+    },
+    confirmLabel: {
+      fontFamily: 'Poppins Regular',
+      fontSize: 14,
+      lineHeight: 20,
+      color: look.inkSoft,
+    },
+    confirmValue: {
+      flexShrink: 1,
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 14,
+      lineHeight: 20,
+      color: look.ink,
+    },
+    confirmTotal: {
+      marginTop: 8,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: look.hairline,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
       alignItems: 'center',
     },
-    availableText: {
-      fontFamily: 'Poppins Medium',
-      fontSize: 10,
-      color: colors.text,
-      marginBottom: 3,
-    },
-    balance: {
+    confirmTotalLabel: {
       fontFamily: 'Poppins SemiBold',
-      fontSize: 18,
-      color: colors.text,
-      marginBottom: 12,
+      fontSize: 15,
+      lineHeight: 21,
+      color: look.ink,
     },
-    confirmationTitle: {
-      fontSize: 16,
+    confirmTotalValue: {
       fontFamily: 'Poppins SemiBold',
+      fontSize: 22,
+      lineHeight: 28,
+      color: look.ink,
     },
-    confirmationSubtitle: {
-      fontSize: 12,
+    confirmNote: {
+      marginTop: 12,
       fontFamily: 'Poppins Regular',
-      color: colors.grey3,
-      letterSpacing: -0.45,
-      marginTop: 7,
-      marginBottom: 40,
+      fontSize: 12.5,
+      lineHeight: 17,
+      color: look.muted,
     },
-    amountTitle: {
-      fontFamily: 'Poppins Medium',
-      fontSize: 16,
-      color: colors.text,
-      marginBottom: 12,
+    footer: { paddingTop: 12, paddingBottom: 12 },
+    footerGap: { height: 10 },
+    backdrop: {
+      flex: 1,
+      justifyContent: 'flex-end',
+      backgroundColor: 'rgba(0,0,0,0.45)',
     },
-    minimum: {
-      fontFamily: 'Poppins Regular',
-      fontSize: 12,
-      color: colors.grey3,
-      marginBottom: 31,
+    sheet: {
+      maxHeight: '80%',
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      paddingHorizontal: 16,
+      paddingTop: 16,
+      backgroundColor: look.surface,
     },
-    fee: {
-      fontFamily: 'Poppins Regular',
-      fontSize: 12,
-      color: colors.grey3,
-      marginBottom: 12,
-    },
-    cashOutLabel: {
-      fontFamily: 'Poppins Medium',
-      fontSize: 16,
-      color: colors.text,
-      marginBottom: 16,
-      marginTop: 8,
-    },
-    divider: {
-      borderBottomWidth: 0.5,
-      borderBottomColor: colors.grey5,
-      marginBottom: 12,
-    },
-    rowBetween: {
+    sheetHeader: {
       flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'space-between',
       marginBottom: 12,
     },
-    label: {
+    sheetTitle: {
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 17,
+      lineHeight: 23,
+      color: look.ink,
+    },
+    search: {
+      height: 44,
+      paddingHorizontal: 14,
+      borderRadius: 12,
+      marginBottom: 8,
       fontFamily: 'Poppins Regular',
-      width: 100,
-      marginRight: 70,
-      fontSize: 14,
-      color: colors.grey3,
+      fontSize: 14.5,
+      color: look.ink,
+      backgroundColor: look.soft,
     },
-    value: {
+    separator: { height: 1, backgroundColor: look.hairline },
+    bankRow: {
+      minHeight: 50,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 10,
+    },
+    bankRowText: {
+      flex: 1,
       fontFamily: 'Poppins Medium',
-      fontSize: 14,
-      color: colors.text,
+      fontSize: 14.5,
+      lineHeight: 20,
+      color: look.ink,
     },
-    buttonWrapper: {
-      paddingTop: 20,
-      paddingBottom: 20,
+    empty: {
+      paddingVertical: 24,
+      textAlign: 'center',
+      fontFamily: 'Poppins Regular',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.muted,
     },
   });

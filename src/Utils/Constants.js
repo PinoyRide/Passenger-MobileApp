@@ -76,6 +76,10 @@ const BASE_DEV = {
     // the passenger's permanent top-up number (PayCools), shown on Cash In
     TOP_UP_NUMBER: 'wallet/top-up-number/',
     QRPH_CHECK_STATUS: 'qrph/check_status/',
+    // Cash out (PayCools): the e-wallets and banks, then the cash-out itself
+    GET_BANKS: 'cash_out/get-banks/',
+    CASH_OUT: 'cash_out/cash-out/',
+    CASH_OUT_STATUS: 'cash_out/check_status/',
 
     //MESSAGES (in-app booking chat)
     GET_CONVERSATION: 'messages/conversation/',
