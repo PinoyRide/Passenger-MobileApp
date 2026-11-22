@@ -26,6 +26,7 @@ const SHARED = [
   'src/Utils/cashOut.js',
   'src/Screens/WalletScreen/CashOutScreen.js',
   'src/Utils/__tests__/cashOut.test.mjs',
+  'src/Utils/__tests__/sameVersion.test.mjs',
   'src/Utils/codeChannel.js',
   'src/Utils/accountDeletion.js',
   'src/Utils/bottomSpace.js',
