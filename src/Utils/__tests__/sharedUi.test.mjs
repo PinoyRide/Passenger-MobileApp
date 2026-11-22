@@ -21,6 +21,8 @@ const SHARED = [
   'src/Components/ConsentCheck/ConsentCheck.js',
   'src/Components/CodeChannelPicker/CodeChannelPicker.js',
   'src/Components/Menu/Menu.js',
+  'src/Components/ProfileAvatar/ProfileAvatar.js',
+  'src/Utils/personName.js',
   'src/Utils/codeChannel.js',
   'src/Utils/accountDeletion.js',
   'src/Utils/bottomSpace.js',

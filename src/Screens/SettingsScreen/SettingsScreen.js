@@ -134,6 +134,7 @@ const SettingsScreen = () => {
       </View>
 
       <ScrollView
+        style={styles.scrollArea}
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}>
         {/* who you are: the card opens the profile, Edit the name and photo */}
@@ -301,7 +302,11 @@ const getStyles = look =>
       letterSpacing: -0.3,
       color: look.ink,
     },
-    scroll: { flexGrow: 1, marginHorizontal: -4, paddingBottom: 16 },
+    // The scroll area itself reaches 4 past Container's 20. On its content the
+    // same margin pushed the cards' sides and the section labels' first
+    // letters out of the scroll area, which cut them off.
+    scrollArea: { marginHorizontal: -4 },
+    scroll: { flexGrow: 1, paddingBottom: 16 },
     flex: { flex: 1 },
     pressed: { opacity: 0.85 },
     profile: {

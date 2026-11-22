@@ -12,12 +12,15 @@ export const titleCase = text =>
     .map(capitalise)
     .join(' ');
 
-// The passenger's first and last name, from the identity check when there is
-// one, else from the profile. '' when neither has a name.
+// The person's first and last name: a passenger's from the identity check
+// when there is one, else from the profile (fname, lname); a rider's from
+// their account (first_name, last_name). '' when there is no name.
 export const fullNameOf = user =>
   [
-    titleCase(user?.ekyc_details?.first_name || user?.fname),
-    titleCase(user?.ekyc_details?.last_name || user?.lname),
+    titleCase(
+      user?.ekyc_details?.first_name || user?.fname || user?.first_name,
+    ),
+    titleCase(user?.ekyc_details?.last_name || user?.lname || user?.last_name),
   ]
     .filter(Boolean)
     .join(' ');
