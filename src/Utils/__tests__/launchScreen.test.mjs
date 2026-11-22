@@ -120,3 +120,14 @@ test('the logo is drawn as large as the app draws it on its own first screen', (
   assert.match(splash, new RegExp(`width: ${width},\\s+height: ${height},`));
   assert.match(layout, /android:layout_centerInParent="true"/);
 });
+
+test('the loading screen stays up through the whole wait for an update', () => {
+  const manifest = read('android/app/src/main/AndroidManifest.xml');
+  const wait = Number(
+    /EXPO_UPDATES_LAUNCH_WAIT_MS" android:value="(\d+)"/.exec(manifest)[1],
+  );
+  const kotlin = read('android/app/src/main/java/com/pinoyride/customer/LaunchScreen.kt');
+  const giveUp = Number(/GIVE_UP_MS = (\d+)L/.exec(kotlin)[1]);
+  // the wait, then the app's own start, before the screen gives up
+  assert.ok(giveUp >= wait + 10000, `gives up at ${giveUp} ms, waits ${wait} ms`);
+});

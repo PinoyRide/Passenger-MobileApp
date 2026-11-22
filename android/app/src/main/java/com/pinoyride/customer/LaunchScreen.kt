@@ -24,7 +24,7 @@ import expo.modules.updates.UpdatesController
  * What a person sees from opening the app until its first screen is ready: the logo, a line that keeps
  * moving, and one sentence saying what the app is doing.
  *
- * Before the app starts it asks the Pinoy Ride backend for an update and waits a few seconds for it
+ * Before the app starts it asks the Pinoy Ride backend for an update and waits up to 20 seconds for it
  * (EXPO_UPDATES_LAUNCH_WAIT_MS in AndroidManifest.xml; README, "SELF-UPDATES"). Nothing of the app exists
  * during that wait, so without this the window is blank. This is plain Android views laid over the window
  * (res/layout/launch_screen.xml), in the look of the app's own first screen (SplashScreen.js), which takes
@@ -288,7 +288,8 @@ class LaunchScreen private constructor(private val activity: Activity) {
     private const val LEAVE_AFTER_APP_ROOT_MS = 300L
     /** When the app's root view is never reported: this long after React Native's first content. */
     private const val LEAVE_AFTER_FIRST_CONTENT_MS = 2500L
-    private const val GIVE_UP_MS = 20000L
+    /** Past the update wait (EXPO_UPDATES_LAUNCH_WAIT_MS, 20 s) and the app's own start. */
+    private const val GIVE_UP_MS = 40000L
     private const val FADE_MS = 220L
     private const val LINE_CROSSES_IN_MS = 1100L
     private const val BAR_DP = 44f

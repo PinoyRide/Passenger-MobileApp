@@ -39,8 +39,10 @@ The script says how that version reaches the phones: as a self-update, or only w
 ### SELF-UPDATES
 
 An installed app (2.0.1 and later) asks the Pinoy Ride backend for newer JavaScript and images every time it
-starts. When an update arrives within 3 seconds the app opens on it straight away; one that takes longer is
-used the next time the app is started. Nothing is installed again.
+starts, and the loading screen waits for it: the app opens on the new code in one loading. The wait is up to
+20 seconds (APKs from Passenger 2.0.13 and Rider 2.0.14; 3 seconds before), long enough to download an update on
+a mobile connection; with no update it takes a moment. An update slower than that is used the next time the app
+is started, and the app says so meanwhile. Nothing is installed again.
 
 - What travels: `src/`, the images and the fonts. What does not: `android/`, `ios/`, and a package added,
   removed or changed in `package.json`. Those need a new APK.
