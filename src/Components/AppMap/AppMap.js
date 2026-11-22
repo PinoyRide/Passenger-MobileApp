@@ -39,6 +39,44 @@ const OVERVIEW_CAMERA_MS = 3000;
 // When the rider fix carries no timing (older data), assume this age.
 const UNKNOWN_FIX_AGE_MS = 1500;
 
+// A rider from the "Riders nearby" button, as the design canvas draws one: a
+// dark dot in a white ring. Painted once, then left alone (tracksViewChanges).
+const NearbyDot = ({ coordinate }) => {
+  const [tracks, setTracks] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setTracks(false), 600);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <Marker
+      coordinate={coordinate}
+      anchor={{ x: 0.5, y: 0.5 }}
+      tracksViewChanges={tracks}>
+      <View style={dotStyles.ring}>
+        <View style={dotStyles.dot} />
+      </View>
+    </Marker>
+  );
+};
+
+const dotStyles = StyleSheet.create({
+  ring: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    elevation: 3,
+  },
+  dot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#17171C',
+  },
+});
+
 const AppMap = forwardRef(
   (
     {
@@ -68,6 +106,8 @@ const AppMap = forwardRef(
       interactive = true,
       // the person's own position, Google's blue dot (needs location access)
       showsUser = true,
+      // the "Riders nearby" button's riders ([{ lat, long }], useNearbyRiders)
+      nearbyRiders = null,
       style,
     },
     ref,
@@ -215,6 +255,44 @@ const AppMap = forwardRef(
             400,
           );
         }
+      },
+      // Where the map's blue dot puts the person, { lat, long }, or null.
+      userPoint: () => {
+        const { latitude, longitude } = userCoordRef.current || {};
+        return latitude != null && longitude != null
+          ? { lat: latitude, long: longitude }
+          : null;
+      },
+      // The "Riders nearby" button: these points ([{ lat, long }]) in the
+      // part of the map above the sheet, at least about 700 m across.
+      showPoints: points => {
+        const coords = (points || [])
+          .map(p => ({ latitude: Number(p?.lat), longitude: Number(p?.long) }))
+          .filter(
+            c => Number.isFinite(c.latitude) && Number.isFinite(c.longitude),
+          );
+        if (!mapRef.current || coords.length === 0) {
+          return;
+        }
+        const lats = coords.map(c => c.latitude);
+        const longs = coords.map(c => c.longitude);
+        const MIN_SPAN = 0.0065;
+        const top = Math.max(...lats);
+        const bottom = Math.min(...lats);
+        const right = Math.max(...longs);
+        const left = Math.min(...longs);
+        const padLat = Math.max(0, MIN_SPAN - (top - bottom)) / 2;
+        const padLong = Math.max(0, MIN_SPAN - (right - left)) / 2;
+        mapRef.current.fitToCoordinates(
+          [
+            { latitude: top + padLat, longitude: left - padLong },
+            { latitude: bottom - padLat, longitude: right + padLong },
+          ],
+          {
+            edgePadding: overviewPadding(mapHeightRef.current, bottomInset),
+            animated: true,
+          },
+        );
       },
       fitToMarkers: () => {
         if (mapRef.current && firstMarkerLat && secondMarkerLat) {
@@ -656,6 +734,18 @@ const AppMap = forwardRef(
                 onLoad={() => lockAfterPaint(setDropoffTracksViewChanges)}
               />
             </Marker>
+          )}
+
+          {(nearbyRiders || []).map((r, i) =>
+            r?.lat != null && r?.long != null ? (
+              <NearbyDot
+                key={`nearby-${i}`}
+                coordinate={{
+                  latitude: Number(r.lat),
+                  longitude: Number(r.long),
+                }}
+              />
+            ) : null,
           )}
 
           {/* Rider: a direction arrow lying flat on the map, turned to the

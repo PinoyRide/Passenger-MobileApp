@@ -37,6 +37,8 @@ const BASE_DEV = {
     CUSTOMER_LOGOUT: id => `customers/${id}/logout`,
     CUSTOMER_FIREBASE_TOKEN: id => `customers/${id}/firebase-token`,
     PLACE_SEARCH: query => `places/search?query=${encodeURIComponent(query)}`,
+    // the "Riders nearby" button: riders within 2 km of a point (Hooks/useNearbyRiders.js)
+    NEARBY_RIDERS: ({ lat, long }) => `nearby-riders?lat=${lat}&lng=${long}`,
   },
 
   // Django endpoints (reached through the .NET proxy)
