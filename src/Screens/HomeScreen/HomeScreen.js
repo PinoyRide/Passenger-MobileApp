@@ -628,10 +628,10 @@ const HomeScreen = () => {
     }
     if (notify) {
       notifyPush(
-        // not_set_off: the rider never set off and the trip was passed on
-        // (backend InstantRelease)
+        // not_set_off: the rider never tapped "Go to Pick Up Location" and
+        // the trip was passed on (backend InstantRelease)
         (oldBooking.not_set_off
-          ? "Your rider didn't set off. We're finding you a new rider."
+          ? "Your rider didn't respond. We're finding you a new rider."
           : "Your rider cancelled. We're finding you a new rider.") +
           (oldBooking.replaced_by_ref_code
             ? ` New reference: ${oldBooking.replaced_by_ref_code}`
