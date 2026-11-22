@@ -200,7 +200,10 @@ const AppMap = forwardRef(
       // The locate button: back to where the person is, as the map's own
       // blue dot knows it (else as the caller does).
       centerOn: fallback => {
-        const { latitude, longitude } = userCoordRef.current || fallback || {};
+        // the caller's position first: the map stops reporting one while
+        // its dot is hidden
+        const { latitude, longitude } =
+          (fallback?.latitude != null ? fallback : userCoordRef.current) || {};
         if (mapRef.current && latitude != null && longitude != null) {
           mapRef.current.animateToRegion(
             {

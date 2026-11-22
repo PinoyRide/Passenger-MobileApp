@@ -633,6 +633,9 @@ const InputLocation = () => {
         initialLat={Number(center.lat)}
         initialLong={Number(center.long)}
         locationReady
+        // the blue dot only until a pickup is set: the pickup pin often
+        // sits on it ("Use my current location")
+        showsUser={!pickupLocation}
         firstMarkerLat={pickupLocation?.lat}
         firstMarkerLong={pickupLocation?.long}
         secondMarkerLat={dropoffLocation?.lat}

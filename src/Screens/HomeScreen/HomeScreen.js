@@ -15,7 +15,7 @@ import { useTheme } from 'react-native-paper';
 import { openSettings } from 'react-native-permissions';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { modern } from '@/Theme/modern';
-import { tripChipText } from '@/Utils/tripText';
+import { distanceKm, tripChipText } from '@/Utils/tripText';
 import BottomModal from './BottomModal';
 import {
   PUSH_BOOKING_UPDATE_EVENT,
@@ -2127,6 +2127,16 @@ const HomeScreen = () => {
     !showChoosePickupPanel &&
     (bookingStatus === 0 || bookingStatus === 4 || bookingStatus === 5);
   const routeSet = Boolean(pickupLocation && dropoffLocation);
+  // The blue dot steps aside while the pickup is where the person is (as
+  // with "Use my current location"): the pickup pin already says so, and
+  // the two would sit on top of each other. Back once they move away.
+  const pickupKmAway = userLocation
+    ? distanceKm(
+        { lat: userLocation.latitude, long: userLocation.longitude },
+        pickupLocation,
+      )
+    : null;
+  const pickupIsHere = pickupKmAway != null && pickupKmAway < 0.05;
   const choosingRide = sheetShown && routeSet && !isConfirmed;
   const choosingPlace = sheetShown && !routeSet && !isConfirmed;
   const mapRef = useRef(null);
@@ -2478,6 +2488,7 @@ New reference: ${activeBooking.ref_code}`
           riderFixId={riderLocation?.id}
           riderHeardAt={riderLocation?.heardAt}
           bottomInset={modalHeight + floatingAboveSheet}
+          showsUser={!pickupIsHere}
           bookingStatus={bookingStatus}
           interactive
           style={styles.map}
