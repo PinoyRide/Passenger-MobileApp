@@ -1955,6 +1955,22 @@ const HomeScreen = () => {
     }
   };
 
+  // "Ride now instead" on the scheduling sheet: leave the advance booking
+  // entirely, as if Schedule had not been tapped, and give back the payment
+  // it had switched to cash.
+  const handleRideNow = () => {
+    setShowPickDate(false);
+    setScheduledAt(null);
+    setAdvanceBookingFlow(false);
+    setPickupConfirmPending(false);
+    setAutoBookAfterSchedule(false);
+    pendingScheduleRef.current = null;
+    if (paymentBeforeScheduleRef.current !== null) {
+      setSelectedPayment(paymentBeforeScheduleRef.current);
+      paymentBeforeScheduleRef.current = null;
+    }
+  };
+
   const handlePickDateConfirm = date => {
     setScheduledAt(date);
     setShowPickDate(false);
@@ -2543,6 +2559,7 @@ New reference: ${activeBooking.ref_code}`
         <PickDateModal
           visible={showPickDate}
           onClose={() => setShowPickDate(false)}
+          onRideNow={handleRideNow}
           onConfirm={handlePickDateConfirm}
           minLeadMinutes={bookLater.minLeadMinutes}
           maxWindowDays={bookLater.maxWindowDays}
