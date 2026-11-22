@@ -16,6 +16,7 @@ import { openSettings } from 'react-native-permissions';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { modern } from '@/Theme/modern';
 import { distanceKm, tripChipText } from '@/Utils/tripText';
+import { REACH_M } from '@/Utils/radarPing';
 import BottomModal from './BottomModal';
 import {
   PUSH_BOOKING_UPDATE_EVENT,
@@ -2290,6 +2291,12 @@ const HomeScreen = () => {
     statusNum === 0 &&
     !scheduledAt &&
     !activeBooking?.is_advance;
+  // Meanwhile the map pings out from the pickup to the reach of the request
+  // (the owner, 2026-11-22: "make a radar ping 1.5 km for me").
+  const radar =
+    searchingSheet && pickupLocation
+      ? { lat: pickupLocation.lat, long: pickupLocation.long, radiusM: REACH_M }
+      : null;
   // The banner over the map steps aside when the sheet says the same: the
   // rider's arrival time under "Jomar is on the way", or "Finding your rider"
   // (a re-pooled booking's new reference still shows in the banner).
@@ -2549,6 +2556,7 @@ New reference: ${activeBooking.ref_code}`
           bottomInset={modalHeight + floatingAboveSheet}
           showsUser={!pickupIsHere}
           nearbyRiders={nearby?.riders}
+          radar={radar}
           bookingStatus={bookingStatus}
           interactive
           style={styles.map}

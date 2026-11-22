@@ -6,7 +6,14 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  AccessibilityInfo,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { routeFromDirections } from '../../Utils/routeDirections';
 import {
@@ -20,7 +27,8 @@ import {
 import { overviewPadding } from '../../Utils/overviewPadding';
 import useVehicleTracker from '../../Utils/useVehicleTracker';
 import NavArrow from './NavArrow';
-import MapView, { Marker, Polyline } from 'react-native-maps';
+import MapView, { Circle, Marker, Polyline } from 'react-native-maps';
+import { boundsAround, ringsAt } from '../../Utils/radarPing';
 import { Constants } from '@/Utils';
 import { fetchWithTimeout } from '@/Utils/Network';
 import useNetworkStatus from '@/Hooks/useNetworkStatus';
@@ -56,6 +64,61 @@ const NearbyDot = ({ coordinate }) => {
         <View style={dotStyles.dot} />
       </View>
     </Marker>
+  );
+};
+
+// The radar ping while a rider is being found: gold rings sweeping out from
+// the pickup to the reach of the request, over a faint line where it ends
+// (Utils/radarPing.js). On a phone set to reduce motion, only the line.
+const RADAR_FRAME_MS = 40;
+const gold = alpha => `rgba(254, 193, 7, ${alpha.toFixed(3)})`;
+const RadarPing = ({ center, radiusM }) => {
+  const [still, setStill] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then(reduce => alive && setStill(Boolean(reduce)))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (still) {
+      return undefined;
+    }
+    const start = Date.now();
+    const timer = setInterval(
+      () => setElapsed(Date.now() - start),
+      RADAR_FRAME_MS,
+    );
+    return () => clearInterval(timer);
+  }, [still]);
+  return (
+    <>
+      <Circle
+        center={center}
+        radius={radiusM}
+        strokeWidth={2}
+        strokeColor={gold(0.75)}
+        fillColor={gold(0.06)}
+        zIndex={1}
+      />
+      {still
+        ? null
+        : ringsAt(elapsed).map((ring, i) => (
+            <Circle
+              key={`ring-${i}`}
+              center={center}
+              radius={Math.max(1, ring.share * radiusM)}
+              strokeWidth={2}
+              strokeColor={gold(0.9 * ring.alpha)}
+              fillColor={gold(0.2 * ring.alpha)}
+              zIndex={2}
+            />
+          ))}
+    </>
   );
 };
 
@@ -108,6 +171,9 @@ const AppMap = forwardRef(
       showsUser = true,
       // the "Riders nearby" button's riders ([{ lat, long }], useNearbyRiders)
       nearbyRiders = null,
+      // while a rider is being found: { lat, long, radiusM }, the pickup and
+      // the reach of the request, drawn as a radar ping and kept in view
+      radar = null,
       style,
     },
     ref,
@@ -120,6 +186,18 @@ const AppMap = forwardRef(
     const mapWidthRef = useRef(0); // dp
     // where the map's blue dot last put the person
     const userCoordRef = useRef(null);
+    // the radar ping, in plain numbers so effects and markers can follow it
+    const radarLat = radar ? Number(radar.lat) : NaN;
+    const radarLong = radar ? Number(radar.long) : NaN;
+    const radarRadius = radar ? Number(radar.radiusM) : NaN;
+    const radarOn =
+      Number.isFinite(radarLat) &&
+      Number.isFinite(radarLong) &&
+      radarRadius > 0;
+    const radarCenter = useMemo(
+      () => (radarOn ? { latitude: radarLat, longitude: radarLong } : null),
+      [radarOn, radarLat, radarLong],
+    );
     const [routeCoords, setRouteCoords] = useState([]);
     // Last time the passenger panned/pinched; auto-framing pauses after it.
     const lastTouchAtRef = useRef(0);
@@ -343,7 +421,16 @@ const AppMap = forwardRef(
         };
       };
 
-      if (firstMarkerLat && secondMarkerLat) {
+      if (radarOn) {
+        // a rider is being found: the whole reach of the request in view
+        mapRef.current.fitToCoordinates(
+          boundsAround(radarLat, radarLong, radarRadius),
+          {
+            edgePadding: overviewPadding(mapHeightRef.current, bottomInset),
+            animated: true,
+          },
+        );
+      } else if (firstMarkerLat && secondMarkerLat) {
         mapRef.current.fitToCoordinates(
           [
             {
@@ -386,6 +473,10 @@ const AppMap = forwardRef(
       isLiveLeg,
       // the sheet grew or shrank: frame the trip above it again
       bottomInset,
+      radarOn,
+      radarLat,
+      radarLong,
+      radarRadius,
     ]);
 
     // While a rider is tracked.
@@ -735,6 +826,10 @@ const AppMap = forwardRef(
               />
             </Marker>
           )}
+
+          {radarCenter ? (
+            <RadarPing center={radarCenter} radiusM={radarRadius} />
+          ) : null}
 
           {(nearbyRiders || []).map((r, i) =>
             r?.lat != null && r?.long != null ? (
