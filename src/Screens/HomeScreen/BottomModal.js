@@ -1,10 +1,11 @@
-import React from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { AppButton } from '@/Components';
+import React, { useState } from 'react';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { bottomSpace } from '@/Utils/bottomSpace';
+import { formatPeso } from '@/Utils/formatPeso';
 import { modern } from '@/Theme/modern';
 import ServiceList from './Components/ServiceList';
 
@@ -19,6 +20,17 @@ const PAYMENT_METHOD_CONFIG = {
   },
 };
 
+// A place's first part, for the one-line route: "SM Mall of Asia".
+const placeName = place =>
+  (place?.description || place?.address || '').split(',')[0].trim();
+const placeText = place => place?.description || place?.address || '';
+
+// The booking sheet (docs/booking-redesign-spec.md, "BottomModal"). Top to
+// bottom: the route, the title with Schedule, the rides, the payment, promo
+// and note pills, the fare, and one button. Until pickup and drop-off are
+// both set it shows only "Where to?" and the two fields: no rides, no fares.
+// The fare it is given is always the one for the trip on screen (HomeScreen
+// prices the trip by itself and drops a fare asked for another one).
 const BottomModal = ({
   onLayout,
   services,
@@ -42,7 +54,9 @@ const BottomModal = ({
   selectedPromo,
   noteToRider,
   inquireBookingResponse,
+  fareProblem,
   isLoading,
+  isPricing = false,
   isOnline = true,
   showAdvanceBooking = false,
   onAdvanceBooking,
@@ -54,65 +68,124 @@ const BottomModal = ({
   // The navigation bar may cover the bottom of the screen: keep the bottom content clear of it
   const { bottom: bottomInset } = useSafeAreaInsets();
   const theme = useTheme();
-  const { colors } = theme;
   const look = modern(theme);
-  const styles = getStyles({ colors, look });
+  const styles = getStyles(look, theme.colors.blue ?? '#084CF7');
   const navigation = useNavigation();
+  const [showBreakdown, setShowBreakdown] = useState(false);
+
+  const fare = inquireBookingResponse;
+  const routeComplete = Boolean(pickup && dropoff);
+  const confirming = isBooked && !isConfirmed;
+  // The ride can change until the booking is placed, but not while a
+  // booking request is on its way (pricing alone does not hold it).
+  const ridesLocked = isConfirmed || (isLoading && !isPricing);
 
   const paymentConfig =
     PAYMENT_METHOD_CONFIG[selectedPayment] || PAYMENT_METHOD_CONFIG.cash;
 
+  // Payment, promo and note. An added promo or note shows as a gold dot after
+  // its name, so the three pills keep their width.
   const buttons = [
     {
       id: 'payment',
-      image: paymentConfig?.icon,
-      text: paymentConfig?.label ?? 'Cash',
+      image: paymentConfig.icon,
+      text: paymentConfig.label,
+      added: false,
+      label: `Payment: ${paymentConfig.label}`,
       onPress: () => setShowPaymentModal(true),
     },
     {
       id: 'promo',
       image: require('@/Assets/Common/HomeScreen/BottomModal/Promo.png'),
-      text: selectedPromo ? selectedPromo.code : 'Promo',
+      text: 'Promo',
+      added: Boolean(selectedPromo),
+      label: selectedPromo
+        ? `Promo ${selectedPromo.code} applied`
+        : 'Add a promo',
       onPress: () => setShowPromoModal(true),
     },
     {
       id: 'note',
       image: require('@/Assets/Common/HomeScreen/BottomModal/Note_To_Rider.png'),
-      text: noteToRider ? 'Note Added' : 'Note to Rider',
+      text: 'Note',
+      added: Boolean(noteToRider),
+      label: noteToRider
+        ? 'Note to the rider added'
+        : 'Add a note to the rider',
       onPress: () => setShowNoteModal(true),
     },
   ];
 
+  // The same three steps as before; only the look changed. "No Internet"
+  // moved into the fare caption, so the button always names its action.
   const actionButtons = [
     {
       visible: !isBooked,
-      title: isOnline ? 'Book' : 'No Internet',
+      title: 'Book',
       onPress: onInquireBooking,
-      color: pickup && dropoff && isOnline ? colors.primary : colors.grey5,
-      disabled: !pickup || !dropoff || isLoading || !isOnline,
+      // no ride picked yet: Book waits, as it did when the rides were a modal
+      disabled:
+        !pickup || !dropoff || isLoading || !isOnline || !selectedService,
     },
     {
-      visible: isBooked && !isConfirmed,
-      title: isOnline ? 'Confirm' : 'No Internet',
+      visible: confirming,
+      title: 'Confirm',
       onPress: onCreateBooking,
-      color: isOnline && inquireBookingResponse ? colors.primary : colors.grey5,
       disabled: isLoading || !isOnline || !inquireBookingResponse,
     },
     {
       visible: isConfirmed,
-      title: isOnline ? 'Cancel' : 'No Internet',
+      title: 'Cancel',
       onPress: onBackToConfirm,
-      color: isOnline ? colors.error : colors.grey5,
-      outlined: true,
-      textColor: isOnline ? colors.error : colors.grey5,
+      danger: true,
       disabled: isLoading || !isOnline,
     },
   ];
+  const action = actionButtons.find(b => b.visible);
 
-  const navigateToInputLocation = () => {
+  // The line under "Total fare".
+  const fareCaption = () => {
+    if (!isOnline) {
+      return 'No Internet';
+    }
+    if (fareProblem) {
+      return fareProblem;
+    }
+    if (!selectedService) {
+      return 'Choose a ride to see the fare';
+    }
+    if (!fare) {
+      return 'Getting the fare…';
+    }
+    if (advanceCashOnlyNote) {
+      return 'Cash only for advance bookings';
+    }
+    if (fareIsEstimate) {
+      return 'Estimated — final fare may change';
+    }
+    return Number(fare.booking_fee) > 0 ? 'Incl. booking fee' : '';
+  };
+  const caption = fareCaption();
+  const figure = fare ? formatPeso(fare.total_amount) : '—';
+
+  const breakdown = fare
+    ? [
+        { label: 'Fare', value: formatPeso(fare.total_amount_wo_promo) },
+        selectedPromo && Number(fare.promo_discount) > 0
+          ? {
+              label: `Promo ${selectedPromo.code}`,
+              value: `−${formatPeso(fare.promo_discount)}`,
+            }
+          : null,
+        { label: 'Total', value: formatPeso(fare.total_amount), strong: true },
+      ].filter(Boolean)
+    : [];
+
+  const openPlaces = (focusDropoff = false) => {
     navigation.navigate('InputLocation', {
       pickup,
       dropoff,
+      focusDropoff,
       onPickupSelect: item => onPickupChange?.(item),
       onDropoffSelect: item => onDropoffChange?.(item),
       // X buttons on the location screen clear the saved points too.
@@ -121,217 +194,258 @@ const BottomModal = ({
     });
   };
 
-  const getLocationText = (location, placeholder) => {
-    if (!location) {
-      return placeholder;
-    }
-    return location.description || location.address || placeholder;
+  const swapPlaces = () => {
+    onPickupChange?.(dropoff || null);
+    onDropoffChange?.(pickup || null);
   };
 
-  const renderActionButton = () => {
-    const btn = actionButtons.find(b => b.visible);
-    if (!btn) {
-      return null;
-    }
+  // Edit: while choosing, change the places; from Confirm, back to choosing.
+  const onEdit = confirming ? onBackToEdit : () => openPlaces(false);
 
-    const blue = colors.blue ?? '#084CF7';
+  const renderRail = () => (
+    <View style={styles.rail}>
+      <View style={styles.railMarks}>
+        <View style={styles.dot} />
+        <View style={styles.railLine} />
+        <View style={styles.square} />
+      </View>
+      <View style={styles.flex}>
+        <Pressable
+          onPress={() => openPlaces(false)}
+          accessibilityRole="button"
+          accessibilityLabel={`Pick-up: ${placeText(pickup) || 'not set'}`}
+          style={({ pressed }) => [styles.field, pressed && styles.pressed]}>
+          <Text style={styles.fieldLabel}>PICK-UP</Text>
+          <Text
+            style={[styles.fieldValue, !pickup && styles.fieldEmpty]}
+            numberOfLines={1}>
+            {placeText(pickup) || 'Choose a pick-up point'}
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => openPlaces(true)}
+          accessibilityRole="button"
+          accessibilityLabel={`Drop-off: ${placeText(dropoff) || 'not set'}`}
+          style={({ pressed }) => [
+            styles.field,
+            styles.fieldGap,
+            pressed && styles.pressed,
+          ]}>
+          <Text style={styles.fieldLabel}>DROP-OFF</Text>
+          <Text
+            style={[styles.fieldValue, !dropoff && styles.fieldEmpty]}
+            numberOfLines={1}>
+            {placeText(dropoff) || 'Choose a drop-off point'}
+          </Text>
+        </Pressable>
+      </View>
+      <Pressable
+        onPress={swapPlaces}
+        disabled={!pickup && !dropoff}
+        hitSlop={4}
+        accessibilityRole="button"
+        accessibilityLabel="Swap pick-up and drop-off"
+        style={({ pressed }) => [styles.swap, pressed && styles.pressed]}>
+        <Icon name="swap-vertical" size={20} color={look.ink} />
+      </Pressable>
+    </View>
+  );
 
-    return (
-      <>
-        {showAdvanceBooking && !isBooked && (
-          <AppButton
-            title="Advance Booking"
-            onPress={onAdvanceBooking}
-            isBold
-            buttonColor={blue}
-            disabled={!isOnline || isLoading}
-            noSpacing
-            featureStyle={{ marginTop: 20, marginBottom: 13 }}
-          />
-        )}
-        <AppButton
-          title={btn.title}
+  const renderRouteLine = () => (
+    <View style={styles.routeLine}>
+      <View style={styles.dot} />
+      <Text style={styles.routeName} numberOfLines={1}>
+        {placeName(pickup)}
+      </Text>
+      <Icon
+        name="arrow-right"
+        size={15}
+        color={look.muted}
+        style={styles.routeArrow}
+      />
+      <View style={styles.square} />
+      <Text style={styles.routeName} numberOfLines={1}>
+        {placeName(dropoff)}
+      </Text>
+      <View style={styles.flex} />
+      {!isConfirmed ? (
+        <Pressable
+          onPress={onEdit}
+          disabled={isLoading}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel={
+            confirming ? 'Edit the booking' : 'Edit pick-up and drop-off'
+          }>
+          <Text style={styles.edit}>Edit</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+
+  const renderHeader = () => (
+    <View style={styles.headerRow}>
+      {!isConfirmed ? (
+        <Text style={styles.title} maxFontSizeMultiplier={1.3}>
+          Choose a ride
+        </Text>
+      ) : (
+        <View style={styles.flex} />
+      )}
+      {showAdvanceBooking ? (
+        <Pressable
+          onPress={onAdvanceBooking}
+          disabled={!isOnline || isLoading}
+          accessibilityRole="button"
+          accessibilityLabel="Schedule the ride for later"
+          style={({ pressed }) => [
+            styles.smallPill,
+            pressed && styles.pressed,
+          ]}>
+          <Icon name="calendar-blank-outline" size={16} color={look.ink} />
+          <Text style={styles.smallPillText}>Schedule</Text>
+        </Pressable>
+      ) : null}
+      {showMinimizeButton ? (
+        <Pressable
+          testID="advance-tracking-minimize"
+          onPress={onMinimizePress}
+          hitSlop={8}
+          accessibilityRole="button"
+          style={({ pressed }) => [
+            styles.smallPill,
+            pressed && styles.pressed,
+          ]}>
+          <Text style={styles.smallPillText}>Close</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+
+  const renderPills = () => (
+    <View style={styles.pillRow}>
+      {buttons.map(btn => (
+        <Pressable
+          key={btn.id}
           onPress={btn.onPress}
-          isBold
-          mode={btn.outlined ? 'outlined' : 'contained'}
-          buttonColor={btn.color}
-          textColor={btn.textColor}
-          disabled={btn.disabled}
-        />
-      </>
-    );
-  };
+          accessibilityRole="button"
+          accessibilityLabel={btn.label}
+          style={({ pressed }) => [styles.pill, pressed && styles.pressed]}>
+          <Image source={btn.image} style={styles.pillIcon} />
+          <Text style={styles.pillText} numberOfLines={1}>
+            {btn.text}
+          </Text>
+          {btn.added ? <View style={styles.addedDot} /> : null}
+        </Pressable>
+      ))}
+    </View>
+  );
+
+  const renderFare = () => (
+    <View>
+      <Pressable
+        onPress={() => setShowBreakdown(open => !open)}
+        disabled={!fare}
+        accessibilityRole="button"
+        accessibilityLabel={`Total fare ${figure}${
+          caption ? `, ${caption}` : ''
+        }`}
+        accessibilityHint={
+          fare
+            ? showBreakdown
+              ? 'Hides the breakdown'
+              : 'Shows the breakdown'
+            : undefined
+        }
+        accessibilityState={{ expanded: showBreakdown, disabled: !fare }}
+        style={styles.fareBlock}>
+        <View style={styles.flex}>
+          <Text style={styles.fareLabel}>Total fare</Text>
+          {caption ? <Text style={styles.fareCaption}>{caption}</Text> : null}
+        </View>
+        <Text style={styles.fareFigure} maxFontSizeMultiplier={1.3}>
+          {figure}
+        </Text>
+        {fare ? (
+          <Icon
+            name={showBreakdown ? 'chevron-up' : 'chevron-down'}
+            size={22}
+            color={look.inkSoft}
+          />
+        ) : null}
+      </Pressable>
+      {fare && showBreakdown ? (
+        <View style={styles.breakdown}>
+          {breakdown.map(row => (
+            <View key={row.label} style={styles.breakdownRow}>
+              <Text style={[styles.breakdownText, row.strong && styles.strong]}>
+                {row.label}
+              </Text>
+              <Text style={[styles.breakdownText, row.strong && styles.strong]}>
+                {row.value}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+
+  const renderAction = () =>
+    action ? (
+      <Pressable
+        onPress={action.onPress}
+        disabled={action.disabled}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: action.disabled }}
+        style={({ pressed }) => [
+          styles.cta,
+          action.danger ? styles.ctaQuiet : styles.ctaMain,
+          action.disabled && styles.ctaDisabled,
+          pressed && styles.pressed,
+        ]}>
+        <Text
+          style={[
+            styles.ctaText,
+            action.danger && styles.ctaDangerText,
+            action.disabled && styles.ctaDisabledText,
+          ]}>
+          {action.title}
+        </Text>
+      </Pressable>
+    ) : null;
 
   return (
     <View
       style={[
-        styles.modalContainer,
-        { paddingBottom: bottomSpace(bottomInset, 30) },
+        styles.sheet,
+        { paddingBottom: bottomSpace(bottomInset, 24, 24) },
       ]}
       onLayout={onLayout}>
-      {/* header: the title while choosing, Back while the fare is up */}
-      {(!isBooked || !isConfirmed || showMinimizeButton) && (
-        <View style={styles.serviceHeader}>
-          {isBooked && !isConfirmed ? (
-            <View style={styles.serviceHeaderBooked}>
-              <TouchableOpacity onPress={onBackToEdit} disabled={isLoading}>
-                <Text style={styles.arrow}>
-                  {'< '}
-                  <Text style={styles.modalTitle}>Back</Text>
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ) : !isBooked ? (
-            <Text style={styles.sheetTitle} maxFontSizeMultiplier={1.3}>
-              Choose a ride
-            </Text>
-          ) : (
-            <View />
-          )}
-          {showMinimizeButton ? (
-            <TouchableOpacity
-              testID="advance-tracking-minimize"
-              onPress={onMinimizePress}
-              style={styles.minimizeButton}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={styles.minimizeButtonText}>Close</Text>
-            </TouchableOpacity>
-          ) : null}
+      <View style={styles.handle} />
+      {routeComplete ? (
+        <View style={styles.stack}>
+          {renderRouteLine()}
+          {!isConfirmed || showMinimizeButton ? renderHeader() : null}
+          <ServiceList
+            services={services}
+            selectedService={selectedService}
+            fare={fare}
+            onSelect={onSelectService}
+            disabled={ridesLocked}
+            selectedOnly={isConfirmed}
+          />
+          {!isConfirmed ? renderPills() : null}
+          {renderFare()}
+          {renderAction()}
         </View>
-      )}
-
-      {/* the rides; once the booking is placed, only the chosen one */}
-      <ServiceList
-        services={services}
-        selectedService={selectedService}
-        fare={inquireBookingResponse}
-        onSelect={onSelectService}
-        disabled={isLoading}
-        selectedOnly={isConfirmed}
-        style={styles.serviceList}
-      />
-
-      {selectedService ? (
-        <>
-          {/* pickup and dropoff */}
-          <View style={styles.locationColumn}>
-            <View style={styles.locationGroup}>
-              <TouchableOpacity
-                style={styles.locationButton}
-                onPress={navigateToInputLocation}
-                disabled={isBooked}>
-                <Image
-                  source={require('@/Assets/Common/Pick_Up_Icon.png')}
-                  style={styles.locationIcon}
-                />
-                <Text style={styles.locationText} numberOfLines={1}>
-                  {getLocationText(pickup, 'Pick up From?')}
-                </Text>
-              </TouchableOpacity>
-
-              <View style={styles.dotLine}>
-                {[...Array(2)].map((_, i) => (
-                  <View key={i} style={styles.dot} />
-                ))}
-              </View>
-
-              <TouchableOpacity
-                style={styles.locationButton}
-                onPress={navigateToInputLocation}
-                disabled={isBooked}>
-                <Image
-                  source={require('@/Assets/Common/Drop_Off_Icon.png')}
-                  style={styles.locationIcon}
-                />
-                <Text style={styles.locationText} numberOfLines={1}>
-                  {getLocationText(dropoff, 'Drop off To?')}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* options row or fare breakdown */}
-          {!isBooked ? (
-            <View style={styles.optionButtonsRow}>
-              {buttons.map((btn, index) => (
-                <React.Fragment key={index}>
-                  <View style={styles.optionWrapper}>
-                    <TouchableOpacity
-                      style={styles.optionButton}
-                      onPress={btn.onPress}>
-                      <Image source={btn.image} style={styles.optionIcon} />
-                      <Text style={styles.optionText}>{btn.text}</Text>
-                    </TouchableOpacity>
-                  </View>
-                  {index < buttons.length - 1 && (
-                    <View style={styles.divider} />
-                  )}
-                </React.Fragment>
-              ))}
-            </View>
-          ) : (
-            <View style={styles.fareBreakdown}>
-              <View style={styles.fareRow}>
-                <Text
-                  style={[styles.feeText, { fontFamily: 'Poppins SemiBold' }]}>
-                  {fareIsEstimate ? 'Estimated Fare' : 'Final Fare'}
-                </Text>
-                <Text
-                  style={[styles.feeText, { fontFamily: 'Poppins SemiBold' }]}>
-                  {inquireBookingResponse?.pretty_total_amount_wo_promo}
-                </Text>
-              </View>
-              {!!selectedPromo &&
-                inquireBookingResponse?.promo_discount > 0 && (
-                  <View style={styles.fareRow}>
-                    <Text style={styles.feeText}>Promo Discount</Text>
-                    <Text style={styles.promoAppliedText}>
-                      -₱
-                      {Number(inquireBookingResponse.promo_discount).toFixed(2)}
-                    </Text>
-                  </View>
-                )}
-              <View style={styles.fareRow}>
-                <Text style={styles.feeText}>
-                  {fareIsEstimate
-                    ? 'Estimated Fare w/ Discount'
-                    : 'Total Fare w/ Discount'}
-                </Text>
-                <Text style={styles.feeText}>
-                  {inquireBookingResponse?.pretty_total_amount}
-                </Text>
-              </View>
-              <View style={styles.fareRow}>
-                <Text style={styles.feeText}>Payment Method</Text>
-                <Text>{selectedPayment}</Text>
-              </View>
-              {!!selectedPromo && (
-                <View style={styles.fareRow}>
-                  <Text style={styles.feeText}>Promo Applied</Text>
-                  <Text style={styles.promoAppliedText}>
-                    {selectedPromo.code}
-                  </Text>
-                </View>
-              )}
-              {!!noteToRider && (
-                <View style={styles.fareRow}>
-                  <Text style={styles.feeText}>Note to Rider</Text>
-                  <Text style={styles.noteText} numberOfLines={1}>
-                    {noteToRider}
-                  </Text>
-                </View>
-              )}
-            </View>
-          )}
-          {renderActionButton()}
-        </>
       ) : (
-        <AppButton
-          title={isOnline ? 'Book' : 'No Internet'}
-          isBold
-          buttonColor={colors.grey5}
-          disabled
-        />
+        <View style={styles.stack}>
+          <Text style={styles.display} maxFontSizeMultiplier={1.3}>
+            Where to?
+          </Text>
+          {renderRail()}
+        </View>
       )}
     </View>
   );
@@ -339,158 +453,277 @@ const BottomModal = ({
 
 export default BottomModal;
 
-const getStyles = ({ colors, look }) =>
+const getStyles = (look, blue) =>
   StyleSheet.create({
-    modalContainer: {
+    sheet: {
       position: 'absolute',
       bottom: 0,
       left: 0,
       right: 0,
-      backgroundColor: colors.onPrimary,
-      paddingVertical: 30,
-      paddingHorizontal: 30,
+      backgroundColor: look.surface,
+      borderTopLeftRadius: look.radiusSheet,
+      borderTopRightRadius: look.radiusSheet,
+      paddingHorizontal: 20,
+      paddingTop: 10,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -10 },
+      shadowOpacity: 0.13,
+      shadowRadius: 22,
+      elevation: 16,
     },
-    modalTitle: {
-      fontFamily: 'Poppins Regular',
-      fontSize: 19,
-      fontWeight: '400',
-      color: colors.text,
+    handle: {
+      alignSelf: 'center',
+      width: 38,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: look.hairline,
+      marginBottom: 14,
     },
-    arrow: {
-      fontFamily: 'Poppins Medium',
-      fontSize: 20,
-      color: colors.blue,
-      fontWeight: '600',
+    stack: {
+      gap: 16,
     },
-    serviceHeaderBooked: {
+    flex: {
       flex: 1,
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginRight: 8,
     },
-    serviceHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 20,
+    pressed: {
+      opacity: 0.85,
     },
-    // the Title role of docs/booking-redesign-spec.md
-    sheetTitle: {
+    // Display and Title roles
+    display: {
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 25,
+      lineHeight: 30,
+      letterSpacing: -0.6,
+      color: look.ink,
+    },
+    title: {
       flex: 1,
-      paddingRight: 8,
       fontFamily: 'Poppins SemiBold',
       fontSize: 22,
       lineHeight: 27,
       letterSpacing: -0.5,
       color: look.ink,
     },
-    serviceList: {
-      marginBottom: 20,
-    },
-    minimizeButton: {
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 6,
-      backgroundColor: colors.grey ?? '#D9D9D9',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    minimizeButtonText: {
-      fontFamily: 'Poppins Medium',
-      fontSize: 14,
-      color: colors.text,
-    },
-    locationColumn: {
-      marginBottom: 20,
-      alignItems: 'flex-start',
-    },
-    locationGroup: {
-      alignItems: 'flex-start',
-    },
-    dotLine: {
-      height: 24,
-      justifyContent: 'space-between',
-      marginLeft: 11,
-      paddingVertical: 5,
-    },
+    // the route: a blue dot for the pickup, a dark square for the drop-off
     dot: {
-      width: 5,
-      height: 5,
-      borderRadius: 2,
-      backgroundColor: colors.grey,
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+      backgroundColor: blue,
     },
-    locationButton: {
-      width: '90%',
+    square: {
+      width: 10,
+      height: 10,
+      borderRadius: 2,
+      backgroundColor: look.ink,
+    },
+    routeLine: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      minHeight: 42,
+    },
+    routeName: {
+      flexShrink: 1,
+      marginLeft: 8,
+      fontFamily: 'Poppins Medium',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.ink,
+    },
+    routeArrow: {
+      marginHorizontal: 8,
+    },
+    edit: {
+      marginLeft: 12,
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 13,
+      lineHeight: 18,
+      color: blue,
+    },
+    rail: {
       flexDirection: 'row',
       alignItems: 'center',
     },
-    locationIcon: {
-      width: 27,
-      height: 27,
-      resizeMode: 'contain',
+    railMarks: {
+      alignSelf: 'stretch',
+      alignItems: 'center',
+      // the dot and the square sit level with the middle of each field
+      paddingVertical: 21,
       marginRight: 10,
     },
-    locationText: {
-      fontSize: 16,
-      color: colors.locationTextColor,
-      fontFamily: 'Poppins SemiBold',
-    },
-    optionButtonsRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-    },
-    optionWrapper: {
+    railLine: {
       flex: 1,
+      width: 2,
+      marginVertical: 4,
+      backgroundColor: look.hairline,
+    },
+    field: {
+      minHeight: 52,
+      justifyContent: 'center',
+      paddingHorizontal: 14,
+      paddingVertical: 6,
+      borderRadius: look.radiusTile,
+      backgroundColor: look.soft,
+    },
+    fieldGap: {
+      marginTop: 6,
+    },
+    // Label role; inkSoft, not muted, on `soft`
+    fieldLabel: {
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 11,
+      lineHeight: 14,
+      letterSpacing: 1.2,
+      color: look.inkSoft,
+    },
+    fieldValue: {
+      fontFamily: 'Poppins Regular',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.ink,
+    },
+    fieldEmpty: {
+      color: look.inkSoft,
+    },
+    swap: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      marginLeft: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: look.soft,
+    },
+    headerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    smallPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      minHeight: 36,
+      paddingHorizontal: 14,
+      borderRadius: look.radiusPill,
+      backgroundColor: look.soft,
+    },
+    smallPillText: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.ink,
+    },
+    pillRow: {
+      flexDirection: 'row',
+      gap: 9,
+    },
+    pill: {
+      flex: 1,
+      minHeight: 46,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
+      paddingHorizontal: 8,
+      borderRadius: look.radiusPill,
+      backgroundColor: look.soft,
     },
-    optionButton: {
-      width: '100%',
+    pillIcon: {
+      width: 18,
+      height: 18,
+      marginRight: 6,
+      resizeMode: 'contain',
+      tintColor: look.inkSoft,
+    },
+    pillText: {
+      flexShrink: 1,
+      fontFamily: 'Poppins Medium',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.ink,
+    },
+    addedDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      marginLeft: 5,
+      backgroundColor: look.accent,
+    },
+    fareBlock: {
       flexDirection: 'row',
       alignItems: 'center',
+      gap: 8,
     },
-    divider: {
-      width: 2,
-      height: '100%',
-      backgroundColor: colors.grey,
-      marginRight: 20,
+    // Body strong, inkSoft
+    fareLabel: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 15,
+      lineHeight: 20,
+      letterSpacing: -0.2,
+      color: look.inkSoft,
     },
-    optionIcon: {
-      width: 22,
-      height: 22,
-      resizeMode: 'contain',
-      marginRight: 6,
-    },
-    optionText: {
-      fontSize: 13,
-      color: colors.darkGrey,
+    fareCaption: {
       fontFamily: 'Poppins Regular',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.muted,
     },
-    fareBreakdown: {
+    // Fare role
+    fareFigure: {
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 23,
+      lineHeight: 28,
+      letterSpacing: -0.7,
+      color: look.ink,
+    },
+    breakdown: {
       marginTop: 10,
+      paddingTop: 10,
+      gap: 4,
+      borderTopWidth: 1,
+      borderTopColor: look.hairline,
     },
-    fareRow: {
+    breakdownRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      marginVertical: 4,
     },
-    feeText: {
+    breakdownText: {
       fontFamily: 'Poppins Regular',
-      fontSize: 16,
-      color: colors.shadow,
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.inkSoft,
     },
-    promoAppliedText: {
+    strong: {
       fontFamily: 'Poppins Medium',
-      fontSize: 16,
-      color: colors.primary,
+      color: look.ink,
     },
-    noteText: {
-      fontFamily: 'Poppins Regular',
-      fontSize: 14,
-      color: colors.text,
-      maxWidth: '50%',
+    // the one button
+    cta: {
+      minHeight: 58,
+      borderRadius: look.radiusCard - 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 16,
+    },
+    ctaMain: {
+      backgroundColor: look.accent,
+    },
+    ctaQuiet: {
+      backgroundColor: look.soft,
+    },
+    ctaDisabled: {
+      backgroundColor: look.soft,
+    },
+    ctaText: {
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 16,
+      lineHeight: 22,
+      color: look.onAccent,
+    },
+    ctaDangerText: {
+      color: look.danger,
+    },
+    ctaDisabledText: {
+      color: look.muted,
     },
   });
