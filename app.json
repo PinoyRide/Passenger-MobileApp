@@ -4,7 +4,7 @@
     "slug": "pinoy-ride",
     "owner": "gabriel1337",
     "scheme": "pinoyride",
-    "version": "2.0.54",
+    "version": "2.0.55",
     "plugins": [
       "expo-font",
       [
