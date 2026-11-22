@@ -53,18 +53,24 @@ const ProfileScreen = () => {
     return address.startsWith('-') ? address.slice(1).trim() : address.trim();
   };
 
+  // "+63 966 852 7271", as the Rider app shows a number (its displayMobile):
+  // +63 replaces the leading 0, never both. Stored as 639XXXXXXXXX; older
+  // rows may hold 09XXXXXXXXX.
   const formatMobile = mobile => {
-    if (!mobile) {
+    const digits = String(mobile || '').replace(/\D/g, '');
+    if (!digits) {
       return 'N/A';
     }
-    // Format as +63 • XXXXXXXXXX
-    if (mobile.startsWith('63')) {
-      return `+63 •  0${mobile.slice(2)}`;
+    let local = digits;
+    if (local.startsWith('63')) {
+      local = local.slice(2);
+    } else if (local.startsWith('0')) {
+      local = local.slice(1);
     }
-    if (mobile.startsWith('09')) {
-      return `+63 •  ${mobile}`;
+    if (local.length !== 10) {
+      return String(mobile);
     }
-    return mobile;
+    return `+63 ${local.slice(0, 3)} ${local.slice(3, 6)} ${local.slice(6)}`;
   };
 
   const fields = [
