@@ -22,6 +22,7 @@ const SHARED = [
   'src/Components/CodeChannelPicker/CodeChannelPicker.js',
   'src/Components/Menu/Menu.js',
   'src/Components/ProfileAvatar/ProfileAvatar.js',
+  'src/Components/ChatThread/ChatThread.js',
   'src/Utils/personName.js',
   'src/Utils/cashOut.js',
   'src/Screens/WalletScreen/CashOutScreen.js',
