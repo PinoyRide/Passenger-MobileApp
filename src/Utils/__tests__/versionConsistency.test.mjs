@@ -101,10 +101,10 @@ test('self-updates are on, signed, and tied to the APK version', () => {
   assert.equal(setting('EXPO_RUNTIME_VERSION'), '@string/expo_runtime_version');
   // asks at every start
   assert.equal(setting('EXPO_UPDATES_CHECK_ON_LAUNCH'), 'ALWAYS');
-  // ... and waits long enough to download an update, so the app opens on it in one loading (the owner,
-  // 2026-11-22), but not without end
+  // ... and waits until the update is in, so the app opens on it in one loading with nothing shown
+  // afterwards (the owner, 2026-11-22), with a cap for a connection that hangs
   const wait = Number(setting('EXPO_UPDATES_LAUNCH_WAIT_MS'));
-  assert.ok(wait >= 10000 && wait <= 30000, `the start waits ${wait} ms`);
+  assert.ok(wait >= 60000 && wait <= 300000, `the start waits ${wait} ms`);
   // every line of the certificate has to survive as a line (&#xA;), or Android cannot read it
   assert.match(
     setting('CODE_SIGNING_CERTIFICATE'),

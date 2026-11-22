@@ -39,10 +39,11 @@ The script says how that version reaches the phones: as a self-update, or only w
 ### SELF-UPDATES
 
 An installed app (2.0.1 and later) asks the Pinoy Ride backend for newer JavaScript and images every time it
-starts, and the loading screen waits for it: the app opens on the new code in one loading. The wait is up to
-20 seconds (APKs from Passenger 2.0.13 and Rider 2.0.14; 3 seconds before), long enough to download an update on
-a mobile connection; with no update it takes a moment. An update slower than that is used the next time the app
-is started, and the app says so meanwhile. Nothing is installed again.
+starts, and the loading screen waits until the update is in: the app opens on the new code in one loading, and
+nothing about updates shows once it is open (APKs from Passenger 2.0.14 and Rider 2.0.15; older ones wait 3 or
+20 seconds). With no update the check takes a moment; with no internet it gives up at once; 2 minutes is a cap
+for a connection that hangs, after which the update is used, without a word, at the next start. Nothing is
+installed again.
 
 - What travels: `src/`, the images and the fonts. What does not: `android/`, `ios/`, and a package added,
   removed or changed in `package.json`. Those need a new APK.
@@ -71,9 +72,9 @@ is started, and the app says so meanwhile. Nothing is installed again.
   `res/layout/launch_screen.xml`), because no JavaScript runs during that wait, and it looks like the app's
   own first screen (`SplashScreen.js`), which takes over from it without a jump. It leaves when the view
   `App.js` marks with `nativeID="app-ready"` is drawn. Changing how it looks needs a new APK.
-- An update that did not arrive within the wait keeps downloading while the app is used. A small line at the
-  bottom says so, and then "Update ready. Close the app and open it again to use it."
-  (`src/Components/UpdateNotice`). That part is JavaScript and travels as an update.
+- Nothing about updates shows once the app is open (the owner, 2026-11-22: "we should do it all on app
+  start"). An update that did not arrive within the wait finishes in the background and is used at the next
+  start.
 - Where it is set: `android/app/src/main/AndroidManifest.xml` (the address, the certificate, how long a start
   waits). The app's own code only shows the label (`src/Utils/selfUpdate.js`), and does not restart the app
   to pick an update up sooner: that file says why. The backend's README ("App updates") describes its side.

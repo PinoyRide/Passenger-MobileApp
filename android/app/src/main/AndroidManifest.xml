@@ -63,10 +63,11 @@
          images, so a change that touches nothing native reaches installed apps without a new APK. An update
          is accepted only when that backend signed it (checked against the certificate below) and it was made
          for this APK's version (expo_runtime_version in res/values/strings.xml).
-         EXPO_UPDATES_LAUNCH_WAIT_MS is how long the start waits for an update to arrive, so that the app
-         opens on the new code in one loading: 20 seconds (3 before), long enough to download an update on a
-         mobile connection. The wait is that long only while an update is coming in or the network is very
-         slow; with no update, the check takes a moment. One that takes longer still is used the next time.
+         EXPO_UPDATES_LAUNCH_WAIT_MS is how long the start waits for an update to arrive: until it is in, so
+         that the app opens on the new code in one loading and nothing about updates shows afterwards (the
+         owner, 2026-11-22). 2 minutes is only a safety cap for a connection that hangs; with no update the
+         check takes a moment, with no internet it gives up at once. An update that still is not in by then
+         is used, without a word, the next time the app is started.
          What is on the screen during that wait is LaunchScreen.kt.
          The address and the certificate are the Develop environment's, like DEV_URL in
          src/Utils/Constants.js. See "Self-updates" in the README. -->
@@ -74,7 +75,7 @@
     <meta-data android:name="expo.modules.updates.EXPO_UPDATE_URL" android:value="https://pinoyride-api-dev.onrender.com/api/app-updates/passenger/manifest"/>
     <meta-data android:name="expo.modules.updates.EXPO_RUNTIME_VERSION" android:value="@string/expo_runtime_version"/>
     <meta-data android:name="expo.modules.updates.EXPO_UPDATES_CHECK_ON_LAUNCH" android:value="ALWAYS"/>
-    <meta-data android:name="expo.modules.updates.EXPO_UPDATES_LAUNCH_WAIT_MS" android:value="20000"/>
+    <meta-data android:name="expo.modules.updates.EXPO_UPDATES_LAUNCH_WAIT_MS" android:value="120000"/>
     <meta-data android:name="expo.modules.updates.CODE_SIGNING_CERTIFICATE" android:value="-----BEGIN CERTIFICATE-----&#xA;MIIDFzCCAf+gAwIBAgIJDK9V1xHC1po2MA0GCSqGSIb3DQEBCwUAMDUxMzAxBgNV&#xA;BAMTKlBpbm95IFJpZGUgcGFzc2VuZ2VyIGFwcCB1cGRhdGVzIChEZXZlbG9wKTAe&#xA;Fw0yNjExMjExNjI1MTNaFw0zNjExMjExNjI1MTNaMDUxMzAxBgNVBAMTKlBpbm95&#xA;IFJpZGUgcGFzc2VuZ2VyIGFwcCB1cGRhdGVzIChEZXZlbG9wKTCCASIwDQYJKoZI&#xA;hvcNAQEBBQADggEPADCCAQoCggEBAMld43aasJRcborWPDIYCAw9jVU4URuZAknr&#xA;jkvfDzQllujwWPEvV3EUxov6Mx3G+MLv+J3TamGH8NRK3j1maxamcJIZdai+EG0t&#xA;mXVemjqkoS+rO6YS87tOxxtvDCDbcw3Z/ui1/35iqjiwLuYa0RbxRekGE57wKxZh&#xA;BX1Uzt59wpdBPCcRPX2YlHut190/F9U8/T+I/iph4XCjTxrd26jpMpkCTqxT0gHJ&#xA;QslAK0xHY47TOZMvQbESnD4G6s7RgKWbWotRxpDfNJBoXJ3W+S+uz1usV2WHKxez&#xA;Z4okR+UfhzTCUAiIxDOnno3oiKCmX+doH0fPX80dpjrqgW8I55ECAwEAAaMqMCgw&#xA;DgYDVR0PAQH/BAQDAgeAMBYGA1UdJQEB/wQMMAoGCCsGAQUFBwMDMA0GCSqGSIb3&#xA;DQEBCwUAA4IBAQB01BNTMw3yEJgzPvJ3Nig1nL1vegE5HN7Ems3SOWK0JIbvFtNX&#xA;QC8iD12NqaP4asN/+iicffWIlFfg1QhM+/ONEFGymGPgdb/wOd2rvSILGglFJsq6&#xA;4rrVOlZU+wcG6JXyGVjmZyDnLC2H6Ae8PndJWFaslbScvQjaKAt2kg+L+ALJSJ7P&#xA;cnJv4iInsRfvi1gr3A0CfIAL/dznqZ1Vzpzn7C0DsSyRLvnuBgH/s141DvMZCRxO&#xA;cPt8ILwKhxmLW4Qxe15//fx89T/uQpupYxvDheuppzjUa8mUm+Edx6reaKZJfVQU&#xA;GWBY2j63Ox8oDrlgqSyldSrmBxr5RZ9Vildg&#xA;-----END CERTIFICATE-----&#xA;"/>
     <meta-data android:name="expo.modules.updates.CODE_SIGNING_METADATA" android:value="{&quot;keyid&quot;:&quot;main&quot;,&quot;alg&quot;:&quot;rsa-v1_5-sha256&quot;}"/>
 

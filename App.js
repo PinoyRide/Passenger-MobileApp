@@ -8,7 +8,6 @@ registerTranslation('en', en);
 import { Provider } from 'react-redux';
 import { PersistGate } from 'redux-persist/integration/react';
 
-import UpdateNotice from '@/Components/UpdateNotice/UpdateNotice';
 import ApplicationNavigator from '@/Navigators/Application';
 import PushNotificationManager from '@/Services/Push/PushNotificationManager';
 import { persistor, store } from '@/Redux/store';
@@ -39,7 +38,6 @@ const App = () => {
           <StatusBar style="dark" />
           <ApplicationNavigator />
           <PushNotificationManager />
-          <UpdateNotice />
         </View>
       </PersistGate>
     </Provider>
