@@ -14,6 +14,10 @@
 const MOBILE = /^09\d{9}$/;
 // PayCools takes at most 30 characters for the account name.
 const MAX_NAME = 30;
+// The smallest cash-out, for riders and passengers alike (the owner,
+// 2026-11-23: "make our minimum cash out 15 for both passenger and driver");
+// the backend refuses less (PayCools:MinimumCashOut, the same ₱15).
+const MINIMUM_CASH_OUT = 15;
 
 // Until the list comes from the backend (or when it cannot be had).
 const GCASH = {
@@ -173,6 +177,7 @@ function afterCashOut(answer, amount) {
 module.exports = {
   GCASH,
   MAX_NAME,
+  MINIMUM_CASH_OUT,
   mobileNumber,
   bankAccountNumber,
   accountError,

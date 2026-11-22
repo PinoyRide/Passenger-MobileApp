@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import mod from '../cashOut.js';
 const {
   GCASH,
+  MINIMUM_CASH_OUT,
   mobileNumber,
   bankAccountNumber,
   accountError,
@@ -102,6 +103,10 @@ test('the request carries the channel and the account in the fields the backend 
     destination_acct_name: 'Juan Dela Cruz',
     amount: '2000',
   });
+});
+
+test('the smallest cash-out is ₱15, as the backend has it', () => {
+  assert.equal(MINIMUM_CASH_OUT, 15);
 });
 
 test('the confirmation shows only the last four digits', () => {

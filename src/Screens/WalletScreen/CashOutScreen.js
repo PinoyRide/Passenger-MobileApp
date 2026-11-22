@@ -24,6 +24,7 @@ import { selectUserInfo } from '@/Redux/Slices/userSlice';
 import { bottomSpace } from '@/Utils/bottomSpace';
 import {
   GCASH,
+  MINIMUM_CASH_OUT,
   accountError,
   accountName,
   accountNameError,
@@ -36,7 +37,7 @@ import {
 } from '@/Utils/cashOut';
 import { modern } from '@/Theme/modern';
 
-const MINIMUM = 10;
+const MINIMUM = MINIMUM_CASH_OUT;
 
 const pesos = value =>
   `₱${Number(value || 0).toLocaleString('en-US', {
