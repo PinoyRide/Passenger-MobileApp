@@ -6,6 +6,7 @@ import { useSelector } from 'react-redux';
 import { selectUserInfo } from '@/Redux/Slices/userSlice';
 import { getCurrentRouteName, navigate } from '@/Utils/NavigationService';
 import { checkIsOnline } from '@/Utils/Network';
+import { signalSignedOut, signedOutReason } from '@/Utils/signedOut';
 
 const REQUEST_TIMEOUT_MS = 15000;
 const OFFLINE_MESSAGE =
@@ -275,6 +276,14 @@ const usePostRequest = () => {
         return { response: res.data, error: null, stale: true };
       }
 
+      // Signed out by Pinoy Ride, or the account was deleted — from ANY
+      // endpoint (Utils/signedOut.js). The app signs out as Log Out does.
+      const signedOut = signedOutReason(res.status, res.data);
+      if (signedOut) {
+        signalSignedOut(signedOut);
+        return { response: null, error: null, signedOut: true };
+      }
+
       // Always set response
       setResponse(res.data);
 
@@ -298,6 +307,17 @@ const usePostRequest = () => {
     } catch (err) {
       if (!isLatest()) {
         return { response: null, error: null, stale: true };
+      }
+
+      // Signed-out check on the thrown-error path — a 401 status makes
+      // axios throw, and the payload lands in err.response.data.
+      const signedOut = signedOutReason(
+        err.response?.status,
+        err.response?.data,
+      );
+      if (signedOut) {
+        signalSignedOut(signedOut);
+        return { response: null, error: null, signedOut: true };
       }
 
       // Force-update check on the thrown-error path — a 426 status makes

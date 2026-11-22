@@ -11,6 +11,7 @@ import DeviceInfo from 'react-native-device-info';
 import { AppUtil, Constants } from '@/Utils';
 import { getCurrentRouteName, navigate } from '@/Utils/NavigationService';
 import { checkIsOnline } from '@/Utils/Network';
+import { signalSignedOut, signedOutReason } from '@/Utils/signedOut';
 
 const REQUEST_TIMEOUT_MS = 15000;
 const OFFLINE_MESSAGE =
@@ -103,6 +104,14 @@ const useApiRequest = () => {
       if (res.status === 426) {
         goToUpdateRequired(res.data?.data);
         return { response: null, error: null, forceUpdate: true };
+      }
+
+      // Signed out by Pinoy Ride, or the account was deleted — from ANY
+      // endpoint (Utils/signedOut.js). The app signs out as Log Out does.
+      const signedOut = signedOutReason(res.status, res.data);
+      if (signedOut) {
+        signalSignedOut(signedOut);
+        return { response: null, error: null, signedOut: true };
       }
 
       const normalised = normalise(res.status, res.data);

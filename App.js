@@ -11,6 +11,8 @@ import { PersistGate } from 'redux-persist/integration/react';
 import ApplicationNavigator from '@/Navigators/Application';
 import PushNotificationManager from '@/Services/Push/PushNotificationManager';
 import { persistor, store } from '@/Redux/store';
+// Signs the app out when the API says its account was signed out or deleted.
+import '@/Services/signedOutHandler';
 
 const App = () => {
   const [fontsLoaded] = useFonts({
