@@ -17,7 +17,7 @@ import { AlertBox, AppButton, AppTextInput } from '@/Components';
 import useApiRequest from '@/Services/ApiV2';
 import { Constants } from '@/Utils';
 import { handedCode } from '@/Utils/handedCode';
-import { EMAIL, SMS, offersEmail } from '@/Utils/codeChannel';
+import { SMS } from '@/Utils/codeChannel';
 
 const OFFLINE_ALERT_TITLE = 'No Internet Connection';
 const OFFLINE_ALERT_MESSAGE =
@@ -48,9 +48,6 @@ const LoginScreen = () => {
   const loginCheck = useApiRequest();
   const sendCode = useApiRequest();
   const isRegister = route.params?.mode === 'register';
-  // { channels, emailHint } when the account can also be emailed its code: the
-  // choice is shown. Typing another number clears it.
-  const [options, setOptions] = useState(null);
   const busy = loginCheck.loading || sendCode.loading;
 
   useEffect(() => {
@@ -97,14 +94,18 @@ const LoginScreen = () => {
       setShowAlert(true);
       return;
     }
-    if (offersEmail(response.data)) {
-      setOptions(response.data); // the choice is shown below the number
-      return;
-    }
-    await requestCode(SMS);
+    // The next step: where the code goes, a text or an email (the owner,
+    // 2026-11-22: the same as the Rider app). Email can be chosen when the
+    // account has an address.
+    navigation.navigate('CodeChannelScreen', {
+      mobileNumber,
+      channels: response.data?.channels,
+      emailHint: response.data?.emailHint,
+    });
   };
 
-  // Sends the code by text or by email; OTPScreen logs in with it.
+  // Registering from the terms screen (an older way in): the code is texted.
+  // Logging in, CodeChannelScreen sends it.
   const requestCode = async channel => {
     const { response, error, offline } = await sendCode.request(
       'POST',
@@ -135,7 +136,6 @@ const LoginScreen = () => {
       handedCode: handedCode(response.data),
       mode: isRegister ? 'register' : 'login',
       channel,
-      emailHint: options?.emailHint,
       // what was ticked on the terms screen; recorded with the new account
       consent: isRegister ? route.params?.consent : undefined,
     });
@@ -187,10 +187,7 @@ const LoginScreen = () => {
             <AppTextInput
               label="Mobile"
               value={mobileNumber}
-              onChangeText={value => {
-                setMobileNumber(value);
-                setOptions(null);
-              }}
+              onChangeText={setMobileNumber}
               onValidationChange={setIsPhoneValid}
               inputMode="phone"
               placeholder="9XX-XXX-XXXX"
@@ -198,39 +195,18 @@ const LoginScreen = () => {
             />
           </View>
 
-          {options ? (
-            <View style={styles.footer}>
-              <Text style={styles.choiceTitle}>
-                Where should we send your code?
-              </Text>
-              <AppButton
-                title={`Text it to +63 ******${mobileNumber.slice(-4)}`}
-                onPress={() => requestCode(SMS)}
-                isBold
-                disabled={busy}
-              />
-              <AppButton
-                title={`Email it to ${options.emailHint}`}
-                mode="outlined"
-                onPress={() => requestCode(EMAIL)}
-                disabled={busy}
-              />
-              {busy ? <Text style={styles.footerText}>Sending…</Text> : null}
-            </View>
-          ) : (
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>
-                Enter your active number to receive a verification code. This
-                helps us keep your account secure.
-              </Text>
-              <AppButton
-                title={busy ? 'Please wait…' : 'Next'}
-                onPress={handleNext}
-                isBold
-                disabled={busy}
-              />
-            </View>
-          )}
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>
+              Enter your active number to receive a verification code. This
+              helps us keep your account secure.
+            </Text>
+            <AppButton
+              title={busy ? 'Please wait…' : 'Next'}
+              onPress={handleNext}
+              isBold
+              disabled={busy}
+            />
+          </View>
         </ScrollView>
       </TouchableWithoutFeedback>
     </Container>
@@ -292,12 +268,5 @@ const getStyles = ({ colors }) =>
       fontSize: 12,
       color: colors.darkGrey,
       marginBottom: 15,
-    },
-    choiceTitle: {
-      textAlign: 'center',
-      fontFamily: 'Poppins Medium',
-      fontSize: 14,
-      color: colors.shadow,
-      marginBottom: 4,
     },
   });

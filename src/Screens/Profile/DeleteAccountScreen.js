@@ -19,7 +19,8 @@ import useApiRequest from '@/Services/ApiV2';
 import { deletePushToken } from '@/Services/Push/pushPlatform';
 import { Constants } from '@/Utils';
 import { CONFIRM_WORD, canDelete, stage } from '@/Utils/accountDeletion';
-import { EMAIL, SMS, offersEmail } from '@/Utils/codeChannel';
+import CodeChannelPicker from '@/Components/CodeChannelPicker/CodeChannelPicker';
+import { EMAIL, SMS, maskedMobile } from '@/Utils/codeChannel';
 import { handedCode } from '@/Utils/handedCode';
 import {
   clearBookingState,
@@ -46,6 +47,7 @@ const DeleteAccountScreen = () => {
   const deleteRequest = useApiRequest();
 
   const [check, setCheck] = useState(null);
+  const [channel, setChannel] = useState(SMS); // where the code is to go
   const [sentBy, setSentBy] = useState(null); // 'sms' | 'email' once a code went out
   const [code, setCode] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -67,17 +69,17 @@ const DeleteAccountScreen = () => {
     })();
   }, []);
 
-  const sendCode = async channel => {
+  const sendCode = async how => {
     const { response, error } = await codeRequest.request(
       'POST',
       Constants.API.CUSTOMER_DELETION_CODE(userInfo.id),
-      { channel },
+      { channel: how },
     );
     if (error || !response?.data) {
       Alert.alert('Code Not Sent', error || 'Please try again.');
       return;
     }
-    setSentBy(channel);
+    setSentBy(how);
     // a test environment that hands a texted code to the app
     const handed = handedCode(response.data);
     if (handed) {
@@ -106,9 +108,7 @@ const DeleteAccountScreen = () => {
   };
 
   const sentTo =
-    sentBy === EMAIL
-      ? check?.emailHint
-      : `+63 ******${String(userInfo?.mobile || '').slice(-4)}`;
+    sentBy === EMAIL ? check?.emailHint : maskedMobile(userInfo?.mobile);
 
   const body = () => {
     if (!check) {
@@ -140,24 +140,24 @@ const DeleteAccountScreen = () => {
         {!sentBy ? (
           <View style={styles.actions}>
             <Text style={styles.subtitle}>
-              First we send you a code to confirm it is you.
+              First we send you a code to confirm it is you. Where should it go?
             </Text>
-            <AppButton
-              title={`Text the code to +63 ******${String(
-                userInfo?.mobile || '',
-              ).slice(-4)}`}
-              onPress={() => sendCode(SMS)}
+            <CodeChannelPicker
+              mobileNumber={userInfo?.mobile}
+              options={check}
+              selected={channel}
+              onSelect={setChannel}
               disabled={codeRequest.loading}
-              isBold
             />
-            {offersEmail(check) ? (
+            <View style={styles.sendButton}>
               <AppButton
-                title={`Email the code to ${check.emailHint}`}
-                mode="outlined"
-                onPress={() => sendCode(EMAIL)}
+                title={codeRequest.loading ? 'Sending…' : 'Send code'}
+                onPress={() => sendCode(channel)}
                 disabled={codeRequest.loading}
+                isBold
+                noSpacing
               />
-            ) : null}
+            </View>
           </View>
         ) : (
           <View style={styles.actions}>
@@ -285,6 +285,7 @@ const getStyles = ({ colors }) =>
       marginBottom: 4,
     },
     actions: { gap: 4 },
+    sendButton: { marginTop: 16 },
     resend: { alignSelf: 'center', paddingVertical: 12 },
     resendText: {
       fontSize: 13,

@@ -7,6 +7,7 @@ import {
   BookingHistoryScreen,
   CashInScreen,
   ChatScreen,
+  CodeChannelScreen,
   CompleteProfileScreen,
   ConfirmDetailsScreen,
   CongratsScreen,
@@ -120,6 +121,11 @@ const ApplicationNavigator = () => {
             <Stack.Screen
               name="LoginScreen"
               component={LoginScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="CodeChannelScreen"
+              component={CodeChannelScreen}
               options={{ headerShown: false }}
             />
             <Stack.Screen
