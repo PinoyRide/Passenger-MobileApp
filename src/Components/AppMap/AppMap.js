@@ -29,7 +29,7 @@ import useVehicleTracker from '../../Utils/useVehicleTracker';
 import NavArrow from './NavArrow';
 import MapView, { Circle, Marker, Polyline } from 'react-native-maps';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { boundsAround, ringsAt } from '../../Utils/radarPing';
+import { SWEEP_MS, boundsAround, ringsAt } from '../../Utils/radarPing';
 import { Constants } from '@/Utils';
 import { fetchWithTimeout } from '@/Utils/Network';
 import useNetworkStatus from '@/Hooks/useNetworkStatus';
@@ -75,9 +75,12 @@ const NearbyDot = ({ coordinate }) => {
 };
 
 // The radar ping while a rider is being found: gold rings sweeping out from
-// the pickup to the reach of the request, over a faint line where it ends
-// (Utils/radarPing.js). On a phone set to reduce motion, only the line.
+// the pickup to the reach of the request (Utils/radarPing.js), and nothing
+// else: no fixed line where the reach ends (the owner, 2026-11-22: "only the
+// radar should be showing"). On a phone set to reduce motion the rings hold
+// still.
 const RADAR_FRAME_MS = 40;
+const RADAR_STILL_MS = SWEEP_MS * 0.3;
 const gold = alpha => `rgba(254, 193, 7, ${alpha.toFixed(3)})`;
 const RadarPing = ({ center, radiusM }) => {
   const [still, setStill] = useState(false);
@@ -104,27 +107,17 @@ const RadarPing = ({ center, radiusM }) => {
   }, [still]);
   return (
     <>
-      <Circle
-        center={center}
-        radius={radiusM}
-        strokeWidth={2}
-        strokeColor={gold(0.75)}
-        fillColor={gold(0.06)}
-        zIndex={1}
-      />
-      {still
-        ? null
-        : ringsAt(elapsed).map((ring, i) => (
-            <Circle
-              key={`ring-${i}`}
-              center={center}
-              radius={Math.max(1, ring.share * radiusM)}
-              strokeWidth={2}
-              strokeColor={gold(0.9 * ring.alpha)}
-              fillColor={gold(0.2 * ring.alpha)}
-              zIndex={2}
-            />
-          ))}
+      {ringsAt(still ? RADAR_STILL_MS : elapsed).map((ring, i) => (
+        <Circle
+          key={`ring-${i}`}
+          center={center}
+          radius={Math.max(1, ring.share * radiusM)}
+          strokeWidth={2}
+          strokeColor={gold(0.9 * ring.alpha)}
+          fillColor={gold(0.2 * ring.alpha)}
+          zIndex={2}
+        />
+      ))}
     </>
   );
 };
