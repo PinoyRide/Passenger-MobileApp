@@ -386,8 +386,9 @@ const getStyles = ({ colors }) =>
       fontWeight: '600',
       color: '#fff',
     },
+    // the map takes what the panel leaves
     mapWrapper: {
-      flex: 6,
+      flex: 1,
       width,
       position: 'relative',
     },
@@ -411,8 +412,13 @@ const getStyles = ({ colors }) =>
       fontSize: 14,
       textAlign: 'center',
     },
+    // As tall as what it holds, so Save Location always shows above
+    // Android's navigation bar (the owner, 2026-11-22: "fix this page it is
+    // overlapping"). A fixed 40% of the screen was shorter than the fields
+    // and the button, which ended under the bar. On a short screen it stops
+    // at 60% and scrolls, so some map stays.
     bottomPanel: {
-      flex: 4,
+      maxHeight: '60%',
       backgroundColor: '#fff',
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
@@ -426,6 +432,7 @@ const getStyles = ({ colors }) =>
     // ✅ Expand bottom panel when keyboard is visible
     bottomPanelExpanded: {
       flex: 1,
+      maxHeight: '100%',
     },
     scrollContent: {
       paddingBottom: 20,
