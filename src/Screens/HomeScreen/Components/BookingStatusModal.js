@@ -23,6 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { bottomSpace } from '@/Utils/bottomSpace';
 import { formatPeso } from '@/Utils/formatPeso';
 import { modern } from '@/Theme/modern';
+import TripActions from '@/Components/TripActions/TripActions';
 import FindingRider from './FindingRider';
 import RiderProfileSheet from './RiderProfileSheet';
 
@@ -68,10 +69,13 @@ const BookingStatusModal = ({
   dropoff,
   vehicle,
   etaText = '',
+  // during the trip: when it gets to the drop-off (Utils/arrivalText.js)
+  arrivalText = '',
   onCancelRide,
   statusBannerText = '',
-  showSafetyGuide = false,
-  onSafetyGuidePress,
+  // a short safety tip under the headline, and the emergency call beside it
+  safetyTip = '',
+  onEmergencyPress,
   confirmedBookingView = false,
 }) => {
   // The navigation bar may cover the bottom of the screen: keep the bottom content clear of it
@@ -258,13 +262,23 @@ const BookingStatusModal = ({
     'Your rider';
   const phoneNumber = ekycDetails?.pretty_mobile_no;
 
-  // "Jomar is on the way" over the arrival time while the rider comes; from
-  // their arrival on, the status line the sheet has always shown.
+  // "Jomar is on the way" over the arrival time while the rider comes; during
+  // the trip, where it goes over when it gets there (the owner, 2026-11-23:
+  // "fix the safety guide message make it cleaner and the ETA": it read "In
+  // transit. Do not use your phone · ETA 4:10 AM"); once the rider has
+  // arrived, the status line the sheet has always shown.
   const onTheWay = Number(bookingStatus) === 1 && !confirmedBookingView;
-  const headline = onTheWay
-    ? `${firstName || 'Your rider'} is on the way`
-    : statusBannerText;
-  const caption = onTheWay ? etaText : '';
+  const inTransit = Number(bookingStatus) === 2;
+  const dropoffName = placeName(dropoff, bookingDetails?.dropoff_location);
+  let headline = statusBannerText;
+  let caption = '';
+  if (onTheWay) {
+    headline = `${firstName || 'Your rider'} is on the way`;
+    caption = etaText;
+  } else if (inTransit) {
+    headline = dropoffName ? `Heading to ${dropoffName}` : 'On your way';
+    caption = arrivalText;
+  }
 
   const toggleExpanded = () => setExpanded(prev => !prev);
   const showTripDetails = confirmedBookingView && expanded;
@@ -327,15 +341,6 @@ const BookingStatusModal = ({
           <View style={styles.handle} />
         )}
 
-        {confirmedBookingView && showSafetyGuide ? (
-          <TouchableOpacity
-            testID="safety-guide-chip"
-            style={styles.safetyChip}
-            onPress={onSafetyGuidePress}>
-            <Text style={styles.safetyChipText}>Safety Guide</Text>
-          </TouchableOpacity>
-        ) : null}
-
         {headline ? (
           <Text style={styles.title} maxFontSizeMultiplier={1.3}>
             {headline}
@@ -346,6 +351,30 @@ const BookingStatusModal = ({
         {/* Minimized: only the handle and the status line, so the map is clear. */}
         {(!confirmedBookingView || expanded) && (
           <View style={styles.stack}>
+            {/* one quiet line of safety, with the emergency call beside it
+                while the map has no Emergency button (it had a blue "Safety
+                Guide" chip, which opened the same call) */}
+            {safetyTip ? (
+              <View style={styles.safety}>
+                <Icon
+                  name="shield-check-outline"
+                  size={18}
+                  color={look.success}
+                />
+                <Text style={styles.safetyText}>{safetyTip}</Text>
+                {onEmergencyPress ? (
+                  <Pressable
+                    testID="safety-guide-chip"
+                    onPress={onEmergencyPress}
+                    hitSlop={10}
+                    accessibilityRole="button"
+                    accessibilityLabel="Emergency call">
+                    <Text style={styles.emergencyText}>Emergency</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
+
             {/* the driver: photo (else the vehicle's, else a plain figure;
                 no name goes to an outside service), name, vehicle, plate.
                 Tapping it opens the rider's profile. */}
@@ -397,36 +426,7 @@ const BookingStatusModal = ({
               />
             </Pressable>
 
-            <View style={styles.actionRow}>
-              {actions.map(action => (
-                <Pressable
-                  key={action.id}
-                  onPress={action.onPress}
-                  disabled={action.disabled}
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    action.badge > 0
-                      ? `${action.label}, ${action.badge} unread`
-                      : action.label
-                  }
-                  accessibilityState={{ disabled: Boolean(action.disabled) }}
-                  style={({ pressed }) => [
-                    styles.action,
-                    action.disabled && styles.actionDisabled,
-                    pressed && styles.pressed,
-                  ]}>
-                  <Icon name={action.icon} size={20} color={look.ink} />
-                  <Text style={styles.actionText}>{action.label}</Text>
-                  {action.badge > 0 ? (
-                    <View style={styles.badge}>
-                      <Text style={styles.badgeText}>
-                        {action.badge > 9 ? '9+' : action.badge}
-                      </Text>
-                    </View>
-                  ) : null}
-                </Pressable>
-              ))}
-            </View>
+            <TripActions actions={actions} />
 
             {showTripDetails ? (
               <View style={styles.routeLine}>
@@ -542,19 +542,23 @@ const getStyles = (look, blue) =>
       color: look.muted,
       textAlign: 'center',
     },
-    safetyChip: {
-      alignSelf: 'flex-start',
-      height: 26,
-      paddingHorizontal: 10,
-      borderRadius: 4,
-      backgroundColor: blue,
-      justifyContent: 'center',
-      marginBottom: 10,
+    safety: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
     },
-    safetyChipText: {
+    safetyText: {
+      flex: 1,
+      fontFamily: 'Poppins Regular',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.inkSoft,
+    },
+    emergencyText: {
       fontFamily: 'Poppins Medium',
-      fontSize: 11,
-      color: '#FFFFFF',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.danger,
     },
     // Title role
     title: {
@@ -619,46 +623,6 @@ const getStyles = (look, blue) =>
     chevron: {
       marginLeft: -6,
       marginRight: -4,
-    },
-    actionRow: {
-      flexDirection: 'row',
-      gap: 9,
-    },
-    action: {
-      flex: 1,
-      minHeight: 54,
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 2,
-      borderRadius: look.radiusTile,
-      backgroundColor: look.soft,
-    },
-    actionDisabled: {
-      opacity: 0.5,
-    },
-    actionText: {
-      fontFamily: 'Poppins Medium',
-      fontSize: 11.5,
-      lineHeight: 15,
-      color: look.ink,
-    },
-    badge: {
-      position: 'absolute',
-      top: 6,
-      right: 14,
-      minWidth: 18,
-      height: 18,
-      paddingHorizontal: 4,
-      borderRadius: 9,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: look.danger,
-    },
-    badgeText: {
-      fontFamily: 'Poppins SemiBold',
-      fontSize: 11,
-      lineHeight: 14,
-      color: '#FFFFFF',
     },
     dot: {
       width: 10,

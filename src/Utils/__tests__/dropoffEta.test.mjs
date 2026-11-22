@@ -1,12 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import mod from '../dropoffEta.js';
-const {
-  getDropoffEtaText,
-  formatArrivalClock,
-  keepDropoffEta,
-  IN_TRANSIT,
-} = mod;
+const { getDropoffEtaText, formatArrivalClock, keepDropoffEta, IN_TRANSIT } =
+  mod;
 
 test('base banner is In transit. Do not use your phone', () => {
   assert.equal(IN_TRANSIT, 'In transit. Do not use your phone');
@@ -100,4 +96,39 @@ test('keepDropoffEta replaces with a newer valid drop-off eta', () => {
   const next = { state: 'en_route', eta_minutes: 6, leg: 'dropoff' };
   assert.equal(keepDropoffEta(prev, next), next);
   assert.equal(keepDropoffEta(null, next), next);
+});
+
+test('the trip sheet says when the trip gets to the drop-off, not "In transit"', () => {
+  const { dropoffArrivalText } = mod;
+  const noon = new Date(2026, 10, 5, 12, 0, 0, 0).getTime();
+  assert.equal(
+    dropoffArrivalText(
+      { state: 'en_route', eta_minutes: 15, leg: 'dropoff' },
+      noon,
+    ),
+    'Arriving at 12:15 PM · 15 min',
+  );
+  assert.equal(
+    dropoffArrivalText(
+      { state: 'en_route', pretty: 'Arriving in 1 hr 5 mins', leg: 'dropoff' },
+      noon,
+    ),
+    'Arriving at 1:05 PM · 1 hr 5 min',
+  );
+  assert.equal(
+    dropoffArrivalText(
+      { state: 'arriving_now', eta_minutes: 0, leg: 'dropoff' },
+      noon,
+    ),
+    'Arriving now',
+  );
+  // a pick-up ETA, or none yet: nothing under the headline
+  assert.equal(
+    dropoffArrivalText(
+      { state: 'en_route', eta_minutes: 8, leg: 'pickup' },
+      noon,
+    ),
+    '',
+  );
+  assert.equal(dropoffArrivalText(null, noon), '');
 });

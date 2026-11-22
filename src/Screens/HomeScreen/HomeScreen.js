@@ -88,7 +88,11 @@ import useNetworkStatus from '@/Hooks/useNetworkStatus';
 import { checkIsOnline } from '@/Utils/Network';
 import { getBookingVehicle } from '@/Hooks/bookingVehicle';
 import { getRiderEtaText } from '@/Hooks/riderEta';
-import { getDropoffEtaText, keepDropoffEta } from '@/Utils/dropoffEta';
+import {
+  dropoffArrivalText,
+  getDropoffEtaText,
+  keepDropoffEta,
+} from '@/Utils/dropoffEta';
 import useBookLaterConfig from '@/Hooks/useBookLaterConfig';
 import {
   formatScheduledDateLabel,
@@ -2380,12 +2384,15 @@ const HomeScreen = () => {
     (searchingSheet && !activeBooking?.replaces);
   const showMapBanner =
     showWaitingBanner && !confirmedBookingView && !sheetSaysIt;
-  // While the rider is on the way, the ETA banner (51) and the Safety Guide
-  // chip (26) float over the map just above the trip sheet (see their `bottom`
-  // styles below). The map counts that strip as covered when framing the rider.
+  // While the rider is on the way, the ETA banner (51) can float over the map
+  // just above the trip sheet (see its `bottom` style below). The map counts
+  // that strip as covered when framing the rider. (The Safety Guide chip that
+  // floated there too is a line in the sheet since 2026-11-23.)
   const floatingAboveSheet =
-    !confirmedBookingView && (statusNum === 1 || statusNum === 2)
-      ? 15 + (showMapBanner ? 59 : 0) + 26
+    !confirmedBookingView &&
+    (statusNum === 1 || statusNum === 2) &&
+    showMapBanner
+      ? 15 + 59
       : 0;
 
   const etaBannerText = riderArrived
@@ -2803,17 +2810,6 @@ New reference: ${activeBooking.ref_code}`
           </View>
         )}
 
-        {(statusNum === 1 || statusNum === 2) && !confirmedBookingView && (
-          <TouchableOpacity
-            testID="safety-guide-chip"
-            style={[
-              styles.safetyChip,
-              { bottom: modalHeight + 15 + (showMapBanner ? 59 : 0) },
-            ]}
-            onPress={() => setShowSafetyGuide(true)}>
-            <Text style={styles.safetyChipText}>Safety Guide</Text>
-          </TouchableOpacity>
-        )}
         {statusNum === 2 && <EmergencyButton style={styles.emergencyButton} />}
         <SafetyGuideModal
           visible={showSafetyGuide}
@@ -3043,10 +3039,18 @@ New reference: ${activeBooking.ref_code}`
                 ? bannerText
                 : ''
             }
-            showSafetyGuide={
-              confirmedBookingView && (statusNum === 1 || statusNum === 2)
+            arrivalText={statusNum === 2 ? dropoffArrivalText(riderEta) : ''}
+            safetyTip={
+              statusNum === 2
+                ? 'Hold on, and keep your phone away while riding.'
+                : statusNum === 1
+                ? 'Check the plate number before you get on.'
+                : ''
             }
-            onSafetyGuidePress={() => setShowSafetyGuide(true)}
+            // the map shows an Emergency button during the trip itself
+            onEmergencyPress={
+              statusNum === 1 ? () => setShowSafetyGuide(true) : undefined
+            }
           />
         )}
 
@@ -3094,21 +3098,6 @@ const getStyles = ({ colors, look }) =>
       flex: 1,
       width,
       height,
-    },
-    safetyChip: {
-      position: 'absolute',
-      left: 30,
-      height: 26,
-      paddingHorizontal: 10,
-      borderRadius: 4,
-      backgroundColor: '#084CF7',
-      justifyContent: 'center',
-      zIndex: 10,
-    },
-    safetyChipText: {
-      fontFamily: 'Poppins Medium',
-      fontSize: 11,
-      color: '#FFFFFF',
     },
     emergencyButton: {
       position: 'absolute',

@@ -1,34 +1,96 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Image,
-  Keyboard,
   Linking,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from 'react-native';
-import Container from '@/Components/Container/Container';
 import { useTheme } from 'react-native-paper';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useDispatch } from 'react-redux';
+import Container from '@/Components/Container/Container';
+import ProfileAvatar from '@/Components/ProfileAvatar/ProfileAvatar';
 import { addRatedBookingId, clearBookingState } from '@/Redux/Slices/userSlice';
 import { AlertBox, AppButton, AppTextInput } from '@/Components';
-import { AppUtil, Constants } from '@/Utils';
+import { Constants } from '@/Utils';
 import usePostRequest from '@/Services/Api';
-import { bookingKey, transformBooking } from '@/Hooks/bookingTransform';
+import {
+  bookingKey,
+  getRiderPhoto,
+  transformBooking,
+} from '@/Hooks/bookingTransform';
+import { getBookingVehicle } from '@/Hooks/bookingVehicle';
+import { formatPeso } from '@/Utils/formatPeso';
+import { modern } from '@/Theme/modern';
 
+const SUPPORT_NUMBER = '09770368299';
+
+// What each number of stars means, said under them.
+const RATING_WORDS = ['', 'Bad', 'Poor', 'Okay', 'Good', 'Great'];
+
+const PAYMENT = {
+  cash: { label: 'Cash', icon: 'cash' },
+  wallet: { label: 'Wallet', icon: 'wallet-outline' },
+};
+
+const parseJson = value => {
+  if (!value) {
+    return {};
+  }
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return {};
+    }
+  }
+  return value;
+};
+
+// A place's first part: "Makati Square".
+const placeName = text =>
+  String(text || '')
+    .split(',')[0]
+    .trim();
+
+// A distance as the apps say it: "450 m", "2.4 km".
+const distanceText = meters =>
+  meters < 1000
+    ? `${Math.round(meters)} m`
+    : `${(meters / 1000).toFixed(1).replace(/\.0$/, '')} km`;
+
+// After a trip: how it went with the rider, in the shared look (the owner,
+// 2026-11-23: "the how was your ride section also lacks styling, align the
+// styling or UI"). The rider, five stars and a word for them, an optional
+// compliment, then the trip: its route, fare and how it was paid, and where it
+// ended when that was away from the drop-off. Submit, or close to skip.
 const RatingScreen = () => {
-  const { colors } = useTheme();
-  const styles = getStyles({ colors });
+  const look = modern(useTheme());
+  const styles = getStyles(look);
   const navigation = useNavigation();
   const route = useRoute();
   const dispatch = useDispatch();
 
-  const paymentDetails = route?.params?.bookingDetails?.payment_details || {};
+  const booking = route?.params?.bookingDetails || {};
+  const paymentDetails = parseJson(booking.payment_details);
+  const rider = booking.rider_details || {};
+  const firstName = rider?.ekyc_details?.first_name?.trim() || '';
+  const lastName = rider?.ekyc_details?.last_name?.trim() || '';
+  const vehicle = getBookingVehicle(booking, rider);
+  const payment =
+    PAYMENT[
+      String(
+        paymentDetails?.type || booking.payment_type || 'cash',
+      ).toLowerCase()
+    ] || PAYMENT.cash;
+  const fare = paymentDetails?.total_amount ?? booking.total_amount;
+  const endedAway =
+    booking.ended_away && Number.isFinite(Number(booking.end_distance_m));
+
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [alertMessage, setAlertMessage] = useState('');
@@ -39,18 +101,16 @@ const RatingScreen = () => {
   // Remember this trip as rated/skipped, then drop the saved booking. Home
   // keeps the completed booking saved until here so a reload re-prompts.
   const finishRating = () => {
-    const b = route?.params?.bookingDetails;
     dispatch(
       addRatedBookingId(
-        b?.id != null ? bookingKey(b) : paymentDetails?.booking_id,
+        booking?.id != null ? bookingKey(booking) : paymentDetails?.booking_id,
       ),
     );
     dispatch(clearBookingState());
   };
 
-  const handleBack = () => {
+  const goHome = () => {
     finishRating();
-
     navigation.reset({
       index: 0,
       routes: [{ name: 'HomeScreen' }],
@@ -58,56 +118,38 @@ const RatingScreen = () => {
   };
 
   const handleSubmit = () => {
-    triggerRateBooking();
-  };
-
-  const handleContactSupport = () => {
-    const url = Platform.OS === 'android' ? 'tel:09770368299' : 'telprompt:';
-    Linking.openURL(url);
-  };
-
-  const handleViewBookingDetails = () => {
-    const raw = route?.params?.bookingDetails;
-    if (!raw) {
-      return;
-    }
-
-    navigation.navigate('BookingDetailsScreen', {
-      bookingDetails: transformBooking(raw),
-    });
-  };
-
-  const triggerRateBooking = () => {
     rateBooking.makePostRequest(Constants.ENDPOINT.RATE_BOOKING, {
-      booking_id: paymentDetails?.booking_id,
+      booking_id: paymentDetails?.booking_id ?? booking?.id,
       rate: rating,
       compliment: comment,
     });
   };
 
-  const handleRateBooking = () => {
+  const handleContactSupport = () => {
+    Linking.openURL(
+      Platform.OS === 'android' ? `tel:${SUPPORT_NUMBER}` : 'telprompt:',
+    );
+  };
+
+  const handleViewDetails = () => {
+    if (!booking?.id) {
+      return;
+    }
+    navigation.navigate('BookingDetailsScreen', {
+      bookingDetails: transformBooking(booking),
+    });
+  };
+
+  useEffect(() => {
     if (rateBooking.error) {
       setAlertMessage(rateBooking.error);
       setShowAlert(true);
       return;
     }
-
-    if (!rateBooking.response) {
-      return;
+    if (rateBooking.response) {
+      goHome();
     }
-
-    finishRating();
-
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'HomeScreen' }],
-    });
-  };
-
-  useEffect(() => {
-    console.log(route?.params?.bookingDetails);
-    AppUtil.debugDeep(route?.params?.bookingDetails);
-    handleRateBooking();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rateBooking.response, rateBooking.error]);
 
   return (
@@ -120,103 +162,145 @@ const RatingScreen = () => {
           setVisible={setShowAlert}
         />
       ) : null}
-      <Container style={styles.container}>
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}>
-            <View style={styles.content}>
-              {/* Top buttons */}
-              <View style={styles.buttonGroupContainer}>
-                <TouchableOpacity
-                  onPress={handleBack}
-                  style={styles.iconButton}>
-                  <Image
-                    source={require('@/Assets/Common/Close.png')}
-                    style={styles.backIcon}
-                    resizeMode="contain"
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={handleContactSupport}>
-                  <Text style={styles.contactSupport}>Contact Support</Text>
-                </TouchableOpacity>
-              </View>
+      <Container style={styles.page} background={look.page}>
+        <View style={styles.top}>
+          <Pressable
+            onPress={goHome}
+            hitSlop={8}
+            style={styles.close}
+            accessibilityRole="button"
+            accessibilityLabel="Close without rating">
+            <Icon name="close" size={24} color={look.ink} />
+          </Pressable>
+          <Pressable
+            onPress={handleContactSupport}
+            hitSlop={8}
+            accessibilityRole="button">
+            <Text style={styles.support}>Contact support</Text>
+          </Pressable>
+        </View>
 
-              {/* Title */}
-              <Text style={styles.title}>How was your Rider?</Text>
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={styles.body}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}>
+          <View style={styles.rider}>
+            <ProfileAvatar
+              uri={getRiderPhoto(rider)}
+              name={`${firstName} ${lastName}`.trim() || undefined}
+              size={72}
+            />
+            <Text style={styles.title} accessibilityRole="header">
+              {firstName
+                ? `How was your ride with ${firstName}?`
+                : 'How was your ride?'}
+            </Text>
+            {vehicle?.label || vehicle?.plateNumber ? (
+              <Text style={styles.vehicle} numberOfLines={1}>
+                {[vehicle?.label, vehicle?.plateNumber]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </Text>
+            ) : null}
+          </View>
 
-              {/* Rider Image + Stars */}
-              <View style={styles.riderRatingRow}>
-                <Image
-                  source={require('@/Assets/Common/Default_Profile.png')}
-                  style={styles.profileImage}
+          <View style={styles.stars} accessibilityRole="adjustable">
+            {[1, 2, 3, 4, 5].map(star => (
+              <Pressable
+                key={star}
+                onPress={() => setRating(star)}
+                hitSlop={4}
+                accessibilityRole="button"
+                accessibilityLabel={`${star} ${star === 1 ? 'star' : 'stars'}`}
+                accessibilityState={{ selected: rating === star }}>
+                <Icon
+                  name="star"
+                  size={42}
+                  color={rating >= star ? look.gold : look.tile}
                 />
-                <View style={styles.starsContainer}>
-                  {[1, 2, 3, 4, 5].map(star => (
-                    <TouchableOpacity
-                      key={star}
-                      onPress={() => setRating(star)}
-                      activeOpacity={0.7}>
-                      <Text
-                        style={[
-                          styles.star,
-                          rating >= star && styles.filledStar,
-                        ]}>
-                        {rating >= star ? '★' : '★'}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
+              </Pressable>
+            ))}
+          </View>
+          <Text style={styles.ratingWord}>{RATING_WORDS[rating]}</Text>
 
-              {/* Comment input */}
-              <AppTextInput
-                placeholder="Share your compliment (Optional)"
-                value={comment}
-                onChangeText={setComment}
-                inputMode="comment"
+          <AppTextInput
+            placeholder={
+              rating >= 4
+                ? 'Add a compliment (optional)'
+                : 'What could have been better? (optional)'
+            }
+            value={comment}
+            onChangeText={setComment}
+            inputMode="comment"
+          />
+
+          <View style={styles.trip}>
+            <View style={styles.routeLine}>
+              <View style={styles.dot} />
+              <Text style={styles.routeName} numberOfLines={1}>
+                {placeName(booking.pickup_location) || 'Pick-up'}
+              </Text>
+              <Icon
+                name="arrow-right"
+                size={15}
+                color={look.muted}
+                style={styles.routeArrow}
               />
-
-              {/* Fare and payment method */}
-              <View style={styles.fareRow}>
-                <Text
-                  style={[styles.feeText, { fontFamily: 'Poppins SemiBold' }]}>
-                  Final Fare
-                </Text>
-                <Text
-                  style={[styles.feeText, { fontFamily: 'Poppins SemiBold' }]}>
-                  {paymentDetails.total_amount}
-                </Text>
-              </View>
-
-              <View style={styles.fareRow}>
-                <Text style={styles.feeText}>Payment Method</Text>
-                <Image
-                  source={require('@/Assets/Common/HomeScreen/BottomModal/Ellipse_9.png')}
-                  style={styles.optionIcon}
-                />
+              <View style={styles.square} />
+              <Text style={styles.routeName} numberOfLines={1}>
+                {placeName(booking.dropoff_location) || 'Drop-off'}
+              </Text>
+            </View>
+            <View style={styles.hairline} />
+            <View style={styles.line}>
+              <Text style={styles.lineLabel}>Total fare</Text>
+              <Text style={styles.fare}>
+                {fare == null || fare === '' ? '—' : formatPeso(fare)}
+              </Text>
+            </View>
+            <View style={styles.line}>
+              <Text style={styles.lineLabel}>Paid with</Text>
+              <View style={styles.paid}>
+                <Icon name={payment.icon} size={18} color={look.inkSoft} />
+                <Text style={styles.lineValue}>{payment.label}</Text>
               </View>
             </View>
+            {endedAway ? (
+              <View style={styles.away}>
+                <Icon
+                  name="map-marker-alert-outline"
+                  size={18}
+                  color={look.inkSoft}
+                />
+                <Text style={styles.awayText}>
+                  {`Your trip ended ${distanceText(
+                    Number(booking.end_distance_m),
+                  )} from your drop-off. Not right? Contact support.`}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        </ScrollView>
 
-            {/* Submit Button fixed at bottom */}
-            <View style={styles.bottomButtonWrapper}>
-              <AppButton
-                title="View Booking Details"
-                onPress={handleViewBookingDetails}
-                isBold
-                mode="outlined"
-              />
-              <AppButton
-                title="Submit"
-                onPress={handleSubmit}
-                disabled={rateBooking.loading}
-                isBold
-                mode="contained"
-              />
-            </View>
-          </ScrollView>
-        </TouchableWithoutFeedback>
+        <View style={styles.footer}>
+          <AppButton
+            title="Submit"
+            onPress={handleSubmit}
+            disabled={rateBooking.loading}
+            isBold
+            mode="contained"
+          />
+          {booking?.id ? (
+            <Pressable
+              onPress={handleViewDetails}
+              hitSlop={8}
+              style={styles.details}
+              accessibilityRole="button">
+              <Text style={styles.detailsText}>View trip details</Text>
+            </Pressable>
+          ) : null}
+        </View>
       </Container>
     </>
   );
@@ -224,87 +308,166 @@ const RatingScreen = () => {
 
 export default RatingScreen;
 
-const getStyles = ({ colors }) =>
+const getStyles = look =>
   StyleSheet.create({
-    container: {
+    page: {
       flex: 1,
-      paddingHorizontal: 15,
+      paddingHorizontal: 20,
     },
-    scrollContent: {
-      flexGrow: 1,
-      justifyContent: 'space-between',
-      paddingBottom: 20,
-    },
-    content: {
+    flex: {
       flex: 1,
     },
-    buttonGroupContainer: {
+    top: {
+      height: 52,
       flexDirection: 'row',
+      alignItems: 'center',
       justifyContent: 'space-between',
+    },
+    close: {
+      width: 44,
+      height: 44,
+      marginLeft: -10,
       alignItems: 'center',
-      marginBottom: 15,
-    },
-    contactSupport: {
-      fontFamily: 'Poppins SemiBold',
-      fontWeight: '600',
-      fontSize: 12,
-      color: colors.blue,
-    },
-    iconButton: {
-      width: 14,
-      height: 14,
       justifyContent: 'center',
-      alignItems: 'center',
     },
-    backIcon: {
-      width: 14,
-      height: 14,
+    support: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 14,
+      lineHeight: 20,
+      color: look.link,
+    },
+    body: {
+      paddingTop: 8,
+      paddingBottom: 16,
+    },
+    rider: {
+      alignItems: 'center',
     },
     title: {
+      marginTop: 14,
       fontFamily: 'Poppins SemiBold',
-      fontWeight: '600',
-      fontSize: 16,
-      marginBottom: 10,
+      fontSize: 22,
+      lineHeight: 28,
+      letterSpacing: -0.5,
+      color: look.ink,
+      textAlign: 'center',
     },
-    riderRatingRow: {
+    vehicle: {
+      marginTop: 2,
+      fontFamily: 'Poppins Regular',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.muted,
+    },
+    stars: {
+      marginTop: 22,
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 6,
+    },
+    ratingWord: {
+      marginTop: 4,
+      marginBottom: 18,
+      fontFamily: 'Poppins Medium',
+      fontSize: 15,
+      lineHeight: 20,
+      color: look.inkSoft,
+      textAlign: 'center',
+    },
+    trip: {
+      marginTop: 18,
+      padding: 16,
+      gap: 10,
+      borderRadius: look.radiusCard,
+      backgroundColor: look.card,
+      borderWidth: 1,
+      borderColor: look.hairline,
+    },
+    routeLine: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 20,
     },
-    profileImage: {
-      width: 55,
-      height: 55,
-      borderRadius: 30,
-      marginRight: 10,
+    dot: {
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+      backgroundColor: look.link,
     },
-    starsContainer: {
+    square: {
+      width: 10,
+      height: 10,
+      borderRadius: 2,
+      backgroundColor: look.ink,
+    },
+    routeName: {
+      flexShrink: 1,
+      marginLeft: 8,
+      fontFamily: 'Poppins Medium',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.ink,
+    },
+    routeArrow: {
+      marginHorizontal: 8,
+    },
+    hairline: {
+      height: 1,
+      backgroundColor: look.hairline,
+    },
+    line: {
       flexDirection: 'row',
-    },
-    star: {
-      fontSize: 24,
-      color: colors.grey,
-      marginHorizontal: 2,
-    },
-    filledStar: {
-      color: colors.primary,
-    },
-    fareRow: {
-      flexDirection: 'row',
+      alignItems: 'center',
       justifyContent: 'space-between',
-      marginVertical: 4,
     },
-    optionIcon: {
-      width: 22,
-      height: 22,
-      resizeMode: 'contain',
-      marginRight: 6,
-    },
-    feeText: {
+    lineLabel: {
       fontFamily: 'Poppins Regular',
-      fontSize: 16,
-      color: '#333',
+      fontSize: 14,
+      lineHeight: 20,
+      color: look.muted,
     },
-    bottomButtonWrapper: {
-      paddingTop: 20,
+    fare: {
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 18,
+      lineHeight: 24,
+      letterSpacing: -0.3,
+      color: look.ink,
+    },
+    paid: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    lineValue: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 14,
+      lineHeight: 20,
+      color: look.ink,
+    },
+    away: {
+      flexDirection: 'row',
+      gap: 8,
+      paddingTop: 2,
+    },
+    awayText: {
+      flex: 1,
+      fontFamily: 'Poppins Regular',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.inkSoft,
+    },
+    footer: {
+      paddingTop: 8,
+      paddingBottom: 8,
+    },
+    details: {
+      minHeight: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    detailsText: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 14,
+      lineHeight: 20,
+      color: look.inkSoft,
     },
   });
