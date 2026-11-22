@@ -80,6 +80,14 @@ function places(version, code) {
         content.replace(/(app_version:\s*')[\d.]+(')/, `$1${version}$2`),
       optional: true,
     },
+    // The build number the app's own screens show (the Account page): a
+    // self-update carries its version, not its build number.
+    {
+      file: 'src/Utils/appBuild.js',
+      replace: content =>
+        setCode ? content.replace(/(APP_BUILD = )\d+/, `$1${code}`) : content,
+      optional: true,
+    },
   ];
 }
 

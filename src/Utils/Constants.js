@@ -30,6 +30,10 @@ const BASE_DEV = {
     CUSTOMER_SELFIE: id => `customers/${id}/selfie`,
     CUSTOMER_CONSENT: id => `customers/${id}/consent`,
     CUSTOMER: id => `customers/${id}`,
+    // the Wallet page: balance, whether it is active, the latest transactions; then all of them
+    CUSTOMER_WALLET: id => `customers/${id}/wallet`,
+    CUSTOMER_WALLET_HISTORY: (id, page, perPage = 20) =>
+      `customers/${id}/wallet/history?page=${page}&perPage=${perPage}`,
     // deleting one's own account: what stands in the way, the confirming code, the deletion
     CUSTOMER_DELETION_CHECK: id => `customers/${id}/deletion/check`,
     CUSTOMER_DELETION_CODE: id => `customers/${id}/deletion/code`,

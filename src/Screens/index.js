@@ -24,6 +24,7 @@ export { default as BookingDetailsScreen } from './BookingHistoryScreen/BookingD
 export { default as PromoReferralsScreen } from './PromoReferralsScreen/PromoReferralsScreen';
 export { default as PaymentOptionScreen } from './PaymentOptionScreen/PaymentOptionScreen';
 export { default as WalletScreen } from './WalletScreen/WalletScreen';
+export { default as WalletTransactionsScreen } from './WalletScreen/WalletTransactionsScreen';
 export { default as OTPScreen } from './Login/OTPScreen';
 export { default as CodeChannelScreen } from './Login/CodeChannelScreen';
 export { default as EKYCScreen } from './Login/EKYCScreen';

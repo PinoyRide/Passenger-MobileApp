@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   FlatList,
   Image,
@@ -9,12 +9,40 @@ import {
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
+import { useDispatch } from 'react-redux';
 import Clipboard from '@react-native-clipboard/clipboard';
+import usePostRequest from '@/Services/Api';
+import { Constants } from '@/Utils';
+import { markPromosSeen } from '@/Redux/Slices/userSlice';
 
 const PromoReferralsScreen = () => {
   const { colors } = useTheme();
   const styles = getStyles({ colors });
   const navigation = useNavigation();
+  const dispatch = useDispatch();
+  const promoRequest = usePostRequest();
+  const [promos, setPromos] = useState([]);
+
+  // The promos open to this passenger. Seeing them here is what takes the
+  // "NEW" badge off the Account page.
+  useEffect(() => {
+    let showing = true;
+    (async () => {
+      const { response } = await promoRequest.makePostRequest(
+        Constants.ENDPOINT.GET_PROMO_LIST,
+        {},
+      );
+      const list = response?.data?.promos;
+      if (showing && Array.isArray(list)) {
+        setPromos(list);
+        dispatch(markPromosSeen(list.map(promo => promo.id)));
+      }
+    })();
+    return () => {
+      showing = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // This will later come from API
   const [referralCode] = useState('4F45HFA9AS');
@@ -32,11 +60,11 @@ const PromoReferralsScreen = () => {
   const renderPromoItem = ({ item }) => {
     return (
       <View style={styles.promoCard}>
-        <Image
-          source={{ uri: item.image }}
-          style={styles.promoImage}
-          resizeMode="cover"
-        />
+        <Text style={styles.promoName}>{item.name || item.code}</Text>
+        <Text style={styles.promoMeta}>
+          {`Code ${item.code}`}
+          {item.end_date ? ` · until ${item.end_date}` : ''}
+        </Text>
       </View>
     );
   };
@@ -64,10 +92,13 @@ const PromoReferralsScreen = () => {
 
         {/* Promo Card FlatList */}
         <FlatList
-          data={[]}
+          data={promos}
           renderItem={renderPromoItem}
-          keyExtractor={(item, index) => index.toString()}
+          keyExtractor={(item, index) => String(item.id ?? index)}
           contentContainerStyle={styles.promoList}
+          ListEmptyComponent={
+            <Text style={styles.subtitle}>No promos right now.</Text>
+          }
           showsVerticalScrollIndicator={false}
         />
 
@@ -202,9 +233,19 @@ const getStyles = ({ colors }) =>
       shadowRadius: 4,
       marginBottom: 10,
     },
-    promoImage: {
-      width: '100%',
-      height: 150,
-      borderRadius: 12,
+    promoName: {
+      paddingHorizontal: 16,
+      paddingTop: 14,
+      fontFamily: 'Poppins Medium',
+      fontSize: 15,
+      color: colors.shadow,
+    },
+    promoMeta: {
+      paddingHorizontal: 16,
+      paddingTop: 2,
+      paddingBottom: 14,
+      fontFamily: 'Poppins Regular',
+      fontSize: 12,
+      color: colors.grey4,
     },
   });

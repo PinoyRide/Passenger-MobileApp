@@ -18,11 +18,15 @@ const Container = ({
   scrollRef,
   handleScroll,
   viewIsInsideTabBar,
+  // the page's colour, when it is not the theme's background (the warm page
+  // of the Account and Settings pages, modern().page)
+  background,
   ...rest
 }) => {
   const headerHeight = useHeaderHeight();
   const { colors } = useTheme();
   const styles = getStyles({ colors }, progressBar);
+  const pageColor = background ?? colors.background;
 
   const edges = ['left', 'right', 'bottom'];
 
@@ -44,7 +48,7 @@ const Container = ({
       style={{
         ...styles.container,
         ...style,
-        backgroundColor: colors.background,
+        backgroundColor: pageColor,
       }}>
       {scrollable ? (
         <KeyboardAwareScrollView
@@ -56,18 +60,14 @@ const Container = ({
           bounces={bounces}
           contentContainerStyle={[
             styles.spacing,
-            { flexGrow: 1, backgroundColor: colors.background },
+            { flexGrow: 1, backgroundColor: pageColor },
           ]}
           {...rest}>
           {/* {!!progressBar && <AppProgressBar progressBar={progressBar} />} */}
           {children}
         </KeyboardAwareScrollView>
       ) : (
-        <View
-          style={[
-            styles.spacing,
-            { flex: 1, backgroundColor: colors.background },
-          ]}>
+        <View style={[styles.spacing, { flex: 1, backgroundColor: pageColor }]}>
           {/* {!!progressBar && <AppProgressBar progressBar={progressBar} />} */}
           {children}
         </View>

@@ -49,6 +49,12 @@ test('iOS has the same version and the same build number as Android', () => {
   ]);
 });
 
+test('the build number the app shows is the one Android has', () => {
+  assert.deepEqual(all(read('src/Utils/appBuild.js'), /APP_BUILD = (\d+)/g), [
+    String(build),
+  ]);
+});
+
 // The version goes up with every change. A self-update carries JavaScript and
 // images only, so which installed apps take it is decided by a second number:
 // the APK version, the version at which android/ or the packages the app is

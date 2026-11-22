@@ -81,6 +81,9 @@ const initialState = {
   parkedAdvanceBookings: [],
   // Completed bookings the passenger already rated or skipped (no re-prompt).
   ratedBookingIds: [],
+  // Promos the passenger has seen on Promo & referrals: the Account page
+  // counts the others as "NEW".
+  seenPromoIds: [],
 };
 
 const userSlice = createSlice({
@@ -95,6 +98,7 @@ const userSlice = createSlice({
         state.acknowledgedScheduledIds = [];
         state.minimizedAdvanceBookingIds = [];
         state.parkedAdvanceBookings = [];
+        state.seenPromoIds = [];
       }
       state.userInfo = action.payload;
     },
@@ -262,6 +266,16 @@ const userSlice = createSlice({
       }
       state.ratedBookingIds = list.slice(-50);
     },
+    markPromosSeen: (state, action) => {
+      const list = (state.seenPromoIds || []).slice();
+      (action.payload || []).forEach(raw => {
+        const id = String(raw ?? '');
+        if (id && !list.includes(id)) {
+          list.push(id);
+        }
+      });
+      state.seenPromoIds = list.slice(-200);
+    },
     // A rider cancel re-pools the trip under a NEW booking id (old one is
     // cancelled with replaced_by). Swap every saved reference to the new id.
     replaceBookingId: (state, action) => {
@@ -334,6 +348,7 @@ export const {
   setBookingStatus,
   setRiderDetails,
   addRatedBookingId,
+  markPromosSeen,
   setPickupLocation,
   setDropoffLocation,
   setSelectedService,
@@ -378,3 +393,4 @@ export const selectParkedAdvanceBookings = state =>
 export default userSlice.reducer;
 
 export const selectRatedBookingIds = state => state.user.ratedBookingIds || [];
+export const selectSeenPromoIds = state => state.user.seenPromoIds || [];

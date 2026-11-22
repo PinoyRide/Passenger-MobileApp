@@ -40,6 +40,7 @@ import {
   UpdateRequiredScreen,
   UploadIDScreen,
   WalletScreen,
+  WalletTransactionsScreen,
 } from '@/Screens';
 import { Text } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
@@ -222,6 +223,11 @@ const ApplicationNavigator = () => {
             <Stack.Screen
               name="WalletScreen"
               component={WalletScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="WalletTransactionsScreen"
+              component={WalletTransactionsScreen}
               options={{ headerShown: false }}
             />
             <Stack.Screen

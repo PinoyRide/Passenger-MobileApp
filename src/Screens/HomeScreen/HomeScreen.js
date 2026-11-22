@@ -26,9 +26,11 @@ import {
   AdvanceBookingAcceptedModal,
   AlertBox,
   AppMap,
+  ProfileAvatar,
   RiderFoundAlertBox,
   SuccessAlertBox,
 } from '@/Components';
+import { fullNameOf } from '@/Utils/personName';
 import {
   useFocusEffect,
   useNavigation,
@@ -149,6 +151,9 @@ const HomeScreen = () => {
 
   // ✅ Use Redux selectors instead of local state
   const userInfo = useSelector(selectUserInfo);
+  // the profile button on the map shows who is signed in
+  const accountName = fullNameOf(userInfo);
+  const accountPhoto = userInfo?.selfie || userInfo?.ekyc_details?.selfie || '';
   const hasShownLoginSuccess = useSelector(selectHasShownLoginSuccess);
   const activeBooking = useSelector(selectActiveBooking);
   const ratedBookingIds = useSelector(selectRatedBookingIds);
@@ -2639,11 +2644,24 @@ New reference: ${activeBooking.ref_code}`
         ) : (
           <TouchableOpacity
             style={styles.profileButton}
-            onPress={handleTopRightPress}>
-            <Image
-              source={require('@/Assets/Common/HomeScreen/Profile_Icon_1.png')}
-              style={styles.iconImage}
-            />
+            onPress={handleTopRightPress}
+            accessibilityRole="button"
+            accessibilityLabel="Your account">
+            {/* the passenger's photo, else their initials (the owner,
+                2026-11-22); the plain icon only while neither is known */}
+            {accountPhoto || accountName ? (
+              <ProfileAvatar
+                uri={accountPhoto}
+                name={accountName}
+                size={51}
+                style={styles.profileAvatar}
+              />
+            ) : (
+              <Image
+                source={require('@/Assets/Common/HomeScreen/Profile_Icon_1.png')}
+                style={styles.iconImage}
+              />
+            )}
           </TouchableOpacity>
         )}
 
@@ -3171,6 +3189,17 @@ const getStyles = ({ colors, look }) =>
       width: 51,
       height: 51,
       resizeMode: 'contain',
+    },
+    // the photo or the initials on the map: a white ring keeps it apart from
+    // the streets under it
+    profileAvatar: {
+      borderWidth: 2.5,
+      borderColor: '#FFFFFF',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.18,
+      shadowRadius: 6,
+      elevation: 5,
     },
     // Figma frame 93: 370x51, 30pt side inset, radius 10, #FEC107
     banner: {

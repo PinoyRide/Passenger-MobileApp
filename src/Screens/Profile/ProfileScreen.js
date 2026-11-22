@@ -14,6 +14,7 @@ import { useTheme } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { selectUserInfo } from '@/Redux/Slices/userSlice';
 import { useSelector } from 'react-redux';
+import { displayMobile } from '@/Utils/personName';
 
 const ProfileScreen = () => {
   const { colors } = useTheme();
@@ -53,25 +54,8 @@ const ProfileScreen = () => {
     return address.startsWith('-') ? address.slice(1).trim() : address.trim();
   };
 
-  // "+63 966 852 7271", as the Rider app shows a number (its displayMobile):
-  // +63 replaces the leading 0, never both. Stored as 639XXXXXXXXX; older
-  // rows may hold 09XXXXXXXXX.
-  const formatMobile = mobile => {
-    const digits = String(mobile || '').replace(/\D/g, '');
-    if (!digits) {
-      return 'N/A';
-    }
-    let local = digits;
-    if (local.startsWith('63')) {
-      local = local.slice(2);
-    } else if (local.startsWith('0')) {
-      local = local.slice(1);
-    }
-    if (local.length !== 10) {
-      return String(mobile);
-    }
-    return `+63 ${local.slice(0, 3)} ${local.slice(3, 6)} ${local.slice(6)}`;
-  };
+  // "+63 966 852 7271" (Utils/personName.js, as the Account page shows it)
+  const formatMobile = mobile => displayMobile(mobile) || 'N/A';
 
   const fields = [
     {

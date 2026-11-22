@@ -1,29 +1,54 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   BackHandler,
-  Image,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
+import Constants from 'expo-constants';
+import { useTheme } from 'react-native-paper';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useDispatch, useSelector } from 'react-redux';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Container from '@/Components/Container/Container';
 import ProfileAvatar from '@/Components/ProfileAvatar/ProfileAvatar';
-import { useTheme } from 'react-native-paper';
-import { useNavigation } from '@react-navigation/native';
-import { selectUserInfo } from '@/Redux/Slices/userSlice';
-import { useSelector } from 'react-redux';
-import { AppUtil } from '@/Utils';
+import { MenuGroup, MenuRow } from '@/Components/Menu/Menu';
+import SafetyGuideModal from '@/Components/SafetyGuide/SafetyGuideModal';
+import usePostRequest from '@/Services/Api';
+import useApiRequest from '@/Services/ApiV2';
+import useLogOut from '@/Services/useLogOut';
+import { Constants as AppConstants, AppUtil } from '@/Utils';
+import { APP_BUILD } from '@/Utils/appBuild';
+import { displayMobile, fullNameOf } from '@/Utils/personName';
+import { modern } from '@/Theme/modern';
+import {
+  markPromosSeen,
+  selectSeenPromoIds,
+  selectUserInfo,
+} from '@/Redux/Slices/userSlice';
 
+// The Account page, opened by the profile button on the map, as the owner's
+// design draws it (2026-11-22): who you are, the wallet, the ride pages,
+// Settings and help, help in an emergency, and Log out (also in Settings).
 const SettingsScreen = () => {
-  const { colors } = useTheme();
-  const styles = getStyles({ colors });
+  const look = modern(useTheme());
+  const styles = getStyles(look);
   const navigation = useNavigation();
+  const dispatch = useDispatch();
   const userInfo = useSelector(selectUserInfo);
-
-  useEffect(() => {
-    AppUtil.debugDeep(userInfo);
-  });
+  const seenPromoIds = useSelector(selectSeenPromoIds);
+  const { confirmLogOut, loggingOut } = useLogOut();
+  const walletRequest = useApiRequest();
+  const promoRequest = usePostRequest();
+  const [balance, setBalance] = useState(
+    userInfo?.wallet_details?.avail_balance ?? null,
+  );
+  const [promoIds, setPromoIds] = useState([]);
+  const [showSafetyGuide, setShowSafetyGuide] = useState(false);
 
   useEffect(() => {
     const backHandler = BackHandler.addEventListener(
@@ -33,171 +58,349 @@ const SettingsScreen = () => {
         return true;
       },
     );
-
     return () => backHandler.remove();
   }, [navigation]);
 
-  const toTitleCase = str =>
-    String(str || '')
-      .toLowerCase()
-      .split(' ')
-      .filter(Boolean)
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
+  // the balance and the promos, read again each time the page shows
+  useFocusEffect(
+    useCallback(() => {
+      if (!userInfo?.id) {
+        return undefined;
+      }
+      let showing = true;
+      (async () => {
+        const { response } = await walletRequest.request(
+          'GET',
+          `${AppConstants.API.CUSTOMER_WALLET(userInfo.id)}?take=0`,
+        );
+        const amount = response?.data?.availBalance;
+        if (showing && amount !== undefined && amount !== null) {
+          setBalance(amount);
+        }
+      })();
+      (async () => {
+        const { response } = await promoRequest.makePostRequest(
+          AppConstants.ENDPOINT.GET_PROMO_LIST,
+          {},
+        );
+        const promos = response?.data?.promos;
+        if (showing && Array.isArray(promos)) {
+          setPromoIds(promos.map(promo => String(promo.id)));
+        }
+      })();
+      return () => {
+        showing = false;
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [userInfo?.id]),
+  );
 
-  // A new account has no name or photo yet: say what to do instead of
-  // showing a blank name beside somebody else's picture.
   const profileComplete = !!userInfo?.profile_complete;
-  const displayName =
-    [
-      toTitleCase(userInfo?.ekyc_details?.first_name || userInfo?.fname),
-      toTitleCase(userInfo?.ekyc_details?.last_name || userInfo?.lname),
-    ]
-      .filter(Boolean)
-      .join(' ') || (profileComplete ? 'User' : 'Complete your profile');
+  const name = fullNameOf(userInfo);
   const photo = userInfo?.selfie || userInfo?.ekyc_details?.selfie || '';
+  const mobile = displayMobile(
+    userInfo?.mobile || userInfo?.ekyc_details?.mobile_no,
+  );
+  const balanceText = `₱${AppUtil.fn(balance ?? 0)}`;
+  const newPromos = promoIds.filter(id => !seenPromoIds.includes(id)).length;
+  const version = Constants.expoConfig?.version ?? '';
 
-  const buttonList = [
-    {
-      id: 'booking_history',
-      label: 'Booking History',
-      onPress: () => navigation.navigate('BookingHistoryScreen'),
-    },
-    {
-      id: 'promo_and_referrals',
-      label: 'Promo & Referrals',
-      onPress: () => navigation.navigate('PromoReferralsScreen'),
-    },
-    {
-      id: 'payment_option',
-      label: 'Payment Option',
-      onPress: () => navigation.navigate('PaymentOptionScreen'),
-    },
-    {
-      id: 'wallet',
-      label: 'Wallet',
-      onPress: () => navigation.navigate('WalletScreen'),
-    },
-    {
-      // Log out and Delete account (the owner, 2026-11-22)
-      id: 'settings',
-      label: 'Settings',
-      onPress: () => navigation.navigate('AccountSettingsScreen'),
-    },
-  ];
-
-  const handleBack = () => {
-    navigation.popToTop();
+  const openPromos = () => {
+    dispatch(markPromosSeen(promoIds));
+    navigation.navigate('PromoReferralsScreen');
   };
 
-  return (
-    <Container style={styles.container}>
-      <View>
-        <TouchableOpacity onPress={handleBack}>
-          <Image
-            source={require('@/Assets/Common/Back.png')}
-            style={styles.backIcon}
-            resizeMode="contain"
-          />
-        </TouchableOpacity>
+  // asked for by the owner, 2026-11-22: there is no help page yet
+  const helpComingSoon = () =>
+    Alert.alert(
+      'Help & support',
+      'Help and support in the app is coming soon.',
+    );
 
-        <TouchableOpacity
-          style={styles.profileButton}
+  return (
+    <Container style={styles.container} background={look.page}>
+      <View style={styles.header}>
+        <Pressable
+          onPress={() => navigation.popToTop()}
+          hitSlop={8}
+          style={styles.back}
+          accessibilityRole="button"
+          accessibilityLabel="Back">
+          <Icon name="chevron-left" size={28} color={look.ink} />
+        </Pressable>
+        <Text style={styles.title} accessibilityRole="header">
+          Account
+        </Text>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}>
+        {/* who you are: the card opens the profile, Edit the name and photo */}
+        <Pressable
           onPress={() =>
             navigation.navigate(
               profileComplete ? 'ProfileScreen' : 'CompleteProfileScreen',
             )
-          }>
-          <ProfileAvatar uri={photo} size={46} />
-          <View style={styles.profileTextContainer}>
-            <Text style={styles.name}>{displayName}</Text>
+          }
+          accessibilityRole="button"
+          accessibilityLabel={[name || 'Your profile', mobile]
+            .filter(Boolean)
+            .join(', ')}
+          style={({ pressed }) => [styles.profile, pressed && styles.pressed]}>
+          <ProfileAvatar uri={photo} name={name} size={56} />
+          <View style={styles.flex}>
+            <Text style={styles.name} numberOfLines={1}>
+              {name || 'Complete your profile'}
+            </Text>
+            {mobile ? <Text style={styles.mobile}>{mobile}</Text> : null}
           </View>
-          <Text style={styles.profileLabel}>
-            {profileComplete ? 'Profile' : 'Set up'}
-          </Text>
-        </TouchableOpacity>
+          <Pressable
+            onPress={() => navigation.navigate('CompleteProfileScreen')}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={
+              profileComplete
+                ? 'Edit your name or photo'
+                : 'Set up your profile'
+            }
+            style={({ pressed }) => [styles.edit, pressed && styles.pressed]}>
+            <Text style={styles.editText}>
+              {profileComplete ? 'Edit' : 'Set up'}
+            </Text>
+          </Pressable>
+        </Pressable>
 
-        {buttonList.map(button => (
-          <TouchableOpacity
-            key={button.id}
-            style={styles.buttons}
-            onPress={button.onPress}>
-            <Text style={styles.label}>{button.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+        {/* the wallet: the card opens the Wallet page, Cash in the top-up */}
+        <Pressable
+          onPress={() => navigation.navigate('WalletScreen')}
+          accessibilityRole="button"
+          accessibilityLabel={`PinoyRide Wallet, ${balanceText}`}
+          style={({ pressed }) => [styles.wallet, pressed && styles.pressed]}>
+          <View style={styles.flex}>
+            <Text style={styles.walletLabel}>PINOYRIDE WALLET</Text>
+            <Text
+              style={styles.walletAmount}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              maxFontSizeMultiplier={1.2}>
+              {balanceText}
+            </Text>
+          </View>
+          <Pressable
+            onPress={() =>
+              navigation.navigate('CashInScreen', {
+                available_balance: balance ?? 0,
+              })
+            }
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel="Cash in"
+            style={({ pressed }) => [styles.cashIn, pressed && styles.pressed]}>
+            <Icon name="plus" size={17} color={look.onGold} />
+            <Text style={styles.cashInText}>Cash in</Text>
+          </Pressable>
+        </Pressable>
+
+        <MenuGroup label="Rides" style={styles.section}>
+          <MenuRow
+            icon="clock-outline"
+            title="Booking history"
+            onPress={() => navigation.navigate('BookingHistoryScreen')}
+          />
+          <MenuRow
+            icon="tag-outline"
+            title="Promo & referrals"
+            badge={newPromos > 0 ? `${newPromos} NEW` : undefined}
+            onPress={openPromos}
+          />
+          <MenuRow
+            icon="credit-card-outline"
+            title="Payment options"
+            value="Cash"
+            onPress={() => navigation.navigate('PaymentOptionScreen')}
+          />
+        </MenuGroup>
+
+        <MenuGroup label="Account" style={styles.section}>
+          <MenuRow
+            icon="cog-outline"
+            title="Settings"
+            tone="quiet"
+            onPress={() => navigation.navigate('AccountSettingsScreen')}
+          />
+          <MenuRow
+            icon="help-circle-outline"
+            title="Help & support"
+            tone="quiet"
+            onPress={helpComingSoon}
+          />
+        </MenuGroup>
+
+        <MenuGroup style={styles.emergency}>
+          <MenuRow
+            icon="shield-alert-outline"
+            title="Emergency assistance"
+            note="Reach help while you are on a trip"
+            tone="danger"
+            onPress={() => setShowSafetyGuide(true)}
+          />
+        </MenuGroup>
+
+        <View style={styles.spacer} />
+
+        <Pressable
+          onPress={confirmLogOut}
+          disabled={loggingOut}
+          accessibilityRole="button"
+          accessibilityState={{ busy: loggingOut }}
+          style={styles.logOut}>
+          {loggingOut ? (
+            <ActivityIndicator color={look.muted} />
+          ) : (
+            <Text style={styles.logOutText}>Log out</Text>
+          )}
+        </Pressable>
+        <Text style={styles.version}>
+          PinoyRide {version} · build {APP_BUILD}
+        </Text>
+      </ScrollView>
+
+      <SafetyGuideModal
+        visible={showSafetyGuide}
+        onClose={() => setShowSafetyGuide(false)}
+      />
     </Container>
   );
 };
 
 export default SettingsScreen;
 
-const getStyles = ({ colors }) =>
+const getStyles = look =>
   StyleSheet.create({
-    container: {
-      flex: 1,
-      paddingHorizontal: 15,
-    },
-    backIcon: {
-      width: 23,
-      height: 23,
-      marginBottom: 20,
-    },
-    profileButton: {
+    // Container keeps 20 at each side; the design's cards sit 16 from the edge
+    container: { flex: 1, paddingHorizontal: 0 },
+    header: {
+      height: 52,
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingVertical: 18,
-      paddingHorizontal: 20,
-      borderRadius: 10,
-      marginBottom: 17,
-      shadowColor: colors.shadow,
-      shadowOpacity: 0.1,
-      shadowRadius: 10,
-      elevation: 3,
-      backgroundColor: colors.onPrimary,
+      marginLeft: -14,
+      marginBottom: 6,
     },
-    profileTextContainer: {
-      flex: 1,
+    back: {
+      width: 44,
+      height: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    title: {
       marginLeft: 10,
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 20,
+      lineHeight: 26,
+      letterSpacing: -0.3,
+      color: look.ink,
     },
-    profileLabel: {
-      backgroundColor: colors.lightBlue,
-      color: colors.shadow,
-      paddingHorizontal: 10,
-      paddingVertical: 2,
-      borderRadius: 10,
-      fontSize: 10,
-      fontFamily: 'Poppins Regular',
-    },
+    scroll: { flexGrow: 1, marginHorizontal: -4, paddingBottom: 16 },
+    flex: { flex: 1 },
+    pressed: { opacity: 0.85 },
     profile: {
-      width: 46,
-      height: 46,
-      borderRadius: 23,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 14,
+      padding: 14,
+      borderRadius: look.radiusCard,
+      backgroundColor: look.card,
     },
     name: {
-      fontFamily: 'Poppins Medium',
-      fontWeight: 500,
-      fontSize: 14,
-      color: colors.grey3,
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 16,
+      lineHeight: 22,
+      letterSpacing: -0.2,
+      color: look.ink,
     },
-    buttons: {
-      height: 40,
+    mobile: {
+      marginTop: 1,
+      fontFamily: 'Poppins Regular',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.muted,
+    },
+    edit: {
+      height: 27,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      justifyContent: 'center',
+      backgroundColor: look.chip,
+    },
+    editText: {
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 13,
+      lineHeight: 17,
+      color: look.chipInk,
+    },
+    wallet: {
+      marginTop: 14,
+      minHeight: 82,
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 33,
-      borderRadius: 10,
-      marginVertical: 5,
-      shadowColor: colors.shadow,
-      shadowOpacity: 0.1,
-      shadowRadius: 10,
-      elevation: 3,
-      backgroundColor: colors.onPrimary,
+      gap: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      borderRadius: look.radiusCard,
+      backgroundColor: look.gold,
     },
-    label: {
+    walletLabel: {
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 11.5,
+      lineHeight: 15,
+      letterSpacing: 1.2,
+      color: look.onGoldSoft,
+    },
+    walletAmount: {
+      marginTop: 4,
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 28,
+      lineHeight: 34,
+      letterSpacing: -0.6,
+      color: look.onGold,
+    },
+    cashIn: {
+      height: 32,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 14,
+      borderRadius: 10,
+      backgroundColor: look.goldShade,
+    },
+    cashInText: {
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 14,
+      lineHeight: 18,
+      color: look.onGold,
+    },
+    section: { marginTop: 24 },
+    emergency: { marginTop: 22 },
+    spacer: { flex: 1, minHeight: 32 },
+    logOut: {
+      alignSelf: 'center',
+      minHeight: 44,
+      paddingHorizontal: 24,
+      justifyContent: 'center',
+    },
+    logOutText: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 15,
+      lineHeight: 20,
+      color: look.muted,
+    },
+    version: {
+      marginTop: 18,
+      textAlign: 'center',
       fontFamily: 'Poppins Regular',
-      fontWeight: 400,
-      fontSize: 16,
-      color: colors.grey3,
+      fontSize: 12,
+      lineHeight: 16,
+      color: look.faint,
     },
   });
