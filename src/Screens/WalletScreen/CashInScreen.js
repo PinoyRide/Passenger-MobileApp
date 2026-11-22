@@ -20,6 +20,8 @@ import { AppUtil, Constants } from '@/Utils';
 import { AlertBox, AppButton, AppTextError, AppTextInput } from '@/Components';
 import { selectUserInfo } from '@/Redux/Slices/userSlice';
 import { useSelector } from 'react-redux';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { bottomSpace } from '@/Utils/bottomSpace';
 
 const cashInValidationSchema = Yup.object().shape({
   amount: Yup.string()
@@ -41,6 +43,8 @@ const cashInValidationSchema = Yup.object().shape({
 });
 
 const CashInScreen = () => {
+  // The navigation bar may cover the bottom of the screen: keep the bottom content clear of it
+  const { bottom: bottomInset } = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = getStyles({ colors });
   const navigation = useNavigation();
@@ -226,7 +230,11 @@ const CashInScreen = () => {
                 </View>
 
                 {/* Proceed Button */}
-                <View style={styles.buttonContainer}>
+                <View
+                  style={[
+                    styles.buttonContainer,
+                    { paddingBottom: bottomSpace(bottomInset, 20) },
+                  ]}>
                   {requestToPay.loading ? (
                     <View style={styles.loadingContainer}>
                       <ActivityIndicator size="large" color={colors.primary} />

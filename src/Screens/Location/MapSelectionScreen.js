@@ -16,8 +16,12 @@ import { openSettings } from 'react-native-permissions';
 import { Constants } from '@/Utils';
 import { fetchWithTimeout } from '@/Utils/Network';
 import { useLocation } from '@/Hooks/useLocation';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { bottomSpace } from '@/Utils/bottomSpace';
 
 const MapSelectionScreen = () => {
+  // The navigation bar may cover the bottom of the screen: keep the bottom content clear of it
+  const { bottom: bottomInset } = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = getStyles({ colors });
   const navigation = useNavigation();
@@ -167,7 +171,10 @@ const MapSelectionScreen = () => {
 
       <View style={styles.bottomPanel}>
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: bottomSpace(bottomInset, 20) },
+          ]}
           showsVerticalScrollIndicator={false}>
           <View style={styles.toggleContainer}>
             <TouchableOpacity

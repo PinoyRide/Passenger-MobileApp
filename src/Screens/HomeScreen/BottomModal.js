@@ -3,6 +3,8 @@ import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AppButton } from '@/Components';
 import { useTheme } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { bottomSpace } from '@/Utils/bottomSpace';
 
 const PAYMENT_METHOD_CONFIG = {
   cash: {
@@ -47,6 +49,8 @@ const BottomModal = ({
   showMinimizeButton = false,
   onMinimizePress,
 }) => {
+  // The navigation bar may cover the bottom of the screen: keep the bottom content clear of it
+  const { bottom: bottomInset } = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = getStyles({ colors });
   const navigation = useNavigation();
@@ -155,7 +159,12 @@ const BottomModal = ({
   };
 
   return (
-    <View style={styles.modalContainer} onLayout={onLayout}>
+    <View
+      style={[
+        styles.modalContainer,
+        { paddingBottom: bottomSpace(bottomInset, 30) },
+      ]}
+      onLayout={onLayout}>
       {selectedService ? (
         <>
           {/* service header */}

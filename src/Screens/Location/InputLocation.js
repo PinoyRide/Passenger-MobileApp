@@ -18,6 +18,8 @@ import { Constants } from '@/Utils';
 import { fetchWithTimeout } from '@/Utils/Network';
 import Geolocation from 'react-native-geolocation-service';
 import { removeSavedPlace, selectSavedPlaces } from '@/Redux/Slices/userSlice';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { bottomSpace } from '@/Utils/bottomSpace';
 
 const getIconForType = type => {
   switch (type) {
@@ -60,6 +62,8 @@ const savedLocationButtons = [
 ];
 
 const InputLocation = () => {
+  // The navigation bar may cover the bottom of the screen: keep the bottom content clear of it
+  const { bottom: bottomInset } = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = getStyles({ colors });
   const navigation = useNavigation();
@@ -666,7 +670,11 @@ const InputLocation = () => {
         )}
       </ScrollView>
 
-      <View style={styles.bottomButtonContainer}>
+      <View
+        style={[
+          styles.bottomButtonContainer,
+          { paddingBottom: bottomSpace(bottomInset, 20) },
+        ]}>
         <TouchableOpacity onPress={handleOpenMap} style={styles.bottomButton}>
           <Image
             source={require('@/Assets/Common/Location/Map.png')}

@@ -11,6 +11,8 @@ import {
 import { useTheme } from 'react-native-paper';
 import { AlertBox } from '@/Components';
 import TopUpAmountModal from './TopUpAmountModal';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { bottomSpace } from '@/Utils/bottomSpace';
 
 const PaymentMethodModal = ({
   visible,
@@ -18,6 +20,8 @@ const PaymentMethodModal = ({
   onSelect,
   selectedPayment = 'cash',
 }) => {
+  // The navigation bar may cover the bottom of the screen: keep the bottom content clear of it
+  const { bottom: bottomInset } = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = getStyles({ colors });
 
@@ -55,7 +59,11 @@ const PaymentMethodModal = ({
           <View style={styles.backdrop} />
         </TouchableWithoutFeedback>
 
-        <View style={styles.modalContainer}>
+        <View
+          style={[
+            styles.modalContainer,
+            { paddingBottom: bottomSpace(bottomInset, 20) },
+          ]}>
           <Text style={styles.title}>Select Payment</Text>
 
           {/* cash option */}

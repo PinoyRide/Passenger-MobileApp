@@ -22,6 +22,8 @@ import { openSettings } from 'react-native-permissions';
 import { Constants } from '@/Utils';
 import { addSavedPlace, updateSavedPlace } from '@/Redux/Slices/userSlice';
 import { useLocation } from '@/Hooks/useLocation';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { bottomSpace } from '@/Utils/bottomSpace';
 
 const getIconForType = type => {
   switch (type) {
@@ -37,6 +39,8 @@ const getIconForType = type => {
 };
 
 const SaveLocationScreen = () => {
+  // The navigation bar may cover the bottom of the screen: keep the bottom content clear of it
+  const { bottom: bottomInset } = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = getStyles({ colors });
   const navigation = useNavigation();
@@ -269,7 +273,10 @@ const SaveLocationScreen = () => {
               isKeyboardVisible && styles.bottomPanelExpanded,
             ]}>
             <ScrollView
-              contentContainerStyle={styles.scrollContent}
+              contentContainerStyle={[
+                styles.scrollContent,
+                { paddingBottom: bottomSpace(bottomInset, 20) },
+              ]}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled">
               <View style={styles.inputSection}>

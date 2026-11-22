@@ -19,6 +19,8 @@ import { Constants } from '@/Utils';
 import usePostRequest from '@/Services/Api';
 import { getBookingVehicle } from '@/Hooks/bookingVehicle';
 import { getRiderPhoto } from '@/Hooks/bookingTransform';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { bottomSpace } from '@/Utils/bottomSpace';
 
 const UNREAD_POLL_INTERVAL_MS = 5000;
 
@@ -71,6 +73,8 @@ const BookingStatusModal = ({
   onSafetyGuidePress,
   confirmedBookingView = false,
 }) => {
+  // The navigation bar may cover the bottom of the screen: keep the bottom content clear of it
+  const { bottom: bottomInset } = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = getStyles({ colors });
   const navigation = useNavigation();
@@ -243,7 +247,11 @@ const BookingStatusModal = ({
   if (!riderDetails) {
     return (
       <View style={styles.overlay} onLayout={onLayout}>
-        <View style={styles.container}>
+        <View
+          style={[
+            styles.container,
+            { paddingBottom: bottomSpace(bottomInset, 50) },
+          ]}>
           <View style={styles.loadingRow}>
             <ActivityIndicator size="small" color={colors.primary} />
             <Text style={styles.loadingText}>Finding your rider...</Text>
@@ -260,7 +268,11 @@ const BookingStatusModal = ({
 
   return (
     <View style={styles.overlay} onLayout={onLayout}>
-      <View style={styles.container}>
+      <View
+        style={[
+          styles.container,
+          { paddingBottom: bottomSpace(bottomInset, 50) },
+        ]}>
         {confirmedBookingView ? (
           <View
             style={styles.swipeHandleHit}

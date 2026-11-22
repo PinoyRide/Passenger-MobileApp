@@ -12,8 +12,12 @@ import {
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { AppButton, AppTextInput } from '@/Components';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { bottomSpace } from '@/Utils/bottomSpace';
 
 const NoteToRiderModal = ({ visible, onClose, onSave, initialNote = '' }) => {
+  // The navigation bar may cover the bottom of the screen: keep the bottom content clear of it
+  const { bottom: bottomInset } = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = getStyles({ colors });
   const [note, setNote] = useState(initialNote);
@@ -48,7 +52,11 @@ const NoteToRiderModal = ({ visible, onClose, onSave, initialNote = '' }) => {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardContainer}>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View style={styles.modalContainer}>
+          <View
+            style={[
+              styles.modalContainer,
+              { paddingBottom: bottomSpace(bottomInset, 40) },
+            ]}>
             <Text style={styles.title}>Note To Rider</Text>
 
             <AppTextInput

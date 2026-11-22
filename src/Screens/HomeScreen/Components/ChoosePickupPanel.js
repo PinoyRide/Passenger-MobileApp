@@ -4,13 +4,22 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { AppButton } from '@/Components';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { bottomSpace } from '@/Utils/bottomSpace';
 
 const ChoosePickupPanel = ({ address, onAddressPress, onChoose, onLayout }) => {
+  // The navigation bar may cover the bottom of the screen: keep the bottom content clear of it
+  const { bottom: bottomInset } = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = getStyles({ colors });
 
   return (
-    <View style={styles.container} onLayout={onLayout}>
+    <View
+      style={[
+        styles.container,
+        { paddingBottom: bottomSpace(bottomInset, 46.5) },
+      ]}
+      onLayout={onLayout}>
       <TouchableOpacity
         style={styles.field}
         onPress={onAddressPress}

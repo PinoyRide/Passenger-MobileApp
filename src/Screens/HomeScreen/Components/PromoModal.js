@@ -14,6 +14,8 @@ import {
   View,
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { bottomSpace } from '@/Utils/bottomSpace';
 
 const PromoModal = ({
   visible,
@@ -23,6 +25,8 @@ const PromoModal = ({
   availablePromos = [],
   isLoading = false,
 }) => {
+  // The navigation bar may cover the bottom of the screen: keep the bottom content clear of it
+  const { bottom: bottomInset } = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = getStyles({ colors });
 
@@ -103,7 +107,11 @@ const PromoModal = ({
         <View style={styles.backdrop} />
       </TouchableWithoutFeedback>
 
-      <View style={styles.modalContainer}>
+      <View
+        style={[
+          styles.modalContainer,
+          { paddingBottom: bottomSpace(bottomInset, 34) },
+        ]}>
         <Text style={styles.title}>Select Promo</Text>
 
         <View style={styles.inputWrapper}>
