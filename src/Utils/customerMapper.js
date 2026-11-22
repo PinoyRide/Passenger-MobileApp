@@ -58,7 +58,6 @@ function toLegacyCustomer(dto) {
       source: ekyc.source,
     },
     wallet_details: toWallet(dto.wallet),
-    pr_wallet_details: toWallet(dto.pinoyRideWallet),
   };
 }
 
