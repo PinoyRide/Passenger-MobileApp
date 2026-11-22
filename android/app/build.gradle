@@ -62,8 +62,8 @@ android {
         applicationId 'com.pinoyride.customer'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 61
-        versionName "2.0.53"
+        versionCode 62
+        versionName "2.0.54"
         // Without this, the ready-made libraries inside dependencies (React Native, Hermes, ML Kit) are packed
         // for every chip type whatever was asked for, which adds about 50 MB that no phone uses.
         ndk {
