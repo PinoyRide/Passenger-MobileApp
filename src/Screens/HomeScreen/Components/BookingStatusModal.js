@@ -24,6 +24,7 @@ import { bottomSpace } from '@/Utils/bottomSpace';
 import { formatPeso } from '@/Utils/formatPeso';
 import { modern } from '@/Theme/modern';
 import FindingRider from './FindingRider';
+import RiderProfileSheet from './RiderProfileSheet';
 
 const UNREAD_POLL_INTERVAL_MS = 5000;
 
@@ -54,9 +55,10 @@ const placeName = (place, fallback) =>
 // "BookingStatusModal", and the design canvas): a headline ("Jomar is on the
 // way" over the arrival time), the driver card, Call / Message / Share trip,
 // the fare, and a quiet Cancel ride while the rider is on the way. Nothing the
-// data lacks is shown: no rating, no pickup PIN. While the rider's details
-// load, "Finding your rider". Once the rider has arrived, and during the trip,
-// the sheet swipes down to its headline, as before.
+// data lacks is shown: no pickup PIN. Tapping the driver card opens the
+// rider's profile (RiderProfileSheet), which adds their rating. While the
+// rider's details load, "Finding your rider". Once the rider has arrived, and
+// during the trip, the sheet swipes down to its headline, as before.
 const BookingStatusModal = ({
   onLayout,
   riderDetails,
@@ -80,6 +82,12 @@ const BookingStatusModal = ({
   const navigation = useNavigation();
   const userInfo = useSelector(selectUserInfo);
   const [expanded, setExpanded] = useState(true);
+  const [profileOpen, setProfileOpen] = useState(false);
+
+  // a new booking or a new rider starts with the profile closed
+  useEffect(() => {
+    setProfileOpen(false);
+  }, [bookingDetails?.id, riderDetails?.id]);
 
   const swipeResponder = useRef(
     PanResponder.create({
@@ -337,8 +345,24 @@ const BookingStatusModal = ({
         {(!confirmedBookingView || expanded) && (
           <View style={styles.stack}>
             {/* the driver: photo (else the vehicle's, else a plain figure;
-                no name goes to an outside service), name, vehicle, plate */}
-            <View style={styles.driverCard}>
+                no name goes to an outside service), name, vehicle, plate.
+                Tapping it opens the rider's profile. */}
+            <Pressable
+              onPress={() => setProfileOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel={[
+                shortName,
+                resolvedVehicle?.label,
+                resolvedVehicle?.plateNumber &&
+                  `plate ${resolvedVehicle.plateNumber}`,
+              ]
+                .filter(Boolean)
+                .join(', ')}
+              accessibilityHint="Opens the rider's profile"
+              style={({ pressed }) => [
+                styles.driverCard,
+                pressed && styles.pressed,
+              ]}>
               <ProfileAvatar
                 uri={
                   getRiderPhoto(riderDetails) ||
@@ -363,7 +387,13 @@ const BookingStatusModal = ({
                   </Text>
                 </View>
               ) : null}
-            </View>
+              <Icon
+                name="chevron-right"
+                size={20}
+                color={look.muted}
+                style={styles.chevron}
+              />
+            </Pressable>
 
             <View style={styles.actionRow}>
               {actions.map(action => (
@@ -443,6 +473,15 @@ const BookingStatusModal = ({
           </View>
         )}
       </View>
+
+      <RiderProfileSheet
+        visible={profileOpen}
+        onClose={() => setProfileOpen(false)}
+        riderDetails={riderDetails}
+        bookingDetails={bookingDetails}
+        vehicle={resolvedVehicle}
+        customerId={userInfo?.id}
+      />
     </View>
   );
 };
@@ -574,6 +613,10 @@ const getStyles = (look, blue) =>
       lineHeight: 16,
       letterSpacing: 0.4,
       color: look.surface,
+    },
+    chevron: {
+      marginLeft: -6,
+      marginRight: -4,
     },
     actionRow: {
       flexDirection: 'row',

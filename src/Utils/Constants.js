@@ -49,6 +49,7 @@ const BASE_DEV = {
     UPDATE_BOOKING_STATUS: 'booking/update_status_for_customer/',
     GET_BOOKING_HISTORY: 'booking/get_history/',
     GET_BOOKING_DETAILS: 'booking/get_details/',
+    RIDER_PROFILE: 'booking/rider_profile/',
     GET_BOOKING_CONTACT: 'booking/get_contact/',
     GET_BOOKING_CONFIG: 'booking/get_config/',
     GET_UPCOMING_BOOKINGS: 'booking/get_upcoming/',

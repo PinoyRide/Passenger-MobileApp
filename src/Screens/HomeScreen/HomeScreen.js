@@ -110,6 +110,7 @@ import {
   getReplacementId,
   isAdvanceAcceptedAcknowledged,
   isReturnedToPool,
+  riderHasSetOff,
   shouldShowRiderFoundAlert,
   transformBooking,
 } from '@/Hooks/bookingTransform';
@@ -1109,7 +1110,7 @@ const HomeScreen = () => {
 
         if (booking.status === 1 && !riderAlertShownRef.current) {
           AppUtil.debugDeep(riderDetails);
-          if (shouldShowRiderFoundAlert(booking)) {
+          if (shouldShowRiderFoundAlert(booking) && !riderHasSetOff(booking)) {
             setShowRiderFound(true);
           }
           riderAlertShownRef.current = true;
@@ -1569,6 +1570,14 @@ const HomeScreen = () => {
           : null,
       );
 
+      // "We found you a Rider!" (an advance booking's "Congratulations") goes
+      // by itself once the rider sets off for the pickup: the passenger watches
+      // the rider come on the map instead.
+      if (riderHasSetOff(data)) {
+        setShowRiderFound(false);
+        setShowAdvanceAccepted(false);
+      }
+
       if (statusNum === 5) {
         if (isReturnedToPool(data) || !hasRider(data, rider_details)) {
           dispatch(clearAcknowledgedScheduledForBooking(data.id));
@@ -1591,7 +1600,7 @@ const HomeScreen = () => {
           setRiderEtaReceivedAt(Date.now());
         }
         if (!riderAlertShownRef.current) {
-          if (shouldShowRiderFoundAlert(data)) {
+          if (shouldShowRiderFoundAlert(data) && !riderHasSetOff(data)) {
             setShowRiderFound(true);
           }
           riderAlertShownRef.current = true;
