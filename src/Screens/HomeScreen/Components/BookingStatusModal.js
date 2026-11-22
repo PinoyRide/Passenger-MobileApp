@@ -1,10 +1,9 @@
-import { AppButton, ProfileAvatar } from '@/Components';
+import { ProfileAvatar } from '@/Components';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Image,
   Linking,
   PanResponder,
+  Pressable,
   Share,
   StyleSheet,
   Text,
@@ -14,6 +13,7 @@ import {
 import { useTheme } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { selectUserInfo } from '@/Redux/Slices/userSlice';
 import { Constants } from '@/Utils';
 import usePostRequest from '@/Services/Api';
@@ -22,18 +22,14 @@ import { getRiderPhoto } from '@/Hooks/bookingTransform';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { bottomSpace } from '@/Utils/bottomSpace';
 import { formatPeso } from '@/Utils/formatPeso';
+import { modern } from '@/Theme/modern';
+import FindingRider from './FindingRider';
 
 const UNREAD_POLL_INTERVAL_MS = 5000;
 
 const PAYMENT_METHOD_CONFIG = {
-  cash: {
-    label: 'Cash',
-    icon: require('@/Assets/Common/HomeScreen/PaymentMethodModal/Cash.png'),
-  },
-  wallet: {
-    label: 'Wallet',
-    icon: require('@/Assets/Common/HomeScreen/PaymentMethodModal/Wallet.png'),
-  },
+  cash: { label: 'Cash' },
+  wallet: { label: 'Wallet' },
 };
 
 const parseJsonField = value => {
@@ -50,17 +46,27 @@ const parseJsonField = value => {
   return value;
 };
 
+// A place's first part: "SM Mall of Asia".
+const placeName = (place, fallback) =>
+  (place?.description || place?.address || fallback || '').split(',')[0].trim();
+
+// The trip sheet once a rider has the booking (docs/booking-redesign-spec.md,
+// "BookingStatusModal", and the design canvas): a headline ("Jomar is on the
+// way" over the arrival time), the driver card, Call / Message / Share trip,
+// the fare, and a quiet Cancel ride while the rider is on the way. Nothing the
+// data lacks is shown: no rating, no pickup PIN. While the rider's details
+// load, "Finding your rider". Once the rider has arrived, and during the trip,
+// the sheet swipes down to its headline, as before.
 const BookingStatusModal = ({
   onLayout,
   riderDetails,
-  onShareTrip,
   bookingDetails,
   bookingStatus,
   pickup,
   dropoff,
-  selectedService,
-  onChangeService,
   vehicle,
+  etaText = '',
+  onCancelRide,
   statusBannerText = '',
   showSafetyGuide = false,
   onSafetyGuidePress,
@@ -68,8 +74,9 @@ const BookingStatusModal = ({
 }) => {
   // The navigation bar may cover the bottom of the screen: keep the bottom content clear of it
   const { bottom: bottomInset } = useSafeAreaInsets();
-  const { colors } = useTheme();
-  const styles = getStyles({ colors });
+  const theme = useTheme();
+  const look = modern(theme);
+  const styles = getStyles(look, theme.colors.blue ?? '#084CF7');
   const navigation = useNavigation();
   const userInfo = useSelector(selectUserInfo);
   const [expanded, setExpanded] = useState(true);
@@ -101,24 +108,6 @@ const BookingStatusModal = ({
     Boolean(bookingDetails?.is_advance) &&
     (allPaymentDetails?.fare_is_estimate === true ||
       bookingDetails?.status === 5);
-  const finalFareLabel = showEstimatedFareLabels
-    ? 'Estimated Fare'
-    : 'Final Fare';
-  const totalFareLabel = showEstimatedFareLabels
-    ? 'Estimated Fare w/ Discount'
-    : 'Total Fare w/ Discount';
-  const finalFareDisplay =
-    allPaymentDetails?.pretty_total_amount_wo_promo ||
-    formatPeso(
-      paymentDetails?.total_amount_wo_promo ??
-        paymentDetails?.total_amount ??
-        bookingDetails?.total_amount,
-    );
-  const totalFareDisplay =
-    allPaymentDetails?.pretty_total_amount ||
-    formatPeso(
-      paymentDetails?.total_amount ?? bookingDetails?.total_amount ?? 0,
-    );
   const headerFareDisplay =
     allPaymentDetails?.pretty_total_amount ||
     formatPeso(
@@ -237,35 +226,74 @@ const BookingStatusModal = ({
     }
   };
 
+  const sheetStyle = [
+    styles.sheet,
+    { paddingBottom: bottomSpace(bottomInset, 24, 24) },
+  ];
+
   if (!riderDetails) {
     return (
       <View style={styles.overlay} onLayout={onLayout}>
-        <View
-          style={[
-            styles.container,
-            { paddingBottom: bottomSpace(bottomInset, 50) },
-          ]}>
-          <View style={styles.loadingRow}>
-            <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={styles.loadingText}>Finding your rider...</Text>
-          </View>
+        <View style={sheetStyle}>
+          <View style={styles.handle} />
+          <FindingRider />
         </View>
       </View>
     );
   }
 
   const ekycDetails = riderDetails?.ekyc_details;
+  const firstName = ekycDetails?.first_name?.trim() || '';
+  const lastInitial = ekycDetails?.last_name?.trim()?.[0];
+  const shortName =
+    [firstName, lastInitial && `${lastInitial}.`].filter(Boolean).join(' ') ||
+    'Your rider';
+  const phoneNumber = ekycDetails?.pretty_mobile_no;
+
+  // "Jomar is on the way" over the arrival time while the rider comes; from
+  // their arrival on, the status line the sheet has always shown.
+  const onTheWay = Number(bookingStatus) === 1 && !confirmedBookingView;
+  const headline = onTheWay
+    ? `${firstName || 'Your rider'} is on the way`
+    : statusBannerText;
+  const caption = onTheWay ? etaText : '';
 
   const toggleExpanded = () => setExpanded(prev => !prev);
   const showTripDetails = confirmedBookingView && expanded;
 
+  let fareCaption = '';
+  if (showEstimatedFareLabels) {
+    fareCaption = 'Estimated — final fare may change';
+  } else if (paymentType === 'cash') {
+    fareCaption = 'Hand the exact fare to your rider';
+  }
+
+  const actions = [
+    {
+      id: 'call',
+      icon: 'phone-outline',
+      label: 'Call',
+      onPress: handleCall,
+      disabled: !phoneNumber,
+    },
+    {
+      id: 'message',
+      icon: 'message-outline',
+      label: 'Message',
+      onPress: handleMessage,
+      badge: unreadCount,
+    },
+    {
+      id: 'share',
+      icon: 'share-variant-outline',
+      label: 'Share trip',
+      onPress: handleShareTrip,
+    },
+  ];
+
   return (
     <View style={styles.overlay} onLayout={onLayout}>
-      <View
-        style={[
-          styles.container,
-          { paddingBottom: bottomSpace(bottomInset, 50) },
-        ]}>
+      <View style={sheetStyle}>
         {confirmedBookingView ? (
           <View
             style={styles.swipeHandleHit}
@@ -279,13 +307,15 @@ const BookingStatusModal = ({
                 expanded ? 'Minimize trip details' : 'Show trip details'
               }
               style={styles.swipeHandleTouch}>
-              <View style={styles.swipeMarker} />
+              <View style={styles.handleBar} />
               {!expanded && (
                 <Text style={styles.expandHint}>▲ Show trip details</Text>
               )}
             </TouchableOpacity>
           </View>
-        ) : null}
+        ) : (
+          <View style={styles.handle} />
+        )}
 
         {confirmedBookingView && showSafetyGuide ? (
           <TouchableOpacity
@@ -296,158 +326,121 @@ const BookingStatusModal = ({
           </TouchableOpacity>
         ) : null}
 
-        {confirmedBookingView && statusBannerText ? (
-          <View style={styles.statusBanner}>
-            <Text style={styles.statusBannerText}>{statusBannerText}</Text>
-          </View>
+        {headline ? (
+          <Text style={styles.title} maxFontSizeMultiplier={1.3}>
+            {headline}
+          </Text>
         ) : null}
+        {caption ? <Text style={styles.caption}>{caption}</Text> : null}
 
         {/* Minimized: only the handle and the status line, so the map is clear. */}
         {(!confirmedBookingView || expanded) && (
-          <>
-            {/* Fare + Vehicle */}
-            <TouchableOpacity
-              style={styles.rowBetween}
-              onPress={onChangeService}
-              disabled={!(bookingStatus === 0 || bookingStatus === 4)}>
-              <View>
-                <Text style={styles.label}>
-                  {selectedService?.title || 'Vehicle'}
-                </Text>
-                {(bookingStatus === 0 || bookingStatus === 4) && (
-                  <Text style={styles.changeText}>Tap to change</Text>
-                )}
-              </View>
-              <Text style={styles.price}>{headerFareDisplay}</Text>
-            </TouchableOpacity>
-
-            {showTripDetails ? (
-              <>
-                <View style={styles.locationColumn}>
-                  <View style={styles.locationGroup}>
-                    <View style={styles.locationButton}>
-                      <Image
-                        source={require('@/Assets/Common/Pick_Up_Icon.png')}
-                        style={styles.locationIcon}
-                      />
-                      <Text style={styles.locationText} numberOfLines={1}>
-                        {pickup?.description || bookingDetails?.pickup_location}
-                      </Text>
-                    </View>
-
-                    <View style={styles.dotLine}>
-                      {[...Array(2)].map((_, i) => (
-                        <View key={i} style={styles.dot} />
-                      ))}
-                    </View>
-
-                    <View style={styles.locationButton}>
-                      <Image
-                        source={require('@/Assets/Common/Drop_Off_Icon.png')}
-                        style={styles.locationIcon}
-                      />
-                      <Text style={styles.locationText} numberOfLines={1}>
-                        {dropoff?.description ||
-                          bookingDetails?.dropoff_location}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-
-                <View style={styles.fareBreakdown}>
-                  <View style={styles.fareRow}>
-                    <Text
-                      style={[
-                        styles.feeText,
-                        { fontFamily: 'Poppins SemiBold' },
-                      ]}>
-                      {finalFareLabel}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.feeText,
-                        { fontFamily: 'Poppins SemiBold' },
-                      ]}>
-                      {finalFareDisplay}
-                    </Text>
-                  </View>
-                  <View style={styles.fareRow}>
-                    <Text style={styles.feeText}>{totalFareLabel}</Text>
-                    <Text style={styles.feeText}>{totalFareDisplay}</Text>
-                  </View>
-                  <View style={styles.fareRow}>
-                    <Text style={styles.feeText}>Payment Method</Text>
-                    <View style={styles.paymentMethodRow}>
-                      <Image
-                        source={paymentConfig.icon}
-                        style={styles.paymentMethodIcon}
-                      />
-                      <Text style={styles.feeText}>{paymentConfig.label}</Text>
-                    </View>
-                  </View>
-                </View>
-              </>
-            ) : null}
-
-            <View style={styles.separator} />
-
-            {/* Rider Info */}
-            <View style={styles.riderRow}>
-              {/* The rider's photo, else their vehicle's; a plain figure when
-                  there is neither (no name is sent to an outside service). */}
+          <View style={styles.stack}>
+            {/* the driver: photo (else the vehicle's, else a plain figure;
+                no name goes to an outside service), name, vehicle, plate */}
+            <View style={styles.driverCard}>
               <ProfileAvatar
                 uri={
                   getRiderPhoto(riderDetails) ||
                   riderDetails?.vehicle_details?.[0]?.motorcyle_img
                 }
-                size={50}
-                style={styles.avatar}
+                size={54}
               />
-
-              <View style={{ flex: 1 }}>
-                <Text style={styles.riderName}>
-                  {ekycDetails?.first_name} {ekycDetails?.last_name}
+              <View style={styles.flex}>
+                <Text style={styles.driverName} numberOfLines={1}>
+                  {shortName}
                 </Text>
-                <Text style={styles.plate}>
-                  {resolvedVehicle?.plateNumber || 'N/A'}
-                </Text>
-                <Text style={styles.vehicle}>
-                  {resolvedVehicle?.label || 'N/A'}
-                </Text>
+                {resolvedVehicle?.label ? (
+                  <Text style={styles.driverMeta} numberOfLines={1}>
+                    {resolvedVehicle.label}
+                  </Text>
+                ) : null}
               </View>
+              {resolvedVehicle?.plateNumber ? (
+                <View style={styles.plate}>
+                  <Text style={styles.plateText}>
+                    {resolvedVehicle.plateNumber}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
 
-              {/* Action Buttons */}
-              <View style={styles.actions}>
-                <TouchableOpacity
-                  style={styles.circleBtn}
-                  onPress={handleMessage}>
-                  <Text>💬</Text>
-                  {unreadCount > 0 && (
-                    <View style={styles.unreadBadge}>
-                      <Text style={styles.unreadBadgeText}>
-                        {unreadCount > 9 ? '9+' : unreadCount}
+            <View style={styles.actionRow}>
+              {actions.map(action => (
+                <Pressable
+                  key={action.id}
+                  onPress={action.onPress}
+                  disabled={action.disabled}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    action.badge > 0
+                      ? `${action.label}, ${action.badge} unread`
+                      : action.label
+                  }
+                  accessibilityState={{ disabled: Boolean(action.disabled) }}
+                  style={({ pressed }) => [
+                    styles.action,
+                    action.disabled && styles.actionDisabled,
+                    pressed && styles.pressed,
+                  ]}>
+                  <Icon name={action.icon} size={20} color={look.ink} />
+                  <Text style={styles.actionText}>{action.label}</Text>
+                  {action.badge > 0 ? (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>
+                        {action.badge > 9 ? '9+' : action.badge}
                       </Text>
                     </View>
-                  )}
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.circleBtn} onPress={handleCall}>
-                  <Text>📞</Text>
-                </TouchableOpacity>
-              </View>
+                  ) : null}
+                </Pressable>
+              ))}
             </View>
-          </>
-        )}
 
-        {(!confirmedBookingView || expanded) && (
-          <AppButton
-            title="Share Your Trip Details"
-            onPress={handleShareTrip}
-            mode="outlined"
-            buttonColor={colors.primary}
-            textColor={colors.primary}
-            isBold
-            noSpacing
-          />
+            {showTripDetails ? (
+              <View style={styles.routeLine}>
+                <View style={styles.dot} />
+                <Text style={styles.routeName} numberOfLines={1}>
+                  {placeName(pickup, bookingDetails?.pickup_location)}
+                </Text>
+                <Icon
+                  name="arrow-right"
+                  size={15}
+                  color={look.muted}
+                  style={styles.routeArrow}
+                />
+                <View style={styles.square} />
+                <Text style={styles.routeName} numberOfLines={1}>
+                  {placeName(dropoff, bookingDetails?.dropoff_location)}
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={styles.fareRow}>
+              <View style={styles.flex}>
+                <Text style={styles.fareLabel}>
+                  {`Pay with ${paymentConfig.label.toLowerCase()}`}
+                </Text>
+                {fareCaption ? (
+                  <Text style={styles.fareCaption}>{fareCaption}</Text>
+                ) : null}
+              </View>
+              <Text style={styles.fareFigure} maxFontSizeMultiplier={1.3}>
+                {headerFareDisplay}
+              </Text>
+            </View>
+
+            {/* Weaker than the button that booked it: cancelling should take
+                more intent than confirming did. */}
+            {onCancelRide ? (
+              <Pressable
+                onPress={onCancelRide}
+                hitSlop={8}
+                accessibilityRole="button"
+                style={styles.cancelLink}>
+                <Text style={styles.cancelText}>Cancel ride</Text>
+              </Pressable>
+            ) : null}
+          </View>
         )}
       </View>
     </View>
@@ -456,7 +449,7 @@ const BookingStatusModal = ({
 
 export default BookingStatusModal;
 
-const getStyles = ({ colors }) =>
+const getStyles = (look, blue) =>
   StyleSheet.create({
     overlay: {
       position: 'absolute',
@@ -465,42 +458,55 @@ const getStyles = ({ colors }) =>
       right: 0,
       backgroundColor: 'transparent',
     },
-    container: {
-      backgroundColor: colors.onPrimary,
+    sheet: {
+      backgroundColor: look.surface,
+      borderTopLeftRadius: look.radiusSheet,
+      borderTopRightRadius: look.radiusSheet,
       paddingHorizontal: 20,
-      paddingBottom: 50,
-      paddingTop: 8,
-      borderTopLeftRadius: 16,
-      borderTopRightRadius: 16,
-      elevation: 10,
+      paddingTop: 10,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -10 },
+      shadowOpacity: 0.13,
+      shadowRadius: 22,
+      elevation: 16,
+    },
+    handle: {
+      alignSelf: 'center',
+      width: 38,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: look.hairline,
+      marginBottom: 14,
     },
     swipeHandleHit: {
-      paddingVertical: 8,
       alignItems: 'center',
+      marginBottom: 6,
     },
     swipeHandleTouch: {
-      paddingVertical: 4,
+      paddingBottom: 8,
       paddingHorizontal: 40,
       alignItems: 'center',
     },
-    expandHint: {
-      marginTop: 6,
-      fontSize: 12,
-      color: '#084CF7',
-      textAlign: 'center',
-    },
-    swipeMarker: {
-      width: 48,
+    handleBar: {
+      width: 38,
       height: 4,
       borderRadius: 2,
-      backgroundColor: '#084CF7',
+      backgroundColor: look.hairline,
+    },
+    expandHint: {
+      marginTop: 6,
+      fontFamily: 'Poppins Medium',
+      fontSize: 12,
+      lineHeight: 16,
+      color: look.muted,
+      textAlign: 'center',
     },
     safetyChip: {
       alignSelf: 'flex-start',
       height: 26,
       paddingHorizontal: 10,
       borderRadius: 4,
-      backgroundColor: '#084CF7',
+      backgroundColor: blue,
       justifyContent: 'center',
       marginBottom: 10,
     },
@@ -509,168 +515,170 @@ const getStyles = ({ colors }) =>
       fontSize: 11,
       color: '#FFFFFF',
     },
-    statusBanner: {
-      minHeight: 51,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      borderRadius: 10,
-      backgroundColor: colors.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: 14,
-    },
-    statusBannerText: {
-      fontFamily: 'Poppins Medium',
-      fontWeight: '500',
-      fontSize: 16,
-      color: colors.onPrimary,
-      textAlign: 'center',
-    },
-    loadingRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: 20,
-      gap: 10,
-    },
-    loadingText: {
-      fontFamily: 'Poppins Medium',
-      fontSize: 14,
-      color: colors.onSurfaceVariant,
-      marginLeft: 10,
-    },
-    rowBetween: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-    },
-    vehicleInfo: {
-      flexDirection: 'column',
-    },
-    label: {
-      fontSize: 16,
-      fontWeight: '600',
+    // Title role
+    title: {
       fontFamily: 'Poppins SemiBold',
+      fontSize: 22,
+      lineHeight: 27,
+      letterSpacing: -0.5,
+      color: look.ink,
     },
-    changeText: {
-      fontSize: 12,
-      color: colors.primary,
-      fontFamily: 'Poppins Regular',
+    caption: {
       marginTop: 2,
+      fontFamily: 'Poppins Regular',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.muted,
     },
-    price: {
-      fontSize: 16,
-      fontWeight: '600',
-      fontFamily: 'Poppins SemiBold',
+    stack: {
+      marginTop: 16,
+      gap: 12,
     },
-    separator: {
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.backdrop,
-      marginVertical: 10,
+    flex: {
+      flex: 1,
     },
-    riderRow: {
+    pressed: {
+      opacity: 0.85,
+    },
+    driverCard: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 20,
+      gap: 12,
+      padding: 14,
+      borderRadius: look.radiusCard,
+      backgroundColor: look.soft,
     },
-    avatar: { width: 50, height: 50, borderRadius: 25, marginRight: 10 },
-    riderName: {
-      fontWeight: 'bold',
-      fontSize: 16,
-      fontFamily: 'Poppins SemiBold',
+    driverName: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 15,
+      lineHeight: 20,
+      letterSpacing: -0.2,
+      color: look.ink,
+    },
+    // inkSoft, not muted, on `soft`
+    driverMeta: {
+      fontFamily: 'Poppins Regular',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.inkSoft,
     },
     plate: {
-      color: colors.shadow,
-      fontFamily: 'Poppins Regular',
-    },
-    vehicle: {
-      color: colors.shadow,
-      fontSize: 12,
-      fontFamily: 'Poppins Regular',
-    },
-    actions: { flexDirection: 'row' },
-    circleBtn: {
-      backgroundColor: colors.primary,
-      borderRadius: 30,
-      padding: 10,
-      marginLeft: 8,
-    },
-    unreadBadge: {
-      position: 'absolute',
-      top: -2,
-      right: -2,
-      minWidth: 16,
-      height: 16,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
       borderRadius: 8,
-      paddingHorizontal: 3,
-      backgroundColor: '#FF3B30',
+      backgroundColor: look.ink,
+    },
+    plateText: {
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 12.5,
+      lineHeight: 16,
+      letterSpacing: 0.4,
+      color: look.surface,
+    },
+    actionRow: {
+      flexDirection: 'row',
+      gap: 9,
+    },
+    action: {
+      flex: 1,
+      minHeight: 54,
       alignItems: 'center',
       justifyContent: 'center',
-      borderWidth: 1.5,
-      borderColor: '#fff',
+      gap: 2,
+      borderRadius: look.radiusTile,
+      backgroundColor: look.soft,
     },
-    unreadBadgeText: {
-      color: '#fff',
-      fontSize: 9,
+    actionDisabled: {
+      opacity: 0.5,
+    },
+    actionText: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 11.5,
+      lineHeight: 15,
+      color: look.ink,
+    },
+    badge: {
+      position: 'absolute',
+      top: 6,
+      right: 14,
+      minWidth: 18,
+      height: 18,
+      paddingHorizontal: 4,
+      borderRadius: 9,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: look.danger,
+    },
+    badgeText: {
       fontFamily: 'Poppins SemiBold',
-      lineHeight: 11,
-    },
-    locationColumn: {
-      marginTop: 20,
-      alignItems: 'flex-start',
-    },
-    locationGroup: {
-      alignItems: 'flex-start',
-    },
-    dotLine: {
-      height: 24,
-      justifyContent: 'space-between',
-      marginLeft: 11,
-      paddingVertical: 5,
+      fontSize: 11,
+      lineHeight: 14,
+      color: '#FFFFFF',
     },
     dot: {
-      width: 5,
-      height: 5,
-      borderRadius: 2,
-      backgroundColor: colors.grey,
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+      backgroundColor: blue,
     },
-    locationButton: {
-      width: '90%',
+    square: {
+      width: 10,
+      height: 10,
+      borderRadius: 2,
+      backgroundColor: look.ink,
+    },
+    routeLine: {
       flexDirection: 'row',
       alignItems: 'center',
+      minHeight: 32,
     },
-    locationIcon: {
-      width: 27,
-      height: 27,
-      resizeMode: 'contain',
-      marginRight: 10,
+    routeName: {
+      flexShrink: 1,
+      marginLeft: 8,
+      fontFamily: 'Poppins Medium',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.ink,
     },
-    locationText: {
-      fontSize: 16,
-      color: colors.locationTextColor,
-      fontFamily: 'Poppins SemiBold',
-    },
-    fareBreakdown: {
-      marginTop: 10,
+    routeArrow: {
+      marginHorizontal: 8,
     },
     fareRow: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
-      marginVertical: 4,
-    },
-    feeText: {
-      fontFamily: 'Poppins Regular',
-      fontSize: 16,
-      color: colors.shadow,
-    },
-    paymentMethodRow: {
-      flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
+      gap: 8,
+      paddingTop: 4,
     },
-    paymentMethodIcon: {
-      width: 18,
-      height: 18,
-      resizeMode: 'contain',
+    fareLabel: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 15,
+      lineHeight: 20,
+      letterSpacing: -0.2,
+      color: look.ink,
+    },
+    fareCaption: {
+      fontFamily: 'Poppins Regular',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.muted,
+    },
+    // Fare role
+    fareFigure: {
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 23,
+      lineHeight: 28,
+      letterSpacing: -0.7,
+      color: look.ink,
+    },
+    cancelLink: {
+      minHeight: 46,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    cancelText: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 14,
+      lineHeight: 20,
+      color: look.muted,
     },
   });

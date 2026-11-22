@@ -11,6 +11,7 @@ import { formatPeso } from '@/Utils/formatPeso';
 import { fareNoteText } from '@/Utils/tripText';
 import { modern } from '@/Theme/modern';
 import ServiceList, { serviceById } from './Components/ServiceList';
+import FindingRider from './Components/FindingRider';
 
 // Line icons (MaterialCommunityIcons), as on the design canvas.
 const PAYMENT_METHOD_CONFIG = {
@@ -64,6 +65,7 @@ const BottomModal = ({
   fareIsEstimate = false,
   showMinimizeButton = false,
   onMinimizePress,
+  searching = false,
 }) => {
   // The navigation bar may cover the bottom of the screen: keep the bottom content clear of it
   const { bottom: bottomInset } = useSafeAreaInsets();
@@ -470,6 +472,52 @@ const BottomModal = ({
       </Pressable>
     ) : null;
 
+  // An instant booking waiting for a rider (the design canvas's "Finding your
+  // rider"): the moving bar, then the trip in one line, then Cancel booking.
+  const renderSearching = () => (
+    <View style={styles.stack}>
+      <FindingRider />
+      <View style={styles.hairline} />
+      <View style={styles.tripSummary}>
+        <View style={styles.tripTile}>
+          <Icon name={ride?.icon || 'moped'} size={22} color={look.chipInk} />
+        </View>
+        <View style={styles.flex}>
+          <Text style={styles.tripName} numberOfLines={1}>
+            {ride?.title || selectedService?.title || 'Your ride'}
+          </Text>
+          <Text style={styles.tripMeta} numberOfLines={1}>
+            {`${paymentConfig.label} · ${placeName(pickup)} → ${placeName(
+              dropoff,
+            )}`}
+          </Text>
+        </View>
+        {fare ? (
+          <Text style={styles.tripName}>{formatPeso(fare.total_amount)}</Text>
+        ) : null}
+      </View>
+      <Pressable
+        onPress={onBackToConfirm}
+        disabled={isLoading || !isOnline}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: isLoading || !isOnline }}
+        style={({ pressed }) => [
+          styles.cancelBooking,
+          (isLoading || !isOnline) && styles.ctaDisabled,
+          pressed && styles.pressed,
+        ]}>
+        <Text
+          style={[
+            styles.ctaDangerText,
+            styles.cancelBookingText,
+            (isLoading || !isOnline) && styles.ctaDisabledText,
+          ]}>
+          Cancel booking
+        </Text>
+      </Pressable>
+    </View>
+  );
+
   return (
     <View
       style={[
@@ -478,7 +526,9 @@ const BottomModal = ({
       ]}
       onLayout={onLayout}>
       <View style={styles.handle} />
-      {routeComplete ? (
+      {searching && routeComplete ? (
+        renderSearching()
+      ) : routeComplete ? (
         <View style={styles.stack}>
           {renderRouteLine()}
           {!isConfirmed || showMinimizeButton ? renderHeader() : null}
@@ -717,6 +767,50 @@ const getStyles = (look, blue) =>
     strong: {
       fontFamily: 'Poppins Medium',
       color: look.ink,
+    },
+    // "Finding your rider": the trip in one line
+    hairline: {
+      height: 1,
+      backgroundColor: look.hairline,
+    },
+    tripSummary: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    tripTile: {
+      width: 44,
+      height: 44,
+      borderRadius: look.radiusTile,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: look.chip,
+    },
+    tripName: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 15,
+      lineHeight: 20,
+      letterSpacing: -0.2,
+      color: look.ink,
+    },
+    tripMeta: {
+      fontFamily: 'Poppins Regular',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.muted,
+    },
+    cancelBooking: {
+      marginTop: 8,
+      minHeight: 54,
+      borderRadius: look.radiusCard - 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: look.soft,
+    },
+    cancelBookingText: {
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 15,
+      lineHeight: 20,
     },
     // the one button
     cta: {

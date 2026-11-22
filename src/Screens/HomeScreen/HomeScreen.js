@@ -2156,12 +2156,27 @@ const HomeScreen = () => {
     (Boolean(riderArrivedAt) || riderEta?.state === 'arrived');
   const confirmedBookingView =
     riderArrived || statusNum === 2 || statusNum === 3;
+  // An instant booking waiting for a rider: the booking sheet shows "Finding
+  // your rider" (BottomModal `searching`).
+  const searchingSheet =
+    isConfirmed &&
+    statusNum === 0 &&
+    !scheduledAt &&
+    !activeBooking?.is_advance;
+  // The banner over the map steps aside when the sheet says the same: the
+  // rider's arrival time under "Jomar is on the way", or "Finding your rider"
+  // (a re-pooled booking's new reference still shows in the banner).
+  const sheetSaysIt =
+    (statusNum === 1 && Boolean(riderDetails)) ||
+    (searchingSheet && !activeBooking?.replaces);
+  const showMapBanner =
+    showWaitingBanner && !confirmedBookingView && !sheetSaysIt;
   // While the rider is on the way, the ETA banner (51) and the Safety Guide
   // chip (26) float over the map just above the trip sheet (see their `bottom`
   // styles below). The map counts that strip as covered when framing the rider.
   const floatingAboveSheet =
     !confirmedBookingView && (statusNum === 1 || statusNum === 2)
-      ? 15 + (showWaitingBanner ? 59 : 0) + 26
+      ? 15 + (showMapBanner ? 59 : 0) + 26
       : 0;
 
   const etaBannerText = riderArrived
@@ -2482,7 +2497,7 @@ New reference: ${activeBooking.ref_code}`
           </TouchableOpacity>
         )}
 
-        {showWaitingBanner && !confirmedBookingView && (
+        {showMapBanner && (
           <View style={[styles.banner, { bottom: modalHeight + 15 }]}>
             <Text style={styles.bannerText}>{bannerText}</Text>
           </View>
@@ -2493,7 +2508,7 @@ New reference: ${activeBooking.ref_code}`
             testID="safety-guide-chip"
             style={[
               styles.safetyChip,
-              { bottom: modalHeight + 15 + (showWaitingBanner ? 59 : 0) },
+              { bottom: modalHeight + 15 + (showMapBanner ? 59 : 0) },
             ]}
             onPress={() => setShowSafetyGuide(true)}>
             <Text style={styles.safetyChipText}>Safety Guide</Text>
@@ -2703,6 +2718,7 @@ New reference: ${activeBooking.ref_code}`
               }
               showMinimizeButton={showAcceptedAdvanceTracking}
               onMinimizePress={handleMinimizeAcceptedAdvance}
+              searching={searchingSheet}
             />
           )}
 
@@ -2717,8 +2733,16 @@ New reference: ${activeBooking.ref_code}`
             bookingStatus={bookingStatus}
             pickup={pickupLocation}
             dropoff={dropoffLocation}
-            selectedService={selectedService}
             vehicle={bookingVehicle}
+            // under "Jomar is on the way": the arrival time the banner had
+            etaText={statusNum === 1 ? bannerText : ''}
+            // the existing cancel, with its free or priced dialog; only while
+            // the rider is on the way (the spec: a quiet link, not a button)
+            onCancelRide={
+              statusNum === 1
+                ? () => requestFullCancel(undefined, true)
+                : undefined
+            }
             confirmedBookingView={confirmedBookingView}
             statusBannerText={
               confirmedBookingView && showWaitingBanner && bannerText
