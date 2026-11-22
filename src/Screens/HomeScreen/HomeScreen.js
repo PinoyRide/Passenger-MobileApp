@@ -11,6 +11,9 @@ import {
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { openSettings } from 'react-native-permissions';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { modern } from '@/Theme/modern';
+import { tripChipText } from '@/Utils/tripText';
 import BottomModal from './BottomModal';
 import {
   PUSH_BOOKING_UPDATE_EVENT,
@@ -130,8 +133,10 @@ const hasRider = (booking, rd) =>
   Boolean(rd && typeof rd === 'object' && (rd.id || Object.keys(rd).length));
 
 const HomeScreen = () => {
-  const { colors } = useTheme();
-  const styles = getStyles({ colors });
+  const theme = useTheme();
+  const { colors } = theme;
+  const look = modern(theme);
+  const styles = getStyles({ colors, look });
   const navigation = useNavigation();
   const route = useRoute();
   const dispatch = useDispatch();
@@ -2058,6 +2063,20 @@ const HomeScreen = () => {
     fareProblem,
   ]);
 
+  // The fare the sheet may show: the one for the trip on screen (a placed
+  // booking keeps its own). The map chip says how long and how far it is.
+  const sheetFare =
+    fareHeld || pricedKeyRef.current === fareKeyNow
+      ? inquireBookingResponse
+      : null;
+  const tripChip =
+    sheetFare && !isConfirmed
+      ? tripChipText({
+          minutes: sheetFare.eta_pickup_to_dropoff_minutes,
+          km: sheetFare.distance_km_round,
+        })
+      : '';
+
   const pickDatePromptedRef = useRef(false);
   useEffect(() => {
     if (!advanceBookingFlow || !bookLater.enabled || scheduledAt) {
@@ -2383,6 +2402,21 @@ New reference: ${activeBooking.ref_code}`
           />
         </TouchableOpacity>
 
+        {/* How long and how far, once the trip is priced (the design canvas's
+            chip; top-left here, as the profile button holds the top-right). */}
+        {tripChip &&
+        !showChoosePickupPanel &&
+        (bookingStatus === 0 || bookingStatus === 4 || bookingStatus === 5) ? (
+          <View
+            style={styles.tripChip}
+            pointerEvents="none"
+            accessible
+            accessibilityLabel={`Trip: ${tripChip}`}>
+            <Icon name="clock-outline" size={16} color={look.ink} />
+            <Text style={styles.tripChipText}>{tripChip}</Text>
+          </View>
+        ) : null}
+
         <RiderFoundAlertBox
           visible={showRiderFound}
           onClose={() => setShowRiderFound(false)}
@@ -2626,12 +2660,7 @@ New reference: ${activeBooking.ref_code}`
               selectedPayment={selectedPayment}
               selectedPromo={selectedPromo}
               noteToRider={noteToRider}
-              // only the fare for the trip on screen (a placed booking keeps its own)
-              inquireBookingResponse={
-                fareHeld || pricedKeyRef.current === fareKeyNow
-                  ? inquireBookingResponse
-                  : null
-              }
+              inquireBookingResponse={sheetFare}
               fareProblem={
                 fareProblem?.key === fareKeyNow ? fareProblem.message : null
               }
@@ -2719,7 +2748,7 @@ export default HomeScreen;
 
 const { width, height } = Dimensions.get('window');
 
-const getStyles = ({ colors }) =>
+const getStyles = ({ colors, look }) =>
   StyleSheet.create({
     container: {
       flex: 1,
@@ -2756,6 +2785,31 @@ const getStyles = ({ colors }) =>
       top: 60,
       right: 28,
       zIndex: 15,
+    },
+    // level with the profile button (51 high at top 60)
+    tripChip: {
+      position: 'absolute',
+      top: 65,
+      left: 28,
+      zIndex: 15,
+      minHeight: 40,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 14,
+      borderRadius: 20,
+      backgroundColor: look.surface,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.12,
+      shadowRadius: 10,
+      elevation: 6,
+    },
+    tripChipText: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.ink,
     },
     iconImage: {
       width: 51,

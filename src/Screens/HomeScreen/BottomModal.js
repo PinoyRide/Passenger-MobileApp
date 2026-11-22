@@ -1,23 +1,19 @@
 import React, { useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { bottomSpace } from '@/Utils/bottomSpace';
 import { formatPeso } from '@/Utils/formatPeso';
+import { fareNoteText } from '@/Utils/tripText';
 import { modern } from '@/Theme/modern';
-import ServiceList from './Components/ServiceList';
+import ServiceList, { serviceById } from './Components/ServiceList';
 
+// Line icons (MaterialCommunityIcons), as on the design canvas.
 const PAYMENT_METHOD_CONFIG = {
-  cash: {
-    label: 'Cash',
-    icon: require('@/Assets/Common/HomeScreen/PaymentMethodModal/Cash.png'),
-  },
-  wallet: {
-    label: 'Wallet',
-    icon: require('@/Assets/Common/HomeScreen/PaymentMethodModal/Wallet.png'),
-  },
+  cash: { label: 'Cash', icon: 'cash' },
+  wallet: { label: 'Wallet', icon: 'wallet-outline' },
 };
 
 // A place's first part, for the one-line route: "SM Mall of Asia".
@@ -84,19 +80,21 @@ const BottomModal = ({
     PAYMENT_METHOD_CONFIG[selectedPayment] || PAYMENT_METHOD_CONFIG.cash;
 
   // Payment, promo and note. An added promo or note shows as a gold dot after
-  // its name, so the three pills keep their width.
+  // its name, so the three pills keep their width; the payment pill opens a
+  // choice, hence its chevron ("Cash ▾").
   const buttons = [
     {
       id: 'payment',
-      image: paymentConfig.icon,
+      icon: paymentConfig.icon,
       text: paymentConfig.label,
+      chevron: true,
       added: false,
       label: `Payment: ${paymentConfig.label}`,
       onPress: () => setShowPaymentModal(true),
     },
     {
       id: 'promo',
-      image: require('@/Assets/Common/HomeScreen/BottomModal/Promo.png'),
+      icon: 'tag-outline',
       text: 'Promo',
       added: Boolean(selectedPromo),
       label: selectedPromo
@@ -106,7 +104,7 @@ const BottomModal = ({
     },
     {
       id: 'note',
-      image: require('@/Assets/Common/HomeScreen/BottomModal/Note_To_Rider.png'),
+      icon: 'square-edit-outline',
       text: 'Note',
       added: Boolean(noteToRider),
       label: noteToRider
@@ -118,10 +116,12 @@ const BottomModal = ({
 
   // The same three steps as before; only the look changed. "No Internet"
   // moved into the fare caption, so the button always names its action.
+  // "Book Motorcycle", "Book Car": the button names the ride it books.
+  const ride = serviceById(selectedService?.id);
   const actionButtons = [
     {
       visible: !isBooked,
-      title: 'Book',
+      title: ride?.short ? `Book ${ride.short}` : 'Book',
       onPress: onInquireBooking,
       // no ride picked yet: Book waits, as it did when the rides were a modal
       disabled:
@@ -163,7 +163,8 @@ const BottomModal = ({
     if (fareIsEstimate) {
       return 'Estimated — final fare may change';
     }
-    return Number(fare.booking_fee) > 0 ? 'Incl. booking fee' : '';
+    // "Incl. booking fee · no surge", as far as the fare's answer shows it
+    return fareNoteText(fare);
   };
   const caption = fareCaption();
   const figure = fare ? formatPeso(fare.total_amount) : '—';
@@ -331,10 +332,23 @@ const BottomModal = ({
           accessibilityRole="button"
           accessibilityLabel={btn.label}
           style={({ pressed }) => [styles.pill, pressed && styles.pressed]}>
-          <Image source={btn.image} style={styles.pillIcon} />
+          <Icon
+            name={btn.icon}
+            size={17}
+            color={look.inkSoft}
+            style={styles.pillIcon}
+          />
           <Text style={styles.pillText} numberOfLines={1}>
             {btn.text}
           </Text>
+          {btn.chevron ? (
+            <Icon
+              name="chevron-down"
+              size={16}
+              color={look.inkSoft}
+              style={styles.pillChevron}
+            />
+          ) : null}
           {btn.added ? <View style={styles.addedDot} /> : null}
         </Pressable>
       ))}
@@ -629,11 +643,10 @@ const getStyles = (look, blue) =>
       backgroundColor: look.soft,
     },
     pillIcon: {
-      width: 18,
-      height: 18,
       marginRight: 6,
-      resizeMode: 'contain',
-      tintColor: look.inkSoft,
+    },
+    pillChevron: {
+      marginLeft: 2,
     },
     pillText: {
       flexShrink: 1,

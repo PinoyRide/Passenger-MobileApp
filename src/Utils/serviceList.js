@@ -8,6 +8,7 @@
 // fare left over from another ride is never shown on this one. Every other
 // row shows a dash (docs/booking-redesign-spec.md, "Service list", option 3).
 const { formatPeso } = require('./formatPeso');
+const { tripLengthText } = require('./tripText');
 
 const NO_FARE = '—';
 
@@ -16,16 +17,8 @@ const sameId = (a, b) => a != null && b != null && String(a) === String(b);
 // The trip's length, worded as a trip so it does not read as the wait for a
 // rider: "28 min trip", "1 hr 15 min trip". '' when unknown.
 function tripTimeText(minutes) {
-  const m = Math.round(Number(minutes));
-  if (!Number.isFinite(m) || m <= 0) {
-    return '';
-  }
-  if (m < 60) {
-    return `${m} min trip`;
-  }
-  const hours = Math.floor(m / 60);
-  const rest = m % 60;
-  return rest ? `${hours} hr ${rest} min trip` : `${hours} hr trip`;
+  const length = tripLengthText(minutes);
+  return length ? `${length} trip` : '';
 }
 
 // The inquiry's fare and trip time for this ride, or null when it was not priced.

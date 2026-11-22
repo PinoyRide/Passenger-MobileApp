@@ -1,32 +1,41 @@
 import React from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { modern } from '@/Theme/modern';
 import { NO_FARE, serviceRows } from '@/Utils/serviceList';
 
-// The ride types. `meta` is the short line under the name, `badge` an optional
-// tag beside it. The icons are one-colour shapes, tinted for each state.
+// The ride types, named as on the design canvas. `icon` is a line icon
+// (MaterialCommunityIcons), `short` the name on the Book button, `meta` the
+// line under the name and `badge` an optional tag beside it. The cars carry
+// their seats in the name, so their meta line is the trip time alone.
 export const services = [
   {
     id: 1,
-    icon: require('@/Assets/Common/HomeScreen/Motorcycle.png'),
+    icon: 'moped',
     title: 'Motorcycle',
+    short: 'Motorcycle',
     meta: '1 seat',
     badge: 'FASTEST',
   },
   {
     id: 2,
-    icon: require('@/Assets/Common/HomeScreen/Car.png'),
-    title: 'Car (4 Seaters)',
-    meta: '4 seats',
+    icon: 'car-side',
+    title: 'Car · 4 seats',
+    short: 'Car',
   },
   {
     id: 3,
-    icon: require('@/Assets/Common/HomeScreen/Car.png'),
-    title: 'Car (6 Seaters)',
-    meta: '6 seats',
+    icon: 'car-estate',
+    title: 'Car · 6 seats',
+    short: 'Car',
   },
 ];
+
+// A ride by its id, from the list above: a ride kept on the phone from an
+// older version may lack the newer fields.
+export const serviceById = id =>
+  services.find(service => String(service.id) === String(id)) || null;
 
 // The ride list inside the booking sheet (it used to be a modal). A row calls
 // onSelect with its ride, never with the press event. What each row shows,
@@ -71,12 +80,10 @@ const ServiceList = ({
               styles.tile,
               { backgroundColor: row.selected ? look.accent : look.chip },
             ]}>
-            <Image
-              source={row.service.icon}
-              style={[
-                styles.icon,
-                { tintColor: row.selected ? look.onAccent : look.chipInk },
-              ]}
+            <Icon
+              name={row.service.icon}
+              size={26}
+              color={row.selected ? look.onAccent : look.chipInk}
             />
           </View>
           <View style={styles.middle}>
@@ -141,11 +148,6 @@ const getStyles = look =>
       alignItems: 'center',
       justifyContent: 'center',
       marginRight: 12,
-    },
-    icon: {
-      width: 30,
-      height: 21,
-      resizeMode: 'contain',
     },
     middle: {
       flex: 1,
