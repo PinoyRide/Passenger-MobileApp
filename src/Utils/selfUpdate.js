@@ -10,9 +10,12 @@
 // this app's version, and goes back to the one before if an update cannot
 // start.
 //
-// The app is deliberately not restarted from here to pick an update up
-// sooner (Updates.reloadAsync). After such a restart the library no longer
-// falls back from an update that cannot start: the app would close instead.
+// The app is never reloaded in place to pick an update up sooner
+// (Updates.reloadAsync): after such a reload the library no longer falls back
+// from an update that cannot start, and the app would close instead. An open
+// app restarts instead, the native way, which starts the update as at any
+// start (Services/useUpdateWhenReady.js; APKs from Passenger 2.0.22 and Rider
+// 2.0.23).
 import * as Updates from 'expo-updates';
 import { updateLabel } from './updateLabel';
 

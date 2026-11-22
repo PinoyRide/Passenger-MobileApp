@@ -114,5 +114,14 @@
     <meta-data
      android:name="com.google.android.geo.API_KEY"
      android:value="AIzaSyAlpSoXuJzvo8uR1qbdtbbbk1sx4MHKIQk"/>
+      <!-- The app's own restart into a downloaded update (AppRestart.kt): a screen that is never seen, in a process of
+         its own, that ends the app's process and opens the app again. -->
+    <activity
+      android:name=".RestartActivity"
+      android:process=":restart"
+      android:exported="false"
+      android:excludeFromRecents="true"
+      android:noHistory="true"
+      android:theme="@android:style/Theme.Translucent.NoTitleBar"/>
   </application>
 </manifest>

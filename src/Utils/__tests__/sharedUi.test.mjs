@@ -25,6 +25,10 @@ const SHARED = [
   'src/Utils/accountDeletion.js',
   'src/Utils/bottomSpace.js',
   'src/Utils/handedCode.js',
+  'src/Utils/updateWhenReady.js',
+  'src/Utils/appRestart.js',
+  'src/Services/useUpdateWhenReady.js',
+  'src/Utils/__tests__/updateWhenReady.test.mjs',
   'src/Utils/__tests__/sharedUi.test.mjs',
 ];
 

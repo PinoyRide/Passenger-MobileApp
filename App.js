@@ -13,6 +13,15 @@ import PushNotificationManager from '@/Services/Push/PushNotificationManager';
 import { persistor, store } from '@/Redux/store';
 // Signs the app out when the API says its account was signed out or deleted.
 import '@/Services/signedOutHandler';
+import useUpdateWhenReady from '@/Services/useUpdateWhenReady';
+import { passengerBusy } from '@/Services/updateBusy';
+
+// Restarts into an update as soon as it is downloaded and nothing would be cut
+// off (the owner, 2026-11-22): Services/useUpdateWhenReady.js.
+const UpdateWhenReady = () => {
+  useUpdateWhenReady(passengerBusy);
+  return null;
+};
 
 const App = () => {
   const [fontsLoaded] = useFonts({
@@ -40,6 +49,7 @@ const App = () => {
           <StatusBar style="dark" />
           <ApplicationNavigator />
           <PushNotificationManager />
+          <UpdateWhenReady />
         </View>
       </PersistGate>
     </Provider>

@@ -64,8 +64,13 @@ installed again.
   is a newer update.
 - Which update a phone runs: the landing screen shows the version and the commit. `v2.0.2 · Develop · 3fa9c1e`
   is version 2.0.2 from commit `3fa9c1e`; no commit means the code the APK came with.
-- A phone picks an update up when the app starts, not when it comes back from the background: swipe it away
-  from the recent apps and open it again.
+- An open app takes an update too (APKs from Passenger 2.0.22 and Rider 2.0.23; the owner, 2026-11-22). While
+  it is on screen it asks every two minutes, and at once when it comes back to the screen; it downloads what it
+  is offered and restarts itself into it right away, through the same loading screen as any start. It waits
+  while a restart would cut something off: a booking under way or being placed, a booking request on the
+  rider's screen, a payment, or a screen with something half done (a sign-in code already texted, a form or the
+  application, a photo or ID check, a place being picked for a booking). It never restarts in the background.
+  Older APKs take an update when the app starts: swipe it away from the recent apps and open it again.
 - What a person sees meanwhile (from the 2.0.5 APK): from the moment the app is opened until its first
   screen is ready, the logo, a moving line and one sentence: "Checking for updates…", "Downloading the
   update…" when one was found, then "Starting…". It is native (`LaunchScreen.kt`,
@@ -74,10 +79,13 @@ installed again.
   `App.js` marks with `nativeID="app-ready"` is drawn. Changing how it looks needs a new APK.
 - Nothing about updates shows once the app is open (the owner, 2026-11-22: "we should do it all on app
   start"). An update that did not arrive within the wait finishes in the background and is used at the next
-  start.
+  start, or by the restart above.
 - Where it is set: `android/app/src/main/AndroidManifest.xml` (the address, the certificate, how long a start
-  waits). The app's own code only shows the label (`src/Utils/selfUpdate.js`), and does not restart the app
-  to pick an update up sooner: that file says why. The backend's README ("App updates") describes its side.
+  waits). The app's own code shows the label (`src/Utils/selfUpdate.js`) and takes an update while open:
+  `src/Services/useUpdateWhenReady.js`, with what holds a restart in `src/Utils/updateWhenReady.js` (a new
+  screen where something can be half done goes in its list) and the restart itself in `AppRestart.kt`, which
+  stops the app and starts it again from cold. It never reloads in place (`Updates.reloadAsync`):
+  `selfUpdate.js` says why. The backend's README ("App updates") describes its side.
 - iOS is not set up for it: `ios/pinoyride/Supporting/Expo.plist` keeps it off.
 
 ### APP ICON
