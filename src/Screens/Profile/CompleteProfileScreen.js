@@ -11,6 +11,7 @@ import {
 import { useTheme } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
+import { launchImageLibrary } from 'react-native-image-picker';
 import { AppButton, AppTextInput, Container } from '@/Components';
 import useApiRequest from '@/Services/ApiV2';
 import { Constants } from '@/Utils';
@@ -19,9 +20,10 @@ import { withCameraPermission } from '@/Utils/Permissions';
 import { selectUserInfo, setUserInfo } from '@/Redux/Slices/userSlice';
 
 // Name: what a passenger must have before booking (the backend refuses bookings otherwise).
-// The face photo is optional (the owner, 2026-11-22). When taken, it is taken on
-// LivenessSelfieScreen, which checks a real person is taking it of themselves; it comes back
-// here as route.params.capturedSelfie.
+// Shown right after registering, and it can be skipped for now (the owner, 2026-11-22):
+// booking asks for the name later. The photo is optional, and so is the check on it: taken on
+// LivenessSelfieScreen, which checks a real person is taking it of themselves (it comes back
+// here as route.params.capturedSelfie), or uploaded from the phone's photos without a check.
 const CompleteProfileScreen = () => {
   const { colors } = useTheme();
   const styles = getStyles({ colors });
@@ -43,6 +45,8 @@ const CompleteProfileScreen = () => {
   const saving = profileRequest.loading || selfieRequest.loading;
 
   const currentSelfie = newSelfie?.uri || userInfo?.selfie || ekyc.selfie || '';
+  // Just registered (no name yet): "Skip for now" goes on to Home
+  const firstTime = !userInfo?.profile_complete;
 
   const capturedSelfie = route.params?.capturedSelfie;
   useEffect(() => {
@@ -59,6 +63,25 @@ const CompleteProfileScreen = () => {
           returnTo: 'CompleteProfileScreen',
         }),
       'Camera access is needed to take your profile photo.',
+    );
+
+  // A photo from the phone instead of the camera: no check that it is really them.
+  const uploadPhoto = () =>
+    launchImageLibrary(
+      { mediaType: 'photo', quality: 0.8, maxWidth: 1080, maxHeight: 1080 },
+      response => {
+        if (response.didCancel || response.errorCode) {
+          return;
+        }
+        const asset = response.assets?.[0];
+        if (asset?.uri) {
+          setNewSelfie({
+            uri: asset.uri,
+            type: asset.type || 'image/jpeg',
+            fileName: asset.fileName || 'photo.jpg',
+          });
+        }
+      },
     );
 
   const validate = () => {
@@ -147,8 +170,8 @@ const CompleteProfileScreen = () => {
           <Text style={styles.sectionSubtitle}>
             Riders see your name so they can find you at pickup; you can book
             once it is filled in. A photo of you is optional and helps them
-            more. It is taken with the camera: you will be asked to turn your
-            head a little so we know it is really you.
+            more: take one with the camera (you will be asked to turn your head
+            a little, so we know it is really you), or upload one.
           </Text>
 
           <TouchableOpacity
@@ -170,11 +193,16 @@ const CompleteProfileScreen = () => {
               </View>
             )}
           </TouchableOpacity>
-          {currentSelfie ? (
+          <View style={styles.photoActions}>
             <TouchableOpacity onPress={takeSelfie} style={styles.retakeButton}>
-              <Text style={styles.retakeText}>Retake photo</Text>
+              <Text style={styles.retakeText}>
+                {currentSelfie ? 'Take a new photo' : 'Take a photo'}
+              </Text>
             </TouchableOpacity>
-          ) : null}
+            <TouchableOpacity onPress={uploadPhoto} style={styles.retakeButton}>
+              <Text style={styles.retakeText}>Upload a photo</Text>
+            </TouchableOpacity>
+          </View>
           {errors.selfie ? (
             <Text style={styles.errorText}>{errors.selfie}</Text>
           ) : null}
@@ -215,6 +243,14 @@ const CompleteProfileScreen = () => {
             isBold
             disabled={saving}
           />
+          {firstTime ? (
+            <TouchableOpacity
+              onPress={() => navigation.goBack()}
+              disabled={saving}
+              style={styles.skipButton}>
+              <Text style={styles.skipText}>Skip for now</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </ScrollView>
     </Container>
@@ -299,4 +335,20 @@ const getStyles = ({ colors }) =>
       marginBottom: 8,
     },
     footer: { paddingHorizontal: 20, paddingVertical: 20 },
+    photoActions: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 8,
+      marginBottom: 8,
+    },
+    skipButton: {
+      alignSelf: 'center',
+      paddingVertical: 12,
+      paddingHorizontal: 24,
+    },
+    skipText: {
+      fontSize: 14,
+      fontFamily: 'Poppins Medium',
+      color: colors.onSurfaceGrey || '#888',
+    },
   });

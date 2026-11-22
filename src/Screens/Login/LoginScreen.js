@@ -17,6 +17,7 @@ import { AlertBox, AppButton, AppTextInput } from '@/Components';
 import useApiRequest from '@/Services/ApiV2';
 import { Constants } from '@/Utils';
 import { handedCode } from '@/Utils/handedCode';
+import { EMAIL, SMS, offersEmail } from '@/Utils/codeChannel';
 
 const OFFLINE_ALERT_TITLE = 'No Internet Connection';
 const OFFLINE_ALERT_MESSAGE =
@@ -40,11 +41,17 @@ const LoginScreen = () => {
   const [alertMessage, setAlertMessage] = useState('');
   const [showAlert, setShowAlert] = useState(false);
 
-  // Sends the login OTP. The backend answers "does not exist" for an unregistered
-  // number, so this also checks registration. Nothing about the account is returned
+  // Asks how a code can reach this account, then sends it. The backend answers
+  // "does not exist" for an unregistered number and says why an account may not
+  // sign in, before anything is sent. Nothing about the account is returned
   // until OTPScreen logs in with the code.
   const loginCheck = useApiRequest();
+  const sendCode = useApiRequest();
   const isRegister = route.params?.mode === 'register';
+  // { channels, emailHint } when the account can also be emailed its code: the
+  // choice is shown. Typing another number clears it.
+  const [options, setOptions] = useState(null);
+  const busy = loginCheck.loading || sendCode.loading;
 
   useEffect(() => {
     if (route.params?.registrationComplete) {
@@ -69,10 +76,44 @@ const LoginScreen = () => {
 
     setErrorMessage('');
 
+    if (isRegister) {
+      await requestCode(SMS);
+      return;
+    }
+
+    // How can a code reach this account? Every sign-in check runs first; nothing is sent
     const { response, error, offline } = await loginCheck.request(
       'POST',
-      isRegister ? Constants.API.OTP_REGISTER : Constants.API.OTP_LOGIN,
+      Constants.API.OTP_LOGIN_OPTIONS,
       { mobileNo: mobileNumber, userType: 'customer' },
+    );
+    if (offline) {
+      Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
+      return;
+    }
+    if (error || !response) {
+      // Not registered, or the account may not sign in now: the backend says which
+      setAlertMessage(error || 'Unable to send the code. Please try again.');
+      setShowAlert(true);
+      return;
+    }
+    if (offersEmail(response.data)) {
+      setOptions(response.data); // the choice is shown below the number
+      return;
+    }
+    await requestCode(SMS);
+  };
+
+  // Sends the code by text or by email; OTPScreen logs in with it.
+  const requestCode = async channel => {
+    const { response, error, offline } = await sendCode.request(
+      'POST',
+      isRegister ? Constants.API.OTP_REGISTER : Constants.API.OTP_LOGIN,
+      {
+        mobileNo: mobileNumber,
+        userType: 'customer',
+        ...(isRegister ? {} : { channel }),
+      },
     );
 
     if (offline) {
@@ -81,19 +122,20 @@ const LoginScreen = () => {
     }
 
     if (error || !response) {
-      // Not registered (login), already registered (register), or the OTP could not be sent
+      // Already registered (register), the email could not be sent, or a code went out a minute ago
       setAlertMessage(error || 'Unable to send the code. Please try again.');
       setShowAlert(true);
       return;
     }
 
-    // OTP sent; OTPScreen logs in with it.
     navigation.navigate('OTPScreen', {
       mobileNumber,
       otpSent: true,
-      // a test environment that hands the code to the app instead of texting it
+      // a test environment that hands a texted code to the app instead of texting it
       handedCode: handedCode(response.data),
       mode: isRegister ? 'register' : 'login',
+      channel,
+      emailHint: options?.emailHint,
       // what was ticked on the terms screen; recorded with the new account
       consent: isRegister ? route.params?.consent : undefined,
     });
@@ -145,7 +187,10 @@ const LoginScreen = () => {
             <AppTextInput
               label="Mobile"
               value={mobileNumber}
-              onChangeText={setMobileNumber}
+              onChangeText={value => {
+                setMobileNumber(value);
+                setOptions(null);
+              }}
               onValidationChange={setIsPhoneValid}
               inputMode="phone"
               placeholder="9XX-XXX-XXXX"
@@ -153,18 +198,39 @@ const LoginScreen = () => {
             />
           </View>
 
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              Enter your active number to receive a verification code. This
-              helps us keep your account secure.
-            </Text>
-            <AppButton
-              title={loginCheck.loading ? 'Please wait…' : 'Next'}
-              onPress={handleNext}
-              isBold
-              disabled={loginCheck.loading}
-            />
-          </View>
+          {options ? (
+            <View style={styles.footer}>
+              <Text style={styles.choiceTitle}>
+                Where should we send your code?
+              </Text>
+              <AppButton
+                title={`Text it to +63 ******${mobileNumber.slice(-4)}`}
+                onPress={() => requestCode(SMS)}
+                isBold
+                disabled={busy}
+              />
+              <AppButton
+                title={`Email it to ${options.emailHint}`}
+                mode="outlined"
+                onPress={() => requestCode(EMAIL)}
+                disabled={busy}
+              />
+              {busy ? <Text style={styles.footerText}>Sending…</Text> : null}
+            </View>
+          ) : (
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>
+                Enter your active number to receive a verification code. This
+                helps us keep your account secure.
+              </Text>
+              <AppButton
+                title={busy ? 'Please wait…' : 'Next'}
+                onPress={handleNext}
+                isBold
+                disabled={busy}
+              />
+            </View>
+          )}
         </ScrollView>
       </TouchableWithoutFeedback>
     </Container>
@@ -226,5 +292,12 @@ const getStyles = ({ colors }) =>
       fontSize: 12,
       color: colors.darkGrey,
       marginBottom: 15,
+    },
+    choiceTitle: {
+      textAlign: 'center',
+      fontFamily: 'Poppins Medium',
+      fontSize: 14,
+      color: colors.shadow,
+      marginBottom: 4,
     },
   });

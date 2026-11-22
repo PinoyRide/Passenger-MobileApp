@@ -1,91 +1,57 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import mod from '../registerForm.js';
-const {
-  registrationErrors,
-  registrationFields,
-  refusalField,
-  afterRegistering,
-} = mod;
+const { registrationErrors, refusalField } = mod;
 
 const complete = {
-  firstName: 'Maria',
-  lastName: 'Clara',
-  email: '',
   mobile: '639171234567',
   mobileValid: true,
   acceptedTerms: true,
   acceptedPrivacy: true,
 };
 
-test('a complete form has nothing to fix; the email is optional', () => {
+test('the number and both consents are all Register asks for', () => {
   assert.deepEqual(registrationErrors(complete), {});
-  assert.deepEqual(
-    registrationErrors({ ...complete, email: 'maria@example.com' }),
-    {},
-  );
 });
 
-test('every missing piece is named before any code is sent', () => {
-  const errors = registrationErrors({
-    firstName: ' ',
-    lastName: '',
-    email: 'not an email',
-    mobile: '',
-    mobileValid: false,
-    acceptedTerms: true,
-    acceptedPrivacy: false,
-  });
-  assert.deepEqual(Object.keys(errors).sort(), [
-    'consent',
-    'email',
-    'firstName',
-    'lastName',
-    'mobile',
-  ]);
-  assert.match(
+test('a missing or unusable number is named before any code is sent', () => {
+  assert.equal(
+    registrationErrors({ ...complete, mobile: '' }).mobile,
+    'Mobile number is required',
+  );
+  assert.equal(
     registrationErrors({ ...complete, mobileValid: false }).mobile,
-    /valid mobile/,
+    'Please enter a valid mobile number',
   );
 });
 
-test('what is sent: trimmed names, and no email when none was given', () => {
+test('both consents are needed', () => {
+  for (const missing of ['acceptedTerms', 'acceptedPrivacy']) {
+    assert.ok(registrationErrors({ ...complete, [missing]: false }).consent);
+  }
+});
+
+test('a refusal about the number is shown under the number', () => {
   assert.deepEqual(
-    registrationFields({ firstName: ' Maria ', lastName: ' Clara ', email: ' ' }),
-    { firstName: 'Maria', lastName: 'Clara', email: null },
+    refusalField('This mobile number is already registered. Please log in instead.'),
+    {
+      field: 'mobile',
+      message:
+        'This mobile number is already registered. Please log in instead.',
+    },
   );
   assert.equal(
-    registrationFields({ ...complete, email: ' m@x.ph ' }).email,
-    'm@x.ph',
+    refusalField(
+      'This mobile number is currently logged in as a rider. Please log out from the rider account first.',
+    ).field,
+    'mobile',
   );
 });
 
-test("the backend's refusals land under the field they are about", () => {
-  assert.equal(refusalField('This email address already exists.').field, 'email');
-  assert.equal(
-    refusalField('This mobile number is already registered. Please log in instead.').field,
-    'mobile',
-  );
-  assert.equal(
-    refusalField('This number is signed in on the Pinoy Ride Driver app.').field,
-    'mobile',
-  );
-  assert.equal(refusalField('First name and last name are required.').field, 'firstName');
-  assert.deepEqual(refusalField(''), {
+test('anything else is shown for the whole screen', () => {
+  assert.deepEqual(refusalField('Please wait 40 seconds before requesting another OTP.'), {
     field: null,
-    message: 'Unable to send the code. Please try again.',
+    message: 'Please wait 40 seconds before requesting another OTP.',
   });
-});
-
-test('after the code: the login page, the number filled in, with Landing underneath', () => {
-  assert.deepEqual(afterRegistering('639171234567'), {
-    index: 1,
-    routes: [
-      { name: 'LandingScreen' },
-      {
-        name: 'LoginScreen',
-        params: { registrationComplete: true, mobileNumber: '639171234567' },
-      },
-    ],
-  });
+  assert.equal(refusalField('').message, 'Unable to send the code. Please try again.');
 });

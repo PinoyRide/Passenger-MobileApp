@@ -21,6 +21,8 @@ const BASE_DEV = {
   // which forwards every route it has not ported yet (ENDPOINT below) to Django unchanged.
   API: {
     OTP_LOGIN: 'otp/login',
+    // how a login code can be sent (text, and email when the account has one); sends nothing
+    OTP_LOGIN_OPTIONS: 'otp/login/options',
     OTP_REGISTER: 'otp/register',
     CUSTOMER_LOGIN: 'customers/login',
     CUSTOMER_REGISTER: 'customers/register',

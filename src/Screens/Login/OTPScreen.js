@@ -18,7 +18,7 @@ import { toStoredUser } from '@/Utils/customerMapper';
 import { signedInRoutes } from '@/Utils/consent';
 import { Constants } from '@/Utils';
 import { handedCode } from '@/Utils/handedCode';
-import { afterRegistering } from '@/Utils/registerForm';
+import { SMS, sentTo } from '@/Utils/codeChannel';
 import DeviceInfo from 'react-native-device-info';
 import { useDispatch, useSelector } from 'react-redux';
 import { selectUserInfo, setUserInfo } from '@/Redux/Slices/userSlice';
@@ -31,8 +31,11 @@ const OTPScreen = () => {
   const styles = getStyles({ colors });
   const navigation = useNavigation();
   const route = useRoute();
-  const { mobileNumber, otpSent, mode, consent, registration } = route.params;
+  const { mobileNumber, otpSent, mode, consent, emailHint } = route.params;
   const isRegister = mode === 'register';
+  // How the login code was sent: a text, or an email (chosen on LoginScreen).
+  // A registration code is always texted.
+  const channel = (!isRegister && route.params.channel) || SMS;
 
   const getOtpCode = useApiRequest();
   const loginUser = useApiRequest();
@@ -63,6 +66,7 @@ const OTPScreen = () => {
       {
         mobileNo: number,
         userType: 'customer',
+        ...(isRegister ? {} : { channel }),
       },
     );
 
@@ -106,8 +110,8 @@ const OTPScreen = () => {
         otpCode: code,
         appVersion: DeviceInfo.getVersion(),
         // registering: the Terms and Privacy Policy acceptance is recorded with the account,
-        // with the form's names and email; the passenger then logs in (signIn: false)
-        ...(isRegister ? { ...consent, ...registration, signIn: false } : {}),
+        // which is made signed in; the profile comes next and can be skipped for now
+        ...(isRegister ? { ...consent } : {}),
       },
     );
 
@@ -121,19 +125,19 @@ const OTPScreen = () => {
       setShowAlert(true);
       return;
     }
-    if (isRegister && loginUser.response?.data) {
-      // The account is made: log in with it, the number filled in
-      navigation.reset(afterRegistering(mobileNumber));
-      return;
-    }
-    if (loginUser.response?.code === 200 && loginUser.response.data) {
+    // Signed in: by logging in, or by registering (the new account comes back signed in)
+    if (
+      loginUser.response?.data &&
+      (isRegister || loginUser.response.code === 200)
+    ) {
       dispatch(setUserInfo(toStoredUser(loginUser.response.data)));
     }
   }, [loginUser.response, loginUser.error]);
 
   // Redirect after login / registration. An account that has not accepted the current Terms and
-  // Privacy Policy is asked first. An incomplete profile (name + selfie) goes straight to
-  // CompleteProfileScreen, with Home underneath so Back still works; booking stays blocked until it is done.
+  // Privacy Policy is asked first. An incomplete profile (no name yet) goes straight to
+  // CompleteProfileScreen, with Home underneath: it can be skipped for now, and booking asks
+  // for the name when it is still missing.
   useEffect(() => {
     if (!userInfo) {
       return;
@@ -198,11 +202,12 @@ const OTPScreen = () => {
           <View style={styles.pageContainer}>
             <Text style={styles.title}>Enter One-Time PIN</Text>
             <Text style={styles.subtitle}>
-              {codeFromBackend
-                ? 'Test environment: no text message is sent. The PIN is filled in for you.'
-                : `A One-Time PIN was sent to +63 ******${mobileNumber.slice(
-                    -4,
-                  )}`}
+              {sentTo({
+                channel,
+                emailHint,
+                mobileNumber,
+                handed: !!codeFromBackend,
+              })}
             </Text>
             <OTPInput
               length={6}
