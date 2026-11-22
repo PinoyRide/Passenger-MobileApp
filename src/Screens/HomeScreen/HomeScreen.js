@@ -30,7 +30,6 @@ import {
 } from '@/Components';
 import {
   useFocusEffect,
-  useIsFocused,
   useNavigation,
   useRoute,
 } from '@react-navigation/native';
@@ -2146,65 +2145,59 @@ const HomeScreen = () => {
 
   // "Riders nearby", for now (the owner, 2026-11-22): a button on the map
   // that shows the online riders within 2 km who are not booked or in
-  // transit, around the pickup, else around the person; pressed again, it
-  // hides them. Only while the booking sheet is up.
-  const isFocused = useIsFocused();
-  const [ridersShown, setRidersShown] = useState(false);
-  // where the map's blue dot put the person at the press: the location
-  // watch may have no position yet when the map does
-  const [ridersHere, setRidersHere] = useState(null);
-  const ridersAround = pickupLocation
-    ? { lat: pickupLocation.lat, long: pickupLocation.long }
-    : userLocation
-    ? { lat: userLocation.latitude, long: userLocation.longitude }
-    : ridersHere;
-  const nearby = useNearbyRiders({
-    shown: ridersShown && isFocused && sheetShown,
-    lat: ridersAround?.lat,
-    long: ridersAround?.long,
-  });
+  // transit, around the pickup, else around the person. One ask per press;
+  // the riders go by themselves after 30 s, or at the next press. Only while
+  // the booking sheet is up.
+  const { nearby, show: showRiders, hide: hideRiders } = useNearbyRiders();
   useEffect(() => {
     if (!sheetShown) {
-      setRidersShown(false);
+      hideRiders();
     }
-  }, [sheetShown]);
-  // the first answer after a press brings the riders into view
+  }, [sheetShown, hideRiders]);
+  // the riders (or the search) on the map: the next press takes them away;
+  // after a failure, it tries again
+  const ridersOn = Boolean(nearby?.looking || nearby?.riders);
+  // each answer brings its riders, and the point they are around, into view
+  const ridersAtRef = useRef(null);
   const ridersFramedRef = useRef(true);
-  const ridersAroundRef = useRef(ridersAround);
-  ridersAroundRef.current = ridersAround;
   useEffect(() => {
-    if (ridersFramedRef.current || !nearby || nearby.failed) {
+    if (ridersFramedRef.current || !nearby?.riders) {
       return;
     }
     ridersFramedRef.current = true;
     if (nearby.riders.length > 0) {
-      mapRef.current?.showPoints([ridersAroundRef.current, ...nearby.riders]);
+      mapRef.current?.showPoints([ridersAtRef.current, ...nearby.riders]);
     }
   }, [nearby]);
   const toggleRiders = () => {
-    if (ridersShown) {
-      setRidersShown(false);
+    if (ridersOn) {
+      hideRiders();
       return;
     }
-    setRidersHere(mapRef.current?.userPoint() ?? null);
+    // the map's own blue dot last: the location watch may have no position
+    // yet when the map does
+    ridersAtRef.current = pickupLocation
+      ? { lat: pickupLocation.lat, long: pickupLocation.long }
+      : userLocation
+      ? { lat: userLocation.latitude, long: userLocation.longitude }
+      : mapRef.current?.userPoint() ?? null;
     ridersFramedRef.current = false;
-    setRidersShown(true);
+    showRiders(ridersAtRef.current);
   };
   let ridersLabel = 'Riders nearby';
-  if (ridersShown) {
-    if (!ridersAround) {
-      ridersLabel = 'Your location is not known yet';
-    } else if (nearby?.failed) {
-      ridersLabel = 'Couldn’t load riders';
-    } else if (!nearby) {
-      ridersLabel = 'Looking for riders…';
-    } else if (nearby.count === 0) {
-      ridersLabel = 'No riders within 2 km';
-    } else {
-      ridersLabel = `${nearby.count} ${
-        nearby.count === 1 ? 'rider' : 'riders'
-      } within 2 km`;
-    }
+  if (nearby?.unknown) {
+    ridersLabel = 'Your location is not known yet';
+  } else if (nearby?.failed) {
+    ridersLabel = 'Couldn’t load riders';
+  } else if (nearby?.looking) {
+    ridersLabel = 'Looking for riders…';
+  } else if (nearby?.riders) {
+    ridersLabel =
+      nearby.count === 0
+        ? 'No riders within 2 km'
+        : `${nearby.count} ${
+            nearby.count === 1 ? 'rider' : 'riders'
+          } within 2 km`;
   }
 
   // Android's back does what the back button does while a ride is chosen,
@@ -2607,30 +2600,32 @@ New reference: ${activeBooking.ref_code}`
           </Pressable>
         ) : null}
 
-        {/* "Riders nearby", for now: shows and hides the riders within 2 km */}
+        {/* "Riders nearby", for now: shows the riders within 2 km for 30 s */}
         {sheetShown ? (
           <Pressable
             onPress={toggleRiders}
             hitSlop={6}
             accessibilityRole="button"
-            accessibilityState={{ selected: ridersShown }}
+            accessibilityState={{ selected: ridersOn }}
             accessibilityLabel={
-              ridersShown ? `${ridersLabel}. Hide riders` : 'Riders nearby'
+              nearby
+                ? `${ridersLabel}. ${ridersOn ? 'Hide riders' : 'Try again'}`
+                : 'Riders nearby'
             }
             style={[
               styles.ridersButton,
-              ridersShown && styles.ridersButtonOn,
+              nearby && styles.ridersButtonOn,
               { bottom: modalHeight + 16 },
             ]}>
             <Icon
               name="motorbike"
               size={20}
-              color={ridersShown ? look.surface : look.ink}
+              color={nearby ? look.surface : look.ink}
             />
             <Text
               style={[
                 styles.ridersButtonText,
-                ridersShown && styles.ridersButtonTextOn,
+                nearby && styles.ridersButtonTextOn,
               ]}
               numberOfLines={1}>
               {ridersLabel}

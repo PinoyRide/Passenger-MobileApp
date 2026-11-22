@@ -1,68 +1,94 @@
-import { useEffect, useRef, useState } from 'react';
-import { AppState } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import useApiRequest from '@/Services/ApiV2';
 import { Constants } from '@/Utils';
 
-// How often the map asks again while the riders are shown.
-const EVERY_MS = 15000;
+// How long the riders stay on the map after a press (the owner, 2026-11-22:
+// "we will give only 30 seconds for it then it will auto off").
+const SHOWN_MS = 30000;
+// A press this soon after the last answer, for about the same spot, shows
+// that answer again instead of asking: pressing on and off asks at most once
+// in this long.
+const REUSE_MS = 15000;
 
-// To about 100 m: the person's own position moves a little all the time, and
-// that must not ask again each time.
+// To about 100 m, the spot an answer belongs to.
 const near = value =>
   value == null || !Number.isFinite(Number(value))
     ? null
     : Math.round(Number(value) * 1000) / 1000;
 
-// The "Riders nearby" button's riders (the owner, 2026-11-22: online, within
-// 2 km, not booked or in transit; the backend's NearbyRiders decides). While
-// `shown` and the point is known: asked at once, again every 15 s while the
-// app is in front, and when the point moves. Returns null while not shown or
-// not answered yet, { count, riders: [{ lat, long }] } once answered, or
-// { failed: true } when the first ask failed.
-export default function useNearbyRiders({ shown, lat, long }) {
+// The "Riders nearby" button: one ask per press, nothing in between (the
+// owner, 2026-11-22: "call only the api when the riders nearby is clicked").
+// show(point) asks for the online riders within 2 km of the point who are not
+// booked or in transit (the backend's NearbyRiders); what comes back stays
+// for 30 s, then goes by itself, and hide() takes it away sooner. `nearby` is
+// null while nothing is shown, else { looking: true }, { count, riders:
+// [{ lat, long }] }, { failed: true }, or { unknown: true } (no point to ask
+// about).
+export default function useNearbyRiders() {
   const { request } = useApiRequest();
-  const requestRef = useRef(request);
-  requestRef.current = request;
-  const [answer, setAnswer] = useState(null);
-  const la = near(lat);
-  const lo = near(long);
+  const [nearby, setNearby] = useState(null);
+  // counts presses (and hides): an answer for an older one is dropped
+  const pressRef = useRef(0);
+  const timerRef = useRef(null);
+  const lastRef = useRef(null);
 
-  useEffect(() => {
-    if (!shown || la == null || lo == null) {
-      setAnswer(null);
-      return undefined;
+  const hide = useCallback(() => {
+    pressRef.current += 1;
+    clearTimeout(timerRef.current);
+    setNearby(null);
+  }, []);
+
+  // what press `press` found, shown for SHOWN_MS
+  const put = (press, value) => {
+    if (press !== pressRef.current) {
+      return;
     }
-    let alive = true;
-    const ask = async () => {
-      const { response, error, stale } = await requestRef.current(
-        'GET',
-        Constants.API.NEARBY_RIDERS({ lat: la, long: lo }),
-      );
-      if (!alive || stale) {
-        return;
+    setNearby(value);
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      if (press === pressRef.current) {
+        setNearby(null);
       }
-      const data = response?.data;
-      if (data && Number.isFinite(Number(data.count))) {
-        setAnswer({
-          count: Number(data.count),
-          riders: Array.isArray(data.riders) ? data.riders : [],
-        });
-      } else if (error) {
-        // the riders already on the map stay; say so only when there are none
-        setAnswer(previous => previous ?? { failed: true });
-      }
-    };
-    ask();
-    const timer = setInterval(() => {
-      if (AppState.currentState === 'active') {
-        ask();
-      }
-    }, EVERY_MS);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-  }, [shown, la, lo]);
+    }, SHOWN_MS);
+  };
 
-  return answer;
+  const show = async point => {
+    const press = ++pressRef.current;
+    clearTimeout(timerRef.current);
+    const la = near(point?.lat);
+    const lo = near(point?.long);
+    if (la == null || lo == null) {
+      put(press, { unknown: true });
+      return;
+    }
+    const spot = `${la},${lo}`;
+    const last = lastRef.current;
+    if (last && last.spot === spot && Date.now() - last.at < REUSE_MS) {
+      put(press, last.answer);
+      return;
+    }
+    setNearby({ looking: true });
+    const { response } = await request(
+      'GET',
+      Constants.API.NEARBY_RIDERS({ lat: la, long: lo }),
+    );
+    if (press !== pressRef.current) {
+      return;
+    }
+    const data = response?.data;
+    if (data && Number.isFinite(Number(data.count))) {
+      const answer = {
+        count: Number(data.count),
+        riders: Array.isArray(data.riders) ? data.riders : [],
+      };
+      lastRef.current = { spot, at: Date.now(), answer };
+      put(press, answer);
+    } else {
+      put(press, { failed: true });
+    }
+  };
+
+  useEffect(() => () => clearTimeout(timerRef.current), []);
+
+  return { nearby, show, hide };
 }
