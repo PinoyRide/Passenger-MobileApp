@@ -15,6 +15,7 @@ export { default as MapSelectionScreen } from './Location/MapSelectionScreen';
 export { default as SaveLocationScreen } from './Location/SaveLocationScreen';
 export { default as RatingScreen } from './RatingScreen/RatingScreen';
 export { default as SettingsScreen } from './SettingsScreen/SettingsScreen';
+export { default as DeleteAccountScreen } from './Profile/DeleteAccountScreen';
 export { default as BookingHistoryScreen } from './BookingHistoryScreen/BookingHistoryScreen';
 export { default as BookingCard } from './BookingHistoryScreen/Components/BookingCard';
 export { default as ReportIssueModal } from './BookingHistoryScreen/Components/ReportIssueModal';

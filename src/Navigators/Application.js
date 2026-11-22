@@ -10,6 +10,7 @@ import {
   CompleteProfileScreen,
   ConfirmDetailsScreen,
   CongratsScreen,
+  DeleteAccountScreen,
   EKYCScreen,
   GeneralTermsScreen,
   HomeScreen,
@@ -174,6 +175,11 @@ const ApplicationNavigator = () => {
             <Stack.Screen
               name="RatingScreen"
               component={RatingScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="DeleteAccountScreen"
+              component={DeleteAccountScreen}
               options={{ headerShown: false }}
             />
             <Stack.Screen

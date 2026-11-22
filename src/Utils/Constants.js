@@ -30,6 +30,10 @@ const BASE_DEV = {
     CUSTOMER_SELFIE: id => `customers/${id}/selfie`,
     CUSTOMER_CONSENT: id => `customers/${id}/consent`,
     CUSTOMER: id => `customers/${id}`,
+    // deleting one's own account: what stands in the way, the confirming code, the deletion
+    CUSTOMER_DELETION_CHECK: id => `customers/${id}/deletion/check`,
+    CUSTOMER_DELETION_CODE: id => `customers/${id}/deletion/code`,
+    CUSTOMER_DELETION: id => `customers/${id}/deletion`,
     CUSTOMER_LOGOUT: id => `customers/${id}/logout`,
     CUSTOMER_FIREBASE_TOKEN: id => `customers/${id}/firebase-token`,
     PLACE_SEARCH: query => `places/search?query=${encodeURIComponent(query)}`,

@@ -36,7 +36,6 @@ const SettingsScreen = () => {
   const activeBooking = useSelector(selectActiveBooking);
   const bookingStatus = useSelector(selectBookingStatus);
   const { request: logoutRequest, loading: loggingOut } = useApiRequest();
-  const { request: deleteRequest, loading: deletingAccount } = useApiRequest();
 
   useEffect(() => {
     AppUtil.debugDeep(userInfo);
@@ -142,66 +141,9 @@ const SettingsScreen = () => {
     );
   };
 
-  // Google Play requires apps that create accounts to let users delete them in the app.
-  const performDeleteAccount = async () => {
-    const online = await checkIsOnline();
-    if (!online) {
-      Alert.alert(
-        'No Internet Connection',
-        'Deleting your account requires an internet connection. Please reconnect and try again.',
-      );
-      return;
-    }
-
-    const { response, error } = await deleteRequest(
-      'DELETE',
-      Constants.API.CUSTOMER(userInfo.id),
-    );
-
-    if (error || !response || response?.code !== 200) {
-      Alert.alert(
-        'Unable to Delete Account',
-        error ||
-          response?.message ||
-          'Failed to delete your account. Please try again.',
-      );
-      return;
-    }
-
-    await clearSessionAndGoToLanding();
-    Alert.alert('Account Deleted', 'Your Pinoy Ride account has been deleted.');
-  };
-
-  const handleDeleteAccount = () => {
-    if (activeBooking?.id && [0, 1, 2, 5].includes(Number(bookingStatus))) {
-      Alert.alert(
-        'Active Booking',
-        'You have an active or scheduled booking. Please complete or cancel it before deleting your account.',
-      );
-      return;
-    }
-
-    const message =
-      'This permanently deletes your Pinoy Ride account. You will be logged out, your saved places ' +
-      'will be removed, and any remaining wallet balance can no longer be used. Completed trip and ' +
-      'payment records are kept as required for transactions. This cannot be undone.';
-
-    if (Platform.OS === 'web') {
-      // Alert.alert buttons are no-ops on react-native-web.
-      if (window.confirm(`Delete Account?\n\n${message}`)) {
-        performDeleteAccount();
-      }
-      return;
-    }
-    Alert.alert('Delete Account?', message, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: performDeleteAccount,
-      },
-    ]);
-  };
+  // Google Play requires apps that create accounts to let users delete them in
+  // the app. Deleting is as strict as in the Admin Portal: DeleteAccountScreen.
+  const handleDeleteAccount = () => navigation.navigate('DeleteAccountScreen');
 
   const handleLogout = async () => {
     if (activeBooking?.id && [1, 2].includes(Number(bookingStatus))) {
@@ -282,10 +224,8 @@ const SettingsScreen = () => {
         <TouchableOpacity
           style={styles.deleteAccountButton}
           onPress={handleDeleteAccount}
-          disabled={deletingAccount || loggingOut}>
-          <Text style={styles.deleteAccountLabel}>
-            {deletingAccount ? 'Deleting Account...' : 'Delete Account'}
-          </Text>
+          disabled={loggingOut}>
+          <Text style={styles.deleteAccountLabel}>Delete Account</Text>
         </TouchableOpacity>
       </View>
     </Container>
