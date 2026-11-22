@@ -211,18 +211,14 @@ const InputLocation = () => {
 
   const handleBack = () => navigation.goBack();
 
-  // Back leaves the trip as it was when this screen opened (the owner,
-  // 2026-11-22: after going back, "the pickup pin is still there"). A point
-  // chosen or cleared here reaches the booking sheet at once, so going back
-  // puts the opening points back as they were. The button keeps the changes,
+  // Back empties the trip (the owner, 2026-11-22: "when i click the back
+  // pick-up and drop-off should automatically be empty"): both points go,
+  // whatever this screen opened with, and the opener's `onBackOut` drops
+  // what it had begun for them (a schedule). The button keeps the points,
   // and so does a point confirmed on the map screen above, which closes this
   // screen too.
-  const openedWithRef = useRef({
-    pickup: route.params?.pickup ?? null,
-    dropoff: route.params?.dropoff ?? null,
-  });
-  const pointsRef = useRef({ pickup: null, dropoff: null });
-  pointsRef.current = { pickup: pickupLocation, dropoff: dropoffLocation };
+  const paramsRef = useRef(route.params);
+  paramsRef.current = route.params;
   const keepRef = useRef(false);
   useEffect(
     () =>
@@ -230,19 +226,9 @@ const InputLocation = () => {
         if (keepRef.current || !navigation.isFocused()) {
           return;
         }
-        const samePlace = (a, b) =>
-          (!a && !b) ||
-          (Boolean(a) &&
-            Boolean(b) &&
-            Number(a.lat) === Number(b.lat) &&
-            Number(a.long) === Number(b.long));
-        const opened = openedWithRef.current;
-        if (!samePlace(pointsRef.current.pickup, opened.pickup)) {
-          dispatch(storePickup(opened.pickup));
-        }
-        if (!samePlace(pointsRef.current.dropoff, opened.dropoff)) {
-          dispatch(storeDropoff(opened.dropoff));
-        }
+        dispatch(storePickup(null));
+        dispatch(storeDropoff(null));
+        paramsRef.current?.onBackOut?.();
       }),
     [navigation, dispatch],
   );

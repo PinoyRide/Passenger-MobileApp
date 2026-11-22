@@ -1960,6 +1960,9 @@ const HomeScreen = () => {
       // X buttons on the location screen clear the saved points too.
       onPickupClear: () => dispatch(setPickupLocation(null)),
       onDropoffClear: () => dispatch(setDropoffLocation(null)),
+      // Back there empties both points; a schedule begun for them goes too,
+      // so it cannot come back with the next route.
+      onBackOut: handleRideNow,
     });
   };
 
@@ -2933,6 +2936,7 @@ New reference: ${activeBooking.ref_code}`
               onDropoffChange={location =>
                 dispatch(setDropoffLocation(location))
               }
+              onPlacesBack={handleRideNow}
               onInquireBooking={() => {
                 if (bookingInFlightRef.current) {
                   return;

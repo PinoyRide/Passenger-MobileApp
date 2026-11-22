@@ -44,6 +44,7 @@ const BottomModal = ({
   onBackToConfirm,
   onPickupChange,
   onDropoffChange,
+  onPlacesBack,
   pickup,
   dropoff,
   isBooked,
@@ -241,6 +242,9 @@ const BottomModal = ({
       // X buttons on the location screen clear the saved points too.
       onPickupClear: () => onPickupChange?.(null),
       onDropoffClear: () => onDropoffChange?.(null),
+      // back there empties both points (it does that itself) and this drops
+      // a schedule begun for them
+      onBackOut: onPlacesBack,
     });
   };
 
