@@ -1,10 +1,7 @@
 import React, { useEffect } from 'react';
-import { deletePushToken } from '@/Services/Push/pushPlatform';
 import {
-  Alert,
   BackHandler,
   Image,
-  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -13,29 +10,16 @@ import {
 import Container from '@/Components/Container/Container';
 import ProfileAvatar from '@/Components/ProfileAvatar/ProfileAvatar';
 import { useTheme } from 'react-native-paper';
-import { CommonActions, useNavigation } from '@react-navigation/native';
-import {
-  clearBookingState,
-  clearSavedPlaces,
-  clearUserInfo,
-  selectActiveBooking,
-  selectBookingStatus,
-  selectUserInfo,
-} from '@/Redux/Slices/userSlice';
-import { useDispatch, useSelector } from 'react-redux';
-import useApiRequest from '@/Services/ApiV2';
-import { AppUtil, Constants } from '@/Utils';
-import { checkIsOnline } from '@/Utils/Network';
+import { useNavigation } from '@react-navigation/native';
+import { selectUserInfo } from '@/Redux/Slices/userSlice';
+import { useSelector } from 'react-redux';
+import { AppUtil } from '@/Utils';
 
 const SettingsScreen = () => {
   const { colors } = useTheme();
   const styles = getStyles({ colors });
   const navigation = useNavigation();
-  const dispatch = useDispatch();
   const userInfo = useSelector(selectUserInfo);
-  const activeBooking = useSelector(selectActiveBooking);
-  const bookingStatus = useSelector(selectBookingStatus);
-  const { request: logoutRequest, loading: loggingOut } = useApiRequest();
 
   useEffect(() => {
     AppUtil.debugDeep(userInfo);
@@ -94,88 +78,16 @@ const SettingsScreen = () => {
       label: 'Wallet',
       onPress: () => navigation.navigate('WalletScreen'),
     },
+    {
+      // Log out and Delete account (the owner, 2026-11-22)
+      id: 'settings',
+      label: 'Settings',
+      onPress: () => navigation.navigate('AccountSettingsScreen'),
+    },
   ];
 
   const handleBack = () => {
     navigation.popToTop();
-  };
-
-  const performLogout = async () => {
-    const online = await checkIsOnline();
-    if (!online) {
-      Alert.alert(
-        'No Internet Connection',
-        'Logging out requires an internet connection. Please reconnect and try again.',
-      );
-      return;
-    }
-
-    const { response, error, offline } = await logoutRequest(
-      'POST',
-      Constants.API.CUSTOMER_LOGOUT(userInfo.id),
-    );
-
-    if (error || !response || response?.code !== 200) {
-      Alert.alert(
-        offline ? 'No Internet Connection' : 'Ongoing Booking',
-        error || response?.message || 'Failed to log out. Please try again.',
-      );
-      return;
-    }
-
-    await clearSessionAndGoToLanding();
-  };
-
-  const clearSessionAndGoToLanding = async () => {
-    // stop pushes to this phone (backend also clears the saved token)
-    await deletePushToken();
-    dispatch(clearUserInfo());
-    dispatch(clearBookingState());
-    dispatch(clearSavedPlaces());
-
-    navigation.dispatch(
-      CommonActions.reset({
-        index: 0,
-        routes: [{ name: 'LandingScreen' }],
-      }),
-    );
-  };
-
-  // Google Play requires apps that create accounts to let users delete them in
-  // the app. Deleting is as strict as in the Admin Portal: DeleteAccountScreen.
-  const handleDeleteAccount = () => navigation.navigate('DeleteAccountScreen');
-
-  const handleLogout = async () => {
-    if (activeBooking?.id && [1, 2].includes(Number(bookingStatus))) {
-      Alert.alert(
-        'Ongoing Booking',
-        'You have an ongoing booking. Please complete your current booking first.',
-      );
-      return;
-    }
-    const online = await checkIsOnline();
-    if (!online) {
-      Alert.alert(
-        'No Internet Connection',
-        'Logging out requires an internet connection. Please reconnect and try again.',
-      );
-      return;
-    }
-    if (Platform.OS === 'web') {
-      // Alert.alert buttons are no-ops on react-native-web.
-      if (window.confirm('Are you sure you want to log out?')) {
-        performLogout();
-      }
-      return;
-    }
-    Alert.alert('Log Out', 'Are you sure you want to log out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Log Out',
-        style: 'destructive',
-        onPress: performLogout,
-      },
-    ]);
   };
 
   return (
@@ -213,20 +125,6 @@ const SettingsScreen = () => {
             <Text style={styles.label}>{button.label}</Text>
           </TouchableOpacity>
         ))}
-        <TouchableOpacity
-          style={[styles.buttons, styles.logoutButton]}
-          onPress={handleLogout}
-          disabled={loggingOut}>
-          <Text style={[styles.label, styles.logoutLabel]}>
-            {loggingOut ? 'Logging Out...' : 'Log Out'}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.deleteAccountButton}
-          onPress={handleDeleteAccount}
-          disabled={loggingOut}>
-          <Text style={styles.deleteAccountLabel}>Delete Account</Text>
-        </TouchableOpacity>
       </View>
     </Container>
   );
@@ -301,17 +199,5 @@ const getStyles = ({ colors }) =>
       fontWeight: 400,
       fontSize: 16,
       color: colors.grey3,
-    },
-    deleteAccountButton: {
-      alignSelf: 'center',
-      marginTop: 24,
-      paddingVertical: 8,
-      paddingHorizontal: 16,
-    },
-    deleteAccountLabel: {
-      fontFamily: 'Poppins Regular',
-      fontSize: 14,
-      color: colors.error,
-      textDecorationLine: 'underline',
     },
   });

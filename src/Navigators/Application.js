@@ -3,6 +3,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import {
+  AccountSettingsScreen,
   BookingDetailsScreen,
   BookingHistoryScreen,
   CashInScreen,
@@ -181,6 +182,11 @@ const ApplicationNavigator = () => {
             <Stack.Screen
               name="RatingScreen"
               component={RatingScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="AccountSettingsScreen"
+              component={AccountSettingsScreen}
               options={{ headerShown: false }}
             />
             <Stack.Screen
