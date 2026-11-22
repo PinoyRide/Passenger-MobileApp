@@ -17,4 +17,21 @@ export const modern = ({ colors, dark }) => ({
   chipInk: dark ? colors.primary : '#7A5B00',
   switchOff: dark ? '#55535A' : '#C9C4BA',
   radius: 16,
+  // headlines, fares, names
+  ink: dark ? '#F4F3F1' : '#17171C',
+  // secondary text, and any text on `soft`, where `muted` is too faint
+  inkSoft: dark ? '#B8B4AE' : '#45454F',
+  // a good-news badge: `success` text on an `onSuccess` fill (the other way
+  // round from accent and onAccent)
+  success: dark ? '#6FD3A6' : '#0B6B46',
+  onSuccess: dark ? 'rgba(111, 211, 166, 0.14)' : '#E4F1EA',
+  // the text of a destructive action, such as cancelling a booking
+  danger: dark ? '#FF8A80' : '#C0261F',
+  // the route line on the map
+  route: dark ? '#F4F3F1' : '#17171C',
+  // corners at four scales: a sheet, a card, an icon tile, a pill
+  radiusSheet: 28,
+  radiusCard: 20,
+  radiusTile: 16,
+  radiusPill: 15,
 });
