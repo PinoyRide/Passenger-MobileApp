@@ -24,18 +24,6 @@ const formatPhoneDisplay = number => {
   }
 };
 
-// The 10 digits after +63 of a stored number (639XXXXXXXXX or 09XXXXXXXXX)
-const localPhoneDigits = number => {
-  const digits = String(number || '').replace(/\D/g, '');
-  if (digits.length === 12 && digits.startsWith('63')) {
-    return digits.slice(2);
-  }
-  if (digits.length === 11 && digits.startsWith('0')) {
-    return digits.slice(1);
-  }
-  return digits.slice(0, 10);
-};
-
 // Philippine mobile number validation - must start with 9
 const validatePhilippineNumber = number => {
   const cleaned = number.replace(/\D/g, '');
@@ -63,16 +51,32 @@ const validatePhilippineNumber = number => {
   return null;
 };
 
+// The 10 digits after +63 of a stored number (639XXXXXXXXX or 09XXXXXXXXX)
+const localPhoneDigits = number => {
+  const digits = String(number || '').replace(/\D/g, '');
+  if (digits.length === 12 && digits.startsWith('63')) {
+    return digits.slice(2);
+  }
+  if (digits.length === 11 && digits.startsWith('0')) {
+    return digits.slice(1);
+  }
+  return digits.slice(0, 10);
+};
+
 const AppTextInput = ({
   label,
   value,
   onChangeText,
   onBlur,
   placeholder,
-  inputMode = 'text', // 'text' | 'phone' | 'amount' | 'comment'
+  inputMode = 'text', // 'text' | 'phone' | 'amount' | 'comment' | 'numeric'
   error,
   labelColor,
   onValidationChange,
+  editable = true, // Add editable prop with default value true
+  containerStyle,
+  inputStyle,
+  autoCapitalize, // undefined keeps RN's default for existing callers
 }) => {
   const theme = useTheme();
   const { colors } = theme;
@@ -81,6 +85,7 @@ const AppTextInput = ({
   const isPhone = inputMode === 'phone';
   const isAmount = inputMode === 'amount';
   const isComment = inputMode === 'comment';
+  const isNumeric = inputMode === 'numeric';
 
   const [isFocused, setIsFocused] = useState(false);
   const [phoneError, setPhoneError] = useState(null);
@@ -105,12 +110,36 @@ const AppTextInput = ({
     return parts.join('.');
   };
 
-  // Clean input - only allow numbers and one decimal point
+  // Clean input - only allow numbers and one decimal point, round to 2 decimal places
   const cleanAmount = val => {
-    return val
-      .replace(/[^0-9.]/g, '') // Only numbers and decimal
-      .replace(/(\..*?)\.+/g, '$1') // Only one decimal point
-      .replace(/^0+(?=\d)/, ''); // Remove leading zeros (except "0.")
+    // Remove everything except numbers and decimal point
+    let cleaned = val.replace(/[^0-9.]/g, '');
+
+    // Only allow one decimal point
+    cleaned = cleaned.replace(/(\..*?)\.+/g, '$1');
+
+    // Remove leading zeros (except "0." or just "0")
+    cleaned = cleaned.replace(/^0+(?=\d)/, '');
+
+    // Handle decimal places with rounding
+    const parts = cleaned.split('.');
+    if (parts.length > 1) {
+      // If user tries to type more than 2 decimal places, round it
+      if (parts[1].length > 2) {
+        const fullNumber = parseFloat(cleaned);
+        if (!isNaN(fullNumber)) {
+          // Round to 2 decimal places
+          const rounded = Math.round(fullNumber * 100) / 100;
+          cleaned = rounded.toString();
+        } else {
+          // Fallback: just truncate
+          parts[1] = parts[1].slice(0, 2);
+          cleaned = parts.join('.');
+        }
+      }
+    }
+
+    return cleaned;
   };
 
   const handleAmountChange = val => {
@@ -216,8 +245,22 @@ const AppTextInput = ({
       : ''
     : value;
 
+  // Get keyboard type based on inputMode
+  const getKeyboardType = () => {
+    if (isAmount) {
+      return 'decimal-pad';
+    }
+    if (isNumeric) {
+      return 'numeric';
+    }
+    if (isPhone) {
+      return 'phone-pad';
+    }
+    return 'default';
+  };
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, containerStyle]}>
       {label && (
         <Text style={[styles.label, labelColor && { color: labelColor }]}>
           {label}
@@ -229,6 +272,7 @@ const AppTextInput = ({
           style={[
             styles.phoneContainer,
             (error || phoneError) && styles.inputError,
+            !editable && styles.disabledInput,
           ]}>
           {/* PH Flag Emoji */}
           <Text style={styles.flagEmoji}>🇵🇭</Text>
@@ -243,9 +287,10 @@ const AppTextInput = ({
             onBlur={handlePhoneBlur}
             onFocus={handlePhoneFocus}
             placeholder={placeholder || '9XX-XXX-XXXX'}
-            placeholderTextColor={colors.darkGrey}
+            placeholderTextColor={colors.onSurfaceVariant}
             style={styles.phoneInput}
             keyboardType="phone-pad"
+            editable={editable}
           />
         </View>
       ) : (
@@ -255,15 +300,19 @@ const AppTextInput = ({
           onBlur={isAmount ? handleAmountBlur : onBlur}
           onFocus={isAmount ? handleAmountFocus : undefined}
           placeholder={placeholder}
-          placeholderTextColor={colors.darkGrey}
+          placeholderTextColor={colors.onSurfaceVariant}
           style={[
             isComment ? styles.commentBox : styles.input,
+            inputStyle,
             error && styles.inputError,
+            !editable && styles.disabledInput,
           ]}
-          keyboardType={isAmount ? 'decimal-pad' : 'default'}
+          keyboardType={getKeyboardType()}
           multiline={isComment}
           numberOfLines={isComment ? 4 : 1}
           textAlignVertical={isComment ? 'top' : 'center'}
+          editable={editable}
+          autoCapitalize={autoCapitalize}
         />
       )}
 
