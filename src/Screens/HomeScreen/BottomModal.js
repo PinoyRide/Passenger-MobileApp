@@ -3,6 +3,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSelector } from 'react-redux';
+import { selectSavedPlaces } from '@/Redux/Slices/userSlice';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { bottomSpace } from '@/Utils/bottomSpace';
 import { formatPeso } from '@/Utils/formatPeso';
@@ -24,7 +26,9 @@ const placeText = place => place?.description || place?.address || '';
 // The booking sheet (docs/booking-redesign-spec.md, "BottomModal"). Top to
 // bottom: the route, the title with Schedule, the rides, the payment, promo
 // and note pills, the fare, and one button. Until pickup and drop-off are
-// both set it shows only "Where to?" and the two fields: no rides, no fares.
+// both set it shows only "Where to?", a search field and the Home, Work and
+// Saved shortcuts (the design canvas's first screen, which the owner chose
+// over the spec's two fields): no rides, no fares.
 // The fare it is given is always the one for the trip on screen (HomeScreen
 // prices the trip by itself and drops a fare asked for another one).
 const BottomModal = ({
@@ -182,10 +186,12 @@ const BottomModal = ({
       ].filter(Boolean)
     : [];
 
-  const openPlaces = (focusDropoff = false) => {
+  // The place picker (InputLocation). `dropoffNow` hands it a drop-off just
+  // set here, before this sheet's props have caught up.
+  const openPlaces = ({ focusDropoff = false, dropoffNow } = {}) => {
     navigation.navigate('InputLocation', {
       pickup,
-      dropoff,
+      dropoff: dropoffNow || dropoff,
       focusDropoff,
       onPickupSelect: item => onPickupChange?.(item),
       onDropoffSelect: item => onDropoffChange?.(item),
@@ -195,61 +201,96 @@ const BottomModal = ({
     });
   };
 
-  const swapPlaces = () => {
-    onPickupChange?.(dropoff || null);
-    onDropoffChange?.(pickup || null);
-  };
-
   // Edit: while choosing, change the places; from Confirm, back to choosing.
-  const onEdit = confirming ? onBackToEdit : () => openPlaces(false);
+  const onEdit = confirming ? onBackToEdit : () => openPlaces();
 
-  const renderRail = () => (
-    <View style={styles.rail}>
-      <View style={styles.railMarks}>
-        <View style={styles.dot} />
-        <View style={styles.railLine} />
-        <View style={styles.square} />
-      </View>
-      <View style={styles.flex}>
-        <Pressable
-          onPress={() => openPlaces(false)}
-          accessibilityRole="button"
-          accessibilityLabel={`Pick-up: ${placeText(pickup) || 'not set'}`}
-          style={({ pressed }) => [styles.field, pressed && styles.pressed]}>
-          <Text style={styles.fieldLabel}>PICK-UP</Text>
-          <Text
-            style={[styles.fieldValue, !pickup && styles.fieldEmpty]}
-            numberOfLines={1}>
-            {placeText(pickup) || 'Choose a pick-up point'}
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => openPlaces(true)}
-          accessibilityRole="button"
-          accessibilityLabel={`Drop-off: ${placeText(dropoff) || 'not set'}`}
-          style={({ pressed }) => [
-            styles.field,
-            styles.fieldGap,
-            pressed && styles.pressed,
-          ]}>
-          <Text style={styles.fieldLabel}>DROP-OFF</Text>
-          <Text
-            style={[styles.fieldValue, !dropoff && styles.fieldEmpty]}
-            numberOfLines={1}>
-            {placeText(dropoff) || 'Choose a drop-off point'}
-          </Text>
-        </Pressable>
-      </View>
+  // Home and Work go straight to the saved place (then ask for the pickup if
+  // there is none yet); one not saved yet is added first, as on the place
+  // picker. Saved opens the picker, which lists every saved place.
+  const savedPlaces = useSelector(selectSavedPlaces) || [];
+  const goToSaved = type => {
+    const place = savedPlaces.find(p => p.type === type);
+    if (!place) {
+      navigation.navigate('SaveLocationScreen', { locationType: type });
+      return;
+    }
+    const target = { address: place.address, lat: place.lat, long: place.long };
+    onDropoffChange?.(target);
+    if (!pickup) {
+      openPlaces({ dropoffNow: target });
+    }
+  };
+  const savedLabel = (type, name) => {
+    const place = savedPlaces.find(p => p.type === type);
+    return place ? `${name}: ${place.address}` : `Add your ${name} address`;
+  };
+  const shortcuts = [
+    {
+      id: 'home',
+      icon: 'home-outline',
+      text: 'Home',
+      label: savedLabel('home', 'home'),
+      onPress: () => goToSaved('home'),
+    },
+    {
+      id: 'work',
+      icon: 'briefcase-outline',
+      text: 'Work',
+      label: savedLabel('work', 'work'),
+      onPress: () => goToSaved('work'),
+    },
+    {
+      id: 'saved',
+      icon: 'bookmark-outline',
+      text: 'Saved',
+      label: 'Saved places',
+      onPress: () => openPlaces({ focusDropoff: true }),
+    },
+  ];
+
+  // The search field asks for the destination; with only the destination
+  // set, it asks for the pickup instead.
+  const renderWhereTo = () => (
+    <>
       <Pressable
-        onPress={swapPlaces}
-        disabled={!pickup && !dropoff}
-        hitSlop={4}
-        accessibilityRole="button"
-        accessibilityLabel="Swap pick-up and drop-off"
-        style={({ pressed }) => [styles.swap, pressed && styles.pressed]}>
-        <Icon name="swap-vertical" size={20} color={look.ink} />
+        onPress={() =>
+          openPlaces({ focusDropoff: !dropoff || Boolean(pickup) })
+        }
+        accessibilityRole="search"
+        accessibilityLabel={
+          dropoff
+            ? `Destination: ${placeText(dropoff)}`
+            : 'Enter your destination'
+        }
+        style={({ pressed }) => [styles.search, pressed && styles.pressed]}>
+        <Icon name="magnify" size={20} color={look.inkSoft} />
+        <Text
+          style={[styles.searchText, dropoff && styles.searchValue]}
+          numberOfLines={1}>
+          {dropoff ? placeText(dropoff) : 'Enter your destination'}
+        </Text>
       </Pressable>
-    </View>
+      <View style={styles.pillRow}>
+        {shortcuts.map(item => (
+          <Pressable
+            key={item.id}
+            onPress={item.onPress}
+            accessibilityRole="button"
+            accessibilityLabel={item.label}
+            style={({ pressed }) => [styles.pill, pressed && styles.pressed]}>
+            <Icon
+              name={item.icon}
+              size={17}
+              color={look.inkSoft}
+              style={styles.pillIcon}
+            />
+            <Text style={styles.pillText} numberOfLines={1}>
+              {item.text}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    </>
   );
 
   const renderRouteLine = () => (
@@ -458,7 +499,7 @@ const BottomModal = ({
           <Text style={styles.display} maxFontSizeMultiplier={1.3}>
             Where to?
           </Text>
-          {renderRail()}
+          {renderWhereTo()}
         </View>
       )}
     </View>
@@ -554,59 +595,26 @@ const getStyles = (look, blue) =>
       lineHeight: 18,
       color: blue,
     },
-    rail: {
+    // "Where to?": the search field
+    search: {
       flexDirection: 'row',
       alignItems: 'center',
-    },
-    railMarks: {
-      alignSelf: 'stretch',
-      alignItems: 'center',
-      // the dot and the square sit level with the middle of each field
-      paddingVertical: 21,
-      marginRight: 10,
-    },
-    railLine: {
-      flex: 1,
-      width: 2,
-      marginVertical: 4,
-      backgroundColor: look.hairline,
-    },
-    field: {
-      minHeight: 52,
-      justifyContent: 'center',
-      paddingHorizontal: 14,
-      paddingVertical: 6,
+      gap: 10,
+      minHeight: 56,
+      paddingHorizontal: 16,
       borderRadius: look.radiusTile,
       backgroundColor: look.soft,
     },
-    fieldGap: {
-      marginTop: 6,
-    },
-    // Label role; inkSoft, not muted, on `soft`
-    fieldLabel: {
-      fontFamily: 'Poppins SemiBold',
-      fontSize: 11,
-      lineHeight: 14,
-      letterSpacing: 1.2,
-      color: look.inkSoft,
-    },
-    fieldValue: {
+    // inkSoft, not muted, on `soft`
+    searchText: {
+      flex: 1,
       fontFamily: 'Poppins Regular',
-      fontSize: 13,
-      lineHeight: 18,
-      color: look.ink,
-    },
-    fieldEmpty: {
+      fontSize: 15,
+      lineHeight: 20,
       color: look.inkSoft,
     },
-    swap: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      marginLeft: 10,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: look.soft,
+    searchValue: {
+      color: look.ink,
     },
     headerRow: {
       flexDirection: 'row',
