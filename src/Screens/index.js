@@ -31,6 +31,7 @@ export { default as ProfileScreen } from './Profile/ProfileScreen';
 export { default as CompleteProfileScreen } from './Profile/CompleteProfileScreen';
 export { default as LivenessSelfieScreen } from './Profile/LivenessSelfieScreen';
 export { default as PersonalDetailsScreen } from './Register/PersonalDetailsScreen';
+export { default as RegisterFormScreen } from './Register/RegisterFormScreen';
 export { default as UploadIDScreen } from './Register/UploadIDScreen';
 export { default as SelfieScreen } from './Register/SelfieScreen';
 export { default as ConfirmDetailsScreen } from './Register/ConfirmDetailsScreen';

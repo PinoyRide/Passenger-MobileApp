@@ -1273,9 +1273,9 @@ const HomeScreen = () => {
     handleInquireBookingRequest();
   }, [inquireBooking.response, inquireBooking.error]);
 
-  // A booking needs a complete profile: first name, last name and a photo of
-  // the passenger (the server refuses it otherwise). It is checked at the
-  // first tap, so nobody picks places and a fare only to be turned away.
+  // A booking needs a complete profile: first name and last name (the server
+  // refuses it otherwise; the photo is optional). It is checked at the first
+  // tap, so nobody picks places and a fare only to be turned away.
   const profileComplete = !!userInfo?.profile_complete;
   const requireCompleteProfile = () => {
     if (profileComplete) {
@@ -1283,7 +1283,7 @@ const HomeScreen = () => {
     }
     Alert.alert(
       'Complete Your Profile',
-      'Add your first name, last name and a photo of yourself before booking.',
+      'Add your first name and last name before booking.',
       [
         { text: 'Later', style: 'cancel' },
         {

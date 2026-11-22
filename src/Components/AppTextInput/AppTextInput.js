@@ -24,6 +24,18 @@ const formatPhoneDisplay = number => {
   }
 };
 
+// The 10 digits after +63 of a stored number (639XXXXXXXXX or 09XXXXXXXXX)
+const localPhoneDigits = number => {
+  const digits = String(number || '').replace(/\D/g, '');
+  if (digits.length === 12 && digits.startsWith('63')) {
+    return digits.slice(2);
+  }
+  if (digits.length === 11 && digits.startsWith('0')) {
+    return digits.slice(1);
+  }
+  return digits.slice(0, 10);
+};
+
 // Philippine mobile number validation - must start with 9
 const validatePhilippineNumber = number => {
   const cleaned = number.replace(/\D/g, '');
@@ -72,7 +84,10 @@ const AppTextInput = ({
 
   const [isFocused, setIsFocused] = useState(false);
   const [phoneError, setPhoneError] = useState(null);
-  const [displayPhone, setDisplayPhone] = useState('');
+  // A number already filled in (639XXXXXXXXX, as this field reports it) is shown as 9XX XXX XXXX
+  const [displayPhone, setDisplayPhone] = useState(() =>
+    isPhone ? localPhoneDigits(value) : '',
+  );
 
   // Format amount with 2 decimals and commas
   const formatAmount = val => {

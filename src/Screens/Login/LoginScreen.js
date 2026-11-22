@@ -29,9 +29,13 @@ const LoginScreen = () => {
   const route = useRoute();
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [mobileNumber, setMobileNumber] = useState('');
+  // Just registered: the number is filled in (639XXXXXXXXX)
+  const registeredNumber = route.params?.mobileNumber || '';
+  const [mobileNumber, setMobileNumber] = useState(registeredNumber);
   const [errorMessage, setErrorMessage] = useState('');
-  const [isPhoneValid, setIsPhoneValid] = useState(false);
+  const [isPhoneValid, setIsPhoneValid] = useState(
+    /^639\d{9}$/.test(registeredNumber),
+  );
 
   const [alertMessage, setAlertMessage] = useState('');
   const [showAlert, setShowAlert] = useState(false);

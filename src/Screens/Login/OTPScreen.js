@@ -18,6 +18,7 @@ import { toStoredUser } from '@/Utils/customerMapper';
 import { signedInRoutes } from '@/Utils/consent';
 import { Constants } from '@/Utils';
 import { handedCode } from '@/Utils/handedCode';
+import { afterRegistering } from '@/Utils/registerForm';
 import DeviceInfo from 'react-native-device-info';
 import { useDispatch, useSelector } from 'react-redux';
 import { selectUserInfo, setUserInfo } from '@/Redux/Slices/userSlice';
@@ -30,7 +31,7 @@ const OTPScreen = () => {
   const styles = getStyles({ colors });
   const navigation = useNavigation();
   const route = useRoute();
-  const { mobileNumber, otpSent, mode, consent } = route.params;
+  const { mobileNumber, otpSent, mode, consent, registration } = route.params;
   const isRegister = mode === 'register';
 
   const getOtpCode = useApiRequest();
@@ -104,8 +105,9 @@ const OTPScreen = () => {
         mobileNo: mobileNumber,
         otpCode: code,
         appVersion: DeviceInfo.getVersion(),
-        // registering: the Terms and Privacy Policy acceptance is recorded with the account
-        ...(isRegister ? consent : {}),
+        // registering: the Terms and Privacy Policy acceptance is recorded with the account,
+        // with the form's names and email; the passenger then logs in (signIn: false)
+        ...(isRegister ? { ...consent, ...registration, signIn: false } : {}),
       },
     );
 
@@ -117,6 +119,11 @@ const OTPScreen = () => {
           : loginUser.error,
       );
       setShowAlert(true);
+      return;
+    }
+    if (isRegister && loginUser.response?.data) {
+      // The account is made: log in with it, the number filled in
+      navigation.reset(afterRegistering(mobileNumber));
       return;
     }
     if (loginUser.response?.code === 200 && loginUser.response.data) {
@@ -166,7 +173,9 @@ const OTPScreen = () => {
           />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>Get Started</Text>
+          <Text style={styles.headerTitle}>
+            {isRegister ? 'Register' : 'Get Started'}
+          </Text>
         </View>
       </View>
 

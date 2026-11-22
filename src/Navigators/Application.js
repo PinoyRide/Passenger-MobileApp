@@ -27,6 +27,7 @@ import {
   PromoReferralsScreen,
   QRPHScreen,
   RatingScreen,
+  RegisterFormScreen,
   RegisterScreen,
   SaveLocationScreen,
   SelfieScreen,
@@ -78,6 +79,11 @@ const ApplicationNavigator = () => {
             <Stack.Screen
               name="RegisterScreen"
               component={RegisterScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="RegisterFormScreen"
+              component={RegisterFormScreen}
               options={{ headerShown: false }}
             />
             <Stack.Screen

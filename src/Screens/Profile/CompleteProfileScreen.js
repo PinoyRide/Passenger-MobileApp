@@ -18,9 +18,10 @@ import { toStoredUser } from '@/Utils/customerMapper';
 import { withCameraPermission } from '@/Utils/Permissions';
 import { selectUserInfo, setUserInfo } from '@/Redux/Slices/userSlice';
 
-// Name + selfie: what a passenger must have before booking (the backend refuses bookings otherwise).
-// The selfie is taken on LivenessSelfieScreen, which checks a real person is taking it of
-// themselves; it comes back here as route.params.capturedSelfie.
+// Name: what a passenger must have before booking (the backend refuses bookings otherwise).
+// The face photo is optional (the owner, 2026-11-22). When taken, it is taken on
+// LivenessSelfieScreen, which checks a real person is taking it of themselves; it comes back
+// here as route.params.capturedSelfie.
 const CompleteProfileScreen = () => {
   const { colors } = useTheme();
   const styles = getStyles({ colors });
@@ -67,9 +68,6 @@ const CompleteProfileScreen = () => {
     }
     if (!lname.trim()) {
       next.lname = 'Last name is required';
-    }
-    if (!currentSelfie) {
-      next.selfie = 'A photo of you is required';
     }
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -147,10 +145,10 @@ const CompleteProfileScreen = () => {
         showsVerticalScrollIndicator={false}>
         <View style={styles.pageContainer}>
           <Text style={styles.sectionSubtitle}>
-            Riders see your name and photo so they can find you at pickup. You
-            can book once these are filled in. The photo is taken with the
-            camera: you will be asked to turn your head a little so we know it
-            is really you.
+            Riders see your name so they can find you at pickup; you can book
+            once it is filled in. A photo of you is optional and helps them
+            more. It is taken with the camera: you will be asked to turn your
+            head a little so we know it is really you.
           </Text>
 
           <TouchableOpacity
@@ -166,7 +164,9 @@ const CompleteProfileScreen = () => {
             ) : (
               <View style={styles.selfiePlaceholder}>
                 <Text style={styles.selfieIcon}>🤳</Text>
-                <Text style={styles.selfieHint}>Tap to take your photo</Text>
+                <Text style={styles.selfieHint}>
+                  Tap to add your photo (optional)
+                </Text>
               </View>
             )}
           </TouchableOpacity>

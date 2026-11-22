@@ -41,7 +41,7 @@ const LandingScreen = () => {
             Don't have an account?{' '}
             <Text
               style={styles.registerLink}
-              onPress={() => navigation.navigate('GeneralTermsScreen')}>
+              onPress={() => navigation.navigate('RegisterFormScreen')}>
               Register
             </Text>
           </Text>
