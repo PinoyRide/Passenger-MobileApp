@@ -7,6 +7,7 @@ import { selectSessionToken, selectUserInfo } from '@/Redux/Slices/userSlice';
 import { getCurrentRouteName, navigate } from '@/Utils/NavigationService';
 import { checkIsOnline } from '@/Utils/Network';
 import { signalSignedOut, signedOutReason } from '@/Utils/signedOut';
+import { UPDATING_MESSAGE, isServerDown, readable } from '@/Utils/serverDown';
 
 const REQUEST_TIMEOUT_MS = 15000;
 const OFFLINE_MESSAGE =
@@ -110,9 +111,10 @@ const usePostRequest = () => {
   }
 
   const extractErrorMessage = errorData => {
-    // Handle string errors
+    // Handle string errors (a web page, such as Render's while the API
+    // restarts, becomes a plain message: serverDown.js)
     if (typeof errorData === 'string') {
-      return errorData;
+      return readable(errorData);
     }
 
     // Handle object errors
@@ -337,8 +339,11 @@ const usePostRequest = () => {
       let message = '';
       let offline = false;
 
-      //  Handle error response with proper extraction
-      if (err.response?.data) {
+      // The API restarting for an update (Render's page or a gateway status):
+      // a plain message, never the page itself
+      if (isServerDown(err.response?.status, err.response?.data)) {
+        message = UPDATING_MESSAGE;
+      } else if (err.response?.data) {
         // Try to extract message from response data
         message = extractErrorMessage(err.response.data);
       } else if (err.response) {

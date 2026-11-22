@@ -12,6 +12,7 @@ import { AppUtil, Constants } from '@/Utils';
 import { getCurrentRouteName, navigate } from '@/Utils/NavigationService';
 import { checkIsOnline } from '@/Utils/Network';
 import { signalSignedOut, signedOutReason } from '@/Utils/signedOut';
+import { UPDATING_MESSAGE, isServerDown } from '@/Utils/serverDown';
 
 const REQUEST_TIMEOUT_MS = 15000;
 const OFFLINE_MESSAGE =
@@ -35,7 +36,11 @@ export function normalise(status, body) {
   return {
     status: ok ? 'success' : 'error',
     code: ok ? 200 : status,
-    message: ok ? 'Success' : errorMessageOf(body),
+    message: ok
+      ? 'Success'
+      : isServerDown(status, body)
+      ? UPDATING_MESSAGE
+      : errorMessageOf(body),
     data: body?.data ?? null,
   };
 }
