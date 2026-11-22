@@ -6,5 +6,5 @@
   <string name="launch_starting">Starting…</string>
   <!-- The APK version: set by bump-version.js when the native part changes. Self-updates made for another
        APK version are not taken. -->
-  <string name="expo_runtime_version">2.0.7</string>
+  <string name="expo_runtime_version">2.0.13</string>
 </resources>
