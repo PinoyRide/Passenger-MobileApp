@@ -63,6 +63,8 @@ const WalletScreen = () => {
 
   const balance =
     wallet?.availBalance ?? userInfo?.wallet_details?.avail_balance ?? 0;
+  // what can be cashed out: money added by Pinoy Ride pays for rides only
+  const cashable = wallet?.cashableBalance;
   const active = Boolean(wallet?.active);
   const transactions = wallet?.transactions ?? [];
 
@@ -110,15 +112,16 @@ const WalletScreen = () => {
           'Sending money from your wallet to someone else is coming soon.',
         ),
     },
+    // Cash out to the passenger's GCash (the owner, 2026-11-23: "since they
+    // can cash in they can also cash out"); it needs the sign-in token
     {
-      id: 'transfer',
-      label: 'Transfer',
-      icon: 'swap-horizontal',
+      id: 'cash-out',
+      label: 'Cash out',
+      icon: 'bank-transfer-out',
       onPress: () =>
-        Alert.alert(
-          'Transfer',
-          'Moving money from your wallet to a bank or e-wallet is coming soon.',
-        ),
+        navigation.navigate('CashOutScreen', {
+          walletDetails: { avail_balance: balance, cashable_balance: cashable },
+        }),
     },
   ];
 

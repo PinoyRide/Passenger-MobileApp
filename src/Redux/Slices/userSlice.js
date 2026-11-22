@@ -62,6 +62,10 @@ const normalizeRiderDetails = rd => {
 const initialState = {
   userInfo: null,
   hasShownLoginSuccess: false,
+  // The passenger's sign-in token from customers/login: a cash-out needs it
+  // (X-Customer-Session). Kept apart from userInfo, which profile updates
+  // replace.
+  sessionToken: null,
   savedPlaces: [], // Array of saved locations
 
   // ✅ NEW: Customer booking state (persisted across app restarts)
@@ -99,11 +103,16 @@ const userSlice = createSlice({
         state.minimizedAdvanceBookingIds = [];
         state.parkedAdvanceBookings = [];
         state.seenPromoIds = [];
+        state.sessionToken = null;
       }
       state.userInfo = action.payload;
     },
+    setSessionToken: (state, action) => {
+      state.sessionToken = action.payload || null;
+    },
     clearUserInfo: state => {
       state.userInfo = null;
+      state.sessionToken = null;
       state.ratedBookingIds = [];
       state.acknowledgedScheduledIds = [];
       state.minimizedAdvanceBookingIds = [];
@@ -337,6 +346,7 @@ const userSlice = createSlice({
 
 export const {
   setUserInfo,
+  setSessionToken,
   clearUserInfo,
   setHasShownLoginSuccess,
   addSavedPlace,
@@ -368,6 +378,7 @@ export const {
 
 // Existing selectors
 export const selectUserInfo = state => state.user.userInfo;
+export const selectSessionToken = state => state.user.sessionToken;
 export const selectHasShownLoginSuccess = state =>
   state.user.hasShownLoginSuccess;
 export const selectSavedPlaces = state => state.user.savedPlaces;

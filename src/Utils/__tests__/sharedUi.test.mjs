@@ -23,6 +23,7 @@ const SHARED = [
   'src/Components/Menu/Menu.js',
   'src/Components/ProfileAvatar/ProfileAvatar.js',
   'src/Utils/personName.js',
+  'src/Utils/cashOut.js',
   'src/Utils/codeChannel.js',
   'src/Utils/accountDeletion.js',
   'src/Utils/bottomSpace.js',

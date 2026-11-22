@@ -7,6 +7,7 @@ import {
   BookingDetailsScreen,
   BookingHistoryScreen,
   CashInScreen,
+  CashOutScreen,
   ChatScreen,
   CodeChannelScreen,
   CompleteProfileScreen,
@@ -233,6 +234,11 @@ const ApplicationNavigator = () => {
             <Stack.Screen
               name="CashInScreen"
               component={CashInScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="CashOutScreen"
+              component={CashOutScreen}
               options={{ headerShown: false }}
             />
 

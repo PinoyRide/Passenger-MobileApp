@@ -74,11 +74,19 @@ const AppTransactionComplete = () => {
         <Text style={styles.title}>
           {route?.params?.referenceData?.paymentMethod === 'QRPH'
             ? 'QRPH Payment Successful!'
+            : route?.params?.referenceData?.transactionType === 'CASHOUT'
+            ? route?.params?.referenceData?.status === 'completed'
+              ? 'Cash out completed'
+              : 'Cash out is processing'
             : 'Cash-out request sent!'}
         </Text>
 
         <Text style={styles.subtitle}>
-          Your transaction has been completed successfully.
+          {route?.params?.referenceData?.transactionType === 'CASHOUT'
+            ? route?.params?.referenceData?.status === 'completed'
+              ? 'The amount has been sent to your account.'
+              : 'The amount is on its way. It is back in your wallet if the transfer fails.'
+            : 'Your transaction has been completed successfully.'}
         </Text>
 
         {/*  Optional: Display transaction ID */}

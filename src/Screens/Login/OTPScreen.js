@@ -22,7 +22,11 @@ import { SMS, sentTo } from '@/Utils/codeChannel';
 import { afterRegistering } from '@/Utils/registerForm';
 import DeviceInfo from 'react-native-device-info';
 import { useDispatch, useSelector } from 'react-redux';
-import { selectUserInfo, setUserInfo } from '@/Redux/Slices/userSlice';
+import {
+  selectUserInfo,
+  setSessionToken,
+  setUserInfo,
+} from '@/Redux/Slices/userSlice';
 
 // The backend's message for an unregistered number ("Customer with this mobile number does not exist").
 const NOT_REGISTERED_ERROR_PATTERN = /does not exist/i;
@@ -134,6 +138,8 @@ const OTPScreen = () => {
     }
     if (loginUser.response?.code === 200 && loginUser.response.data) {
       dispatch(setUserInfo(toStoredUser(loginUser.response.data)));
+      // the sign-in token a cash-out needs (answered only by customers/login)
+      dispatch(setSessionToken(loginUser.response.data.sessionToken));
     }
   }, [loginUser.response, loginUser.error]);
 

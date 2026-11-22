@@ -30,6 +30,7 @@ export { default as CodeChannelScreen } from './Login/CodeChannelScreen';
 export { default as EKYCScreen } from './Login/EKYCScreen';
 export { default as BookingStatusModal } from './HomeScreen/Components/BookingStatusModal';
 export { default as CashInScreen } from './WalletScreen/CashInScreen';
+export { default as CashOutScreen } from './WalletScreen/CashOutScreen';
 export { default as QRPHScreen } from './QRPH/QRPHScreen';
 export { default as ProfileScreen } from './Profile/ProfileScreen';
 export { default as CompleteProfileScreen } from './Profile/CompleteProfileScreen';
