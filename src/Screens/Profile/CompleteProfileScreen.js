@@ -12,21 +12,26 @@ import { useTheme } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import { launchImageLibrary } from 'react-native-image-picker';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppButton, AppTextInput, Container } from '@/Components';
 import useApiRequest from '@/Services/ApiV2';
 import { Constants } from '@/Utils';
 import { toStoredUser } from '@/Utils/customerMapper';
 import { withCameraPermission } from '@/Utils/Permissions';
 import { selectUserInfo, setUserInfo } from '@/Redux/Slices/userSlice';
+import { modern } from '@/Theme/modern';
 
 // Name: what a passenger must have before booking (the backend refuses bookings otherwise).
 // Shown right after registering, and it can be skipped for now (the owner, 2026-11-22):
 // booking asks for the name later. The photo is optional, and so is the check on it: taken on
 // LivenessSelfieScreen, which checks a real person is taking it of themselves (it comes back
 // here as route.params.capturedSelfie), or uploaded from the phone's photos without a check.
+// The page fits one screen and Save stays in view (the owner, 2026-11-22: "this can fit in one
+// screen so i dont need to scroll to see the whole button"): the photo is a small circle with
+// its two actions beside it, and the button is pinned under the fields.
 const CompleteProfileScreen = () => {
-  const { colors } = useTheme();
-  const styles = getStyles({ colors });
+  const look = modern(useTheme());
+  const styles = getStyles(look);
   const navigation = useNavigation();
   const route = useRoute();
   const dispatch = useDispatch();
@@ -163,106 +168,117 @@ const CompleteProfileScreen = () => {
       </View>
 
       <ScrollView
+        style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}>
-        <View style={styles.pageContainer}>
-          <Text style={styles.sectionSubtitle}>
-            Riders see your name so they can find you at pickup; you can book
-            once it is filled in. A photo of you is optional and helps them
-            more: take one with the camera (you will be asked to turn your head
-            a little, so we know it is really you), or upload one.
-          </Text>
+        <Text style={styles.intro}>
+          {firstTime
+            ? 'Riders see your name so they can find you at pickup. You can book once it is filled in.'
+            : 'Riders see your name so they can find you at pickup.'}
+        </Text>
 
+        <View style={styles.photoRow}>
           <TouchableOpacity
-            style={styles.selfieFrame}
+            style={styles.photo}
             onPress={takeSelfie}
-            activeOpacity={0.75}>
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel={
+              currentSelfie ? 'Take a new photo' : 'Take a photo'
+            }>
             {currentSelfie ? (
               <Image
                 source={{ uri: currentSelfie }}
-                style={styles.selfieImage}
+                style={styles.photoImage}
                 resizeMode="cover"
               />
             ) : (
-              <View style={styles.selfiePlaceholder}>
-                <Text style={styles.selfieIcon}>🤳</Text>
-                <Text style={styles.selfieHint}>
-                  Tap to add your photo (optional)
-                </Text>
-              </View>
+              <Icon name="account" size={48} color={look.faint} />
             )}
           </TouchableOpacity>
-          <View style={styles.photoActions}>
-            <TouchableOpacity onPress={takeSelfie} style={styles.retakeButton}>
-              <Text style={styles.retakeText}>
-                {currentSelfie ? 'Take a new photo' : 'Take a photo'}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={uploadPhoto} style={styles.retakeButton}>
-              <Text style={styles.retakeText}>Upload a photo</Text>
-            </TouchableOpacity>
+          <View style={styles.photoSide}>
+            <Text style={styles.photoTitle}>Your photo</Text>
+            <Text style={styles.photoNote}>
+              Optional. It helps riders find you.
+            </Text>
+            <View style={styles.photoActions}>
+              <TouchableOpacity
+                onPress={takeSelfie}
+                hitSlop={6}
+                style={styles.photoAction}>
+                <Text style={styles.photoActionText}>
+                  {currentSelfie ? 'Take a new one' : 'Take a photo'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={uploadPhoto}
+                hitSlop={6}
+                style={styles.photoAction}>
+                <Text style={styles.photoActionText}>Upload</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-          {errors.selfie ? (
-            <Text style={styles.errorText}>{errors.selfie}</Text>
-          ) : null}
-
-          <AppTextInput
-            label="First Name"
-            value={fname}
-            onChangeText={setFname}
-            placeholder="e.g. Juan"
-            error={errors.fname}
-          />
-          <AppTextInput
-            label="Middle Name"
-            value={mname}
-            onChangeText={setMname}
-            placeholder="Optional"
-          />
-          <AppTextInput
-            label="Last Name"
-            value={lname}
-            onChangeText={setLname}
-            placeholder="e.g. Dela Cruz"
-            error={errors.lname}
-          />
-          <AppTextInput
-            label="Email"
-            value={email}
-            onChangeText={setEmail}
-            placeholder="Optional"
-            inputMode="email"
-          />
         </View>
+        {errors.selfie ? (
+          <Text style={styles.errorText}>{errors.selfie}</Text>
+        ) : null}
 
-        <View style={styles.footer}>
-          <AppButton
-            title={saving ? 'Saving…' : 'Save'}
-            onPress={handleSave}
-            isBold
-            disabled={saving}
-          />
-          {firstTime ? (
-            <TouchableOpacity
-              onPress={() => navigation.goBack()}
-              disabled={saving}
-              style={styles.skipButton}>
-              <Text style={styles.skipText}>Skip for now</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
+        <AppTextInput
+          label="First Name"
+          value={fname}
+          onChangeText={setFname}
+          placeholder="e.g. Juan"
+          error={errors.fname}
+        />
+        <AppTextInput
+          label="Middle Name"
+          value={mname}
+          onChangeText={setMname}
+          placeholder="Optional"
+        />
+        <AppTextInput
+          label="Last Name"
+          value={lname}
+          onChangeText={setLname}
+          placeholder="e.g. Dela Cruz"
+          error={errors.lname}
+        />
+        <AppTextInput
+          label="Email"
+          value={email}
+          onChangeText={setEmail}
+          placeholder="Optional"
+          inputMode="email"
+        />
       </ScrollView>
+
+      <View style={styles.footer}>
+        <AppButton
+          title={saving ? 'Saving…' : 'Save'}
+          onPress={handleSave}
+          isBold
+          disabled={saving}
+        />
+        {firstTime ? (
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            disabled={saving}
+            style={styles.skipButton}>
+            <Text style={styles.skipText}>Skip for now</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
     </Container>
   );
 };
 
 export default CompleteProfileScreen;
 
-const getStyles = ({ colors }) =>
+const getStyles = look =>
   StyleSheet.create({
     container: { flex: 1, paddingHorizontal: 10 },
-    header: { height: 52, justifyContent: 'center', marginBottom: 12 },
+    header: { height: 52, justifyContent: 'center', marginBottom: 4 },
     backButton: {
       position: 'absolute',
       width: 52,
@@ -282,73 +298,82 @@ const getStyles = ({ colors }) =>
     headerTitle: {
       fontSize: 16,
       fontFamily: 'Poppins Medium',
-      color: colors.text,
+      color: look.ink,
     },
-    scrollContent: { flexGrow: 1, justifyContent: 'space-between' },
-    pageContainer: { paddingHorizontal: 20 },
-    sectionSubtitle: {
+    scroll: { flex: 1 },
+    scrollContent: { paddingHorizontal: 20, paddingBottom: 4 },
+    intro: {
       fontSize: 13,
       fontFamily: 'Poppins Regular',
-      color: colors.onSurfaceGrey || '#888',
-      marginBottom: 20,
+      color: look.muted,
       lineHeight: 20,
+      marginBottom: 16,
     },
-    selfieFrame: {
-      width: 160,
-      height: 160,
-      borderRadius: 80,
-      alignSelf: 'center',
-      overflow: 'hidden',
-      borderWidth: 3,
-      borderColor: colors.primary,
-      backgroundColor: colors.surface || '#FAFAFA',
-      marginBottom: 4,
-    },
-    selfieImage: { width: '100%', height: '100%' },
-    selfiePlaceholder: {
-      flex: 1,
-      justifyContent: 'center',
+    photoRow: {
+      flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
+      gap: 16,
+      marginBottom: 20,
     },
-    selfieIcon: { fontSize: 32 },
-    selfieHint: {
+    photo: {
+      width: 84,
+      height: 84,
+      borderRadius: 42,
+      overflow: 'hidden',
+      borderWidth: 2,
+      borderColor: look.accent,
+      backgroundColor: look.soft,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    photoImage: { width: '100%', height: '100%' },
+    photoSide: { flex: 1 },
+    photoTitle: {
+      fontSize: 14,
+      fontFamily: 'Poppins Medium',
+      color: look.ink,
+    },
+    photoNote: {
       fontSize: 12,
       fontFamily: 'Poppins Regular',
-      color: colors.onSurfaceGrey || '#888',
+      color: look.muted,
+      marginTop: 2,
     },
-    retakeButton: {
-      alignSelf: 'center',
+    photoActions: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginTop: 10,
+    },
+    photoAction: {
+      backgroundColor: look.chip,
+      borderRadius: look.radiusPill,
       paddingVertical: 6,
-      paddingHorizontal: 16,
+      paddingHorizontal: 12,
     },
-    retakeText: {
+    photoActionText: {
       fontSize: 13,
       fontFamily: 'Poppins Medium',
-      color: colors.primary,
+      color: look.chipInk,
     },
     errorText: {
       fontSize: 12,
       fontFamily: 'Poppins Regular',
-      color: colors.error || '#D32F2F',
-      textAlign: 'center',
-      marginBottom: 8,
+      color: look.danger,
+      marginTop: -8,
+      marginBottom: 12,
     },
-    footer: { paddingHorizontal: 20, paddingVertical: 20 },
-    photoActions: {
-      flexDirection: 'row',
-      justifyContent: 'center',
-      gap: 8,
-      marginBottom: 8,
-    },
+    // pinned under the fields, so Save is always in view
+    footer: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 16 },
     skipButton: {
       alignSelf: 'center',
-      paddingVertical: 12,
+      paddingTop: 12,
+      paddingBottom: 4,
       paddingHorizontal: 24,
     },
     skipText: {
       fontSize: 14,
       fontFamily: 'Poppins Medium',
-      color: colors.onSurfaceGrey || '#888',
+      color: look.muted,
     },
   });
