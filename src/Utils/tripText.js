@@ -25,6 +25,26 @@ function distanceText(km) {
   return n < 10 ? `${n.toFixed(1)} km` : `${Math.round(n)} km`;
 }
 
+// The straight-line distance in km between two places ({ lat, long }), as
+// the place picker shows next to each suggestion; null when either is unknown.
+function distanceKm(a, b) {
+  const known = p =>
+    p?.lat != null &&
+    p?.long != null &&
+    Number.isFinite(Number(p.lat)) &&
+    Number.isFinite(Number(p.long));
+  if (!known(a) || !known(b)) {
+    return null;
+  }
+  const rad = degrees => (Number(degrees) * Math.PI) / 180;
+  const dLat = rad(b.lat) - rad(a.lat);
+  const dLong = rad(b.long) - rad(a.long);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLong / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(h));
+}
+
 // The chip on the map once the trip is priced: "28 min · 5.4 km".
 function tripChipText({ minutes, km }) {
   return [tripLengthText(minutes), distanceText(km)]
@@ -46,4 +66,10 @@ function fareNoteText(fare) {
   return text ? text[0].toUpperCase() + text.slice(1) : '';
 }
 
-module.exports = { tripLengthText, distanceText, tripChipText, fareNoteText };
+module.exports = {
+  tripLengthText,
+  distanceText,
+  distanceKm,
+  tripChipText,
+  fareNoteText,
+};

@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  BackHandler,
   DeviceEventEmitter,
   Dimensions,
   Image,
+  Pressable,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -1958,6 +1960,31 @@ const HomeScreen = () => {
   // "Ride now instead" on the scheduling sheet: leave the advance booking
   // entirely, as if Schedule had not been tapped, and give back the payment
   // it had switched to cash.
+  // Out of the Confirm step, back to choosing (the sheet's Edit and the back
+  // button above the map).
+  const handleBackToEdit = () => {
+    dispatch(setIsBooked(false));
+    dispatch(setInquireBookingResponse(null));
+    setShowWaitingBanner(false);
+    // Back from an advance booking confirm: drop the picked date so
+    // the Advance Booking button shows again (payment restores itself).
+    setScheduledAt(null);
+    setAdvanceBookingFlow(false);
+    setAutoBookAfterSchedule(false);
+    pendingScheduleRef.current = null;
+  };
+
+  // The back button above the map while a ride is being chosen (the design
+  // canvas): from Confirm back to choosing; from choosing back to "Where
+  // to?", the drop-off cleared and the pickup kept.
+  const handleSheetBack = () => {
+    if (isBooked && !isConfirmed) {
+      handleBackToEdit();
+      return;
+    }
+    dispatch(setDropoffLocation(null));
+  };
+
   const handleRideNow = () => {
     setShowPickDate(false);
     setScheduledAt(null);
@@ -2092,6 +2119,37 @@ const HomeScreen = () => {
           km: sheetFare.distance_km_round,
         })
       : '';
+
+  // The map's controls follow the booking sheet: a ride being chosen (both
+  // points set, nothing placed) gets the back button and the trip chip;
+  // "Where to?" gets the locate button.
+  const sheetShown =
+    !showChoosePickupPanel &&
+    (bookingStatus === 0 || bookingStatus === 4 || bookingStatus === 5);
+  const routeSet = Boolean(pickupLocation && dropoffLocation);
+  const choosingRide = sheetShown && routeSet && !isConfirmed;
+  const choosingPlace = sheetShown && !routeSet && !isConfirmed;
+  const mapRef = useRef(null);
+
+  // Android's back does what the back button does while a ride is chosen,
+  // and what it always did otherwise.
+  const sheetBackRef = useRef(null);
+  sheetBackRef.current = choosingRide && !isLoading ? handleSheetBack : null;
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener(
+        'hardwareBackPress',
+        () => {
+          if (!sheetBackRef.current) {
+            return false;
+          }
+          sheetBackRef.current();
+          return true;
+        },
+      );
+      return () => subscription.remove();
+    }, []),
+  );
 
   const pickDatePromptedRef = useRef(false);
   useEffect(() => {
@@ -2406,6 +2464,7 @@ New reference: ${activeBooking.ref_code}`
       ) : null}
       <View style={styles.container}>
         <AppMap
+          ref={mapRef}
           initialLat={currentLocation.latitude}
           initialLong={currentLocation.longitude}
           locationReady={locationReady}
@@ -2424,20 +2483,30 @@ New reference: ${activeBooking.ref_code}`
           style={styles.map}
         />
 
-        <TouchableOpacity
-          style={styles.profileButton}
-          onPress={handleTopRightPress}>
-          <Image
-            source={require('@/Assets/Common/HomeScreen/Profile_Icon_1.png')}
-            style={styles.iconImage}
-          />
-        </TouchableOpacity>
+        {/* While a ride is chosen (the design canvas): back on the left,
+            how long and how far on the right; otherwise the profile button. */}
+        {choosingRide ? (
+          <Pressable
+            onPress={handleSheetBack}
+            disabled={isLoading}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            style={styles.mapBack}>
+            <Icon name="chevron-left" size={28} color={look.ink} />
+          </Pressable>
+        ) : (
+          <TouchableOpacity
+            style={styles.profileButton}
+            onPress={handleTopRightPress}>
+            <Image
+              source={require('@/Assets/Common/HomeScreen/Profile_Icon_1.png')}
+              style={styles.iconImage}
+            />
+          </TouchableOpacity>
+        )}
 
-        {/* How long and how far, once the trip is priced (the design canvas's
-            chip; top-left here, as the profile button holds the top-right). */}
-        {tripChip &&
-        !showChoosePickupPanel &&
-        (bookingStatus === 0 || bookingStatus === 4 || bookingStatus === 5) ? (
+        {choosingRide && tripChip ? (
           <View
             style={styles.tripChip}
             pointerEvents="none"
@@ -2446,6 +2515,18 @@ New reference: ${activeBooking.ref_code}`
             <Icon name="clock-outline" size={16} color={look.ink} />
             <Text style={styles.tripChipText}>{tripChip}</Text>
           </View>
+        ) : null}
+
+        {/* "Where to?": back to where the person is */}
+        {choosingPlace && locationReady ? (
+          <Pressable
+            onPress={() => mapRef.current?.centerOn(userLocation)}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel="Show where I am"
+            style={[styles.locateButton, { bottom: modalHeight + 16 }]}>
+            <Icon name="crosshairs-gps" size={22} color={look.ink} />
+          </Pressable>
         ) : null}
 
         <RiderFoundAlertBox
@@ -2672,17 +2753,7 @@ New reference: ${activeBooking.ref_code}`
               // One designed dialog (never the phone's native one), chosen
               // by the cancel_advance preview: free or with penalty.
               onBackToConfirm={() => requestFullCancel(undefined, true)}
-              onBackToEdit={() => {
-                dispatch(setIsBooked(false));
-                dispatch(setInquireBookingResponse(null));
-                setShowWaitingBanner(false);
-                // Back from an advance booking confirm: drop the picked date so
-                // the Advance Booking button shows again (payment restores itself).
-                setScheduledAt(null);
-                setAdvanceBookingFlow(false);
-                setAutoBookAfterSchedule(false);
-                pendingScheduleRef.current = null;
-              }}
+              onBackToEdit={handleBackToEdit}
               isBooked={isBooked}
               isConfirmed={isConfirmed}
               showPaymentModal={showPaymentModal}
@@ -2827,11 +2898,45 @@ const getStyles = ({ colors, look }) =>
       right: 28,
       zIndex: 15,
     },
-    // level with the profile button (51 high at top 60)
+    // the back button and the chip sit where the profile button does
+    // (51 high at top 60)
+    mapBack: {
+      position: 'absolute',
+      top: 61,
+      left: 28,
+      zIndex: 15,
+      width: 48,
+      height: 48,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: look.surface,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.12,
+      shadowRadius: 10,
+      elevation: 6,
+    },
+    locateButton: {
+      position: 'absolute',
+      right: 20,
+      zIndex: 15,
+      width: 48,
+      height: 48,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: look.surface,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.12,
+      shadowRadius: 10,
+      elevation: 6,
+    },
     tripChip: {
       position: 'absolute',
       top: 65,
-      left: 28,
+      right: 28,
       zIndex: 15,
       minHeight: 40,
       flexDirection: 'row',

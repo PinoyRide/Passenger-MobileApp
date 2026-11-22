@@ -1,90 +1,120 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
-  FlatList,
-  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
-import { Portal, useTheme } from 'react-native-paper';
+import { useTheme } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import Geolocation from 'react-native-geolocation-service';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AppMap } from '@/Components';
 import useApiRequest from '@/Services/ApiV2';
 import { Constants } from '@/Utils';
 import { fetchWithTimeout } from '@/Utils/Network';
-import Geolocation from 'react-native-geolocation-service';
 import { removeSavedPlace, selectSavedPlaces } from '@/Redux/Slices/userSlice';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { bottomSpace } from '@/Utils/bottomSpace';
+import { distanceKm, distanceText } from '@/Utils/tripText';
+import { modern } from '@/Theme/modern';
 
-const getIconForType = type => {
-  switch (type) {
-    case 'home':
-      return require('@/Assets/Common/Location/Home.png');
-    case 'work':
-      return require('@/Assets/Common/Location/Suitcase.png');
-    case 'school':
-      return require('@/Assets/Common/Location/School.png');
-    default:
-      return require('@/Assets/Common/Location/Location.png');
-  }
-};
+// Manila, while neither point is known.
+const DEFAULT_CENTER = { lat: 14.5995, long: 120.9842 };
 
-const savedLocationButtons = [
-  {
-    id: 'home',
-    type: 'home',
-    icon: require('@/Assets/Common/Location/Home.png'),
-    label: 'Add Home',
-  },
-  {
-    id: 'work',
-    type: 'work',
-    icon: require('@/Assets/Common/Location/Suitcase.png'),
-    label: 'Add Work',
-  },
-  {
-    id: 'school',
-    type: 'school',
-    icon: require('@/Assets/Common/Location/School.png'),
-    label: 'Add School',
-  },
-  {
-    id: 'other',
-    type: 'other',
-    icon: require('@/Assets/Common/Location/Location.png'),
-    label: 'Add Another Place',
-  },
+const SAVED_TYPES = [
+  { type: 'home', icon: 'home-outline', name: 'Home' },
+  { type: 'work', icon: 'briefcase-outline', name: 'Work' },
+  { type: 'school', icon: 'school-outline', name: 'School' },
 ];
 
+// A search result's name and the rest of its address. The backend sends the
+// address as the name, a line break, then the full address.
+const titleOf = item =>
+  item.display_name || (item.address || '').split(/[\n,]/)[0].trim();
+const subtitleOf = item => {
+  const lines = (item.address || '').split('\n');
+  if (lines.length > 1 && lines.slice(1).join(' ').trim()) {
+    return lines.slice(1).join(', ').trim();
+  }
+  const text = item.description || item.address || '';
+  const title = titleOf(item);
+  return text.startsWith(title)
+    ? text.slice(title.length).replace(/^[\s,]+/, '')
+    : text;
+};
+// What a chosen result reads as in its field: one line.
+const fieldTextOf = item =>
+  item.description || (item.address || '').replace(/\n/g, ', ');
+
+// The place picker, as the design canvas draws "Set route": the map with
+// the route, and a sheet with the two points in one card (pick-up over
+// drop-off, joined by a line, with a swap button), suggestions with their
+// distance while typing, and one button that confirms the point. Choosing a
+// place fills its field and moves on to the other point when that one is
+// still empty; the button confirms. Everything the screen did before stays:
+// search, my current location, the map picker, saved places.
 const InputLocation = () => {
   // The navigation bar may cover the bottom of the screen: keep the bottom content clear of it
-  const { bottom: bottomInset } = useSafeAreaInsets();
-  const { colors } = useTheme();
-  const styles = getStyles({ colors });
+  const { top: topInset, bottom: bottomInset } = useSafeAreaInsets();
+  const look = modern(useTheme());
+  const styles = getStyles(look);
   const navigation = useNavigation();
   const route = useRoute();
   const dispatch = useDispatch();
-  const savedPlaces = useSelector(selectSavedPlaces);
+  const savedPlaces = useSelector(selectSavedPlaces) || [];
 
   const [pickup, setPickup] = useState('');
   const [dropoff, setDropoff] = useState('');
   const [pickupLocation, setPickupLocation] = useState(null);
   const [dropoffLocation, setDropoffLocation] = useState(null);
   const [searchResults, setSearchResults] = useState([]);
+  // the field being typed in (suggestions show for it)
   const [focusedField, setFocusedField] = useState(null);
-  const [dropdownTop, setDropdownTop] = useState(0);
+  // the point the button confirms and a saved place or my location fills
+  const [activeField, setActiveField] = useState(() => {
+    if (route.params?.focusDropoff) {
+      return 'dropoff';
+    }
+    if (route.params?.returnAfterPickup || !route.params?.pickup) {
+      return 'pickup';
+    }
+    return 'dropoff';
+  });
   const [isLocatingCurrentPosition, setIsLocatingCurrentPosition] =
     useState(false);
+  const [sheetHeight, setSheetHeight] = useState(0);
 
   const searchLocationRequest = useApiRequest();
   const debounceRef = useRef(null);
   const pickupInputRef = useRef(null);
   const dropoffInputRef = useRef(null);
+
+  // With the keyboard up, the navigation bar's room under the button is
+  // covered anyway.
+  const [keyboardShown, setKeyboardShown] = useState(false);
+  useEffect(() => {
+    const shown = Keyboard.addListener('keyboardDidShow', () =>
+      setKeyboardShown(true),
+    );
+    // Android's back closes the keyboard but leaves the field focused: let
+    // go of it, so the sheet knows typing is over.
+    const hidden = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardShown(false);
+      pickupInputRef.current?.blur();
+      dropoffInputRef.current?.blur();
+    });
+    return () => {
+      shown.remove();
+      hidden.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (route.params?.pickup) {
@@ -99,6 +129,13 @@ const InputLocation = () => {
     }
   }, [route.params?.pickup, route.params?.dropoff]);
 
+  const focusField = field => {
+    setActiveField(field);
+    setTimeout(() => {
+      (field === 'pickup' ? pickupInputRef : dropoffInputRef).current?.focus();
+    }, 350);
+  };
+
   // BUG-2: after Confirm Date and Time, open with the drop-off field focused
   // and no pickup suggestions showing.
   useEffect(() => {
@@ -108,6 +145,7 @@ const InputLocation = () => {
     setSearchResults([]);
     const t = setTimeout(() => {
       setFocusedField('dropoff');
+      setActiveField('dropoff');
       dropoffInputRef.current?.focus();
     }, 350);
     return () => clearTimeout(t);
@@ -145,18 +183,16 @@ const InputLocation = () => {
     handleSearchLocationRequest();
   }, [searchLocationRequest.response, searchLocationRequest.error]);
 
-  const handleTextChange = (text, setFieldValue, inputRef) => {
-    setFieldValue(text);
+  const handleTextChange = (text, field) => {
+    if (field === 'pickup') {
+      setPickup(text);
+    } else {
+      setDropoff(text);
+    }
     // drop the previous search's list right away; the new query refills it
     setSearchResults([]);
-    setFocusedField(setFieldValue === setPickup ? 'pickup' : 'dropoff');
-
-    // BUG-2: the pickup list opens below the drop-off field (like the
-    // drop-off list sits below its own field) so drop-off stays visible.
-    const anchorRef = setFieldValue === setPickup ? dropoffInputRef : inputRef;
-    anchorRef.current?.measure((x, y, width, height, pageX, pageY) => {
-      setDropdownTop(pageY + height);
-    });
+    setFocusedField(field);
+    setActiveField(field);
 
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
@@ -169,7 +205,6 @@ const InputLocation = () => {
   };
 
   const handleBack = () => navigation.goBack();
-  const handleProfilePress = () => navigation.navigate('SettingsScreen');
 
   const handleOpenMap = () => {
     setFocusedField(null);
@@ -193,6 +228,7 @@ const InputLocation = () => {
   const handleFieldFocus = field => {
     clearBlurTimer();
     setFocusedField(field);
+    setActiveField(field);
   };
   const handleFieldBlur = () => {
     clearBlurTimer();
@@ -204,38 +240,69 @@ const InputLocation = () => {
   };
   useEffect(() => clearBlurTimer, []);
 
-  const handleSelectItem = item => {
+  // A point chosen (a suggestion, a saved place, my location): fill its
+  // field, tell the booking sheet, and move on to the other point when that
+  // one is still empty (not when only the pickup was asked for).
+  const choosePoint = (field, location, text) => {
     clearBlurTimer();
-    let shouldNavigate = false;
     // BUG-2: a pending debounced search must not reopen the list after a pick
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
     }
-
-    if (focusedField === 'pickup') {
-      setPickup(item.address);
-      setPickupLocation(item);
-      route.params?.onPickupSelect?.(item);
-
-      // Advance Booking: go back to the map ("Choose this pick up" + Pick a Date)
-      if (dropoffLocation || route.params?.returnAfterPickup) {
-        shouldNavigate = true;
-      }
-    } else if (focusedField === 'dropoff') {
-      setDropoff(item.address);
-      setDropoffLocation(item);
-      route.params?.onDropoffSelect?.(item);
-
-      if (pickupLocation) {
-        shouldNavigate = true;
-      }
+    if (field === 'pickup') {
+      setPickup(text);
+      setPickupLocation(location);
+      route.params?.onPickupSelect?.(location);
+    } else {
+      setDropoff(text);
+      setDropoffLocation(location);
+      route.params?.onDropoffSelect?.(location);
     }
-
     setSearchResults([]);
     setFocusedField(null);
+    setActiveField(field);
+    Keyboard.dismiss();
 
-    if (shouldNavigate) {
-      navigation.goBack();
+    const otherSet = field === 'pickup' ? dropoffLocation : pickupLocation;
+    const pickupOnly = field === 'pickup' && route.params?.returnAfterPickup;
+    if (!otherSet && !pickupOnly) {
+      focusField(field === 'pickup' ? 'dropoff' : 'pickup');
+    }
+  };
+
+  const clearPoint = field => {
+    if (field === 'pickup') {
+      setPickup('');
+      setPickupLocation(null);
+      route.params?.onPickupClear?.();
+    } else {
+      setDropoff('');
+      setDropoffLocation(null);
+      route.params?.onDropoffClear?.();
+    }
+    focusField(field);
+  };
+
+  const handleSelectItem = item => {
+    choosePoint(focusedField || activeField, item, fieldTextOf(item));
+  };
+
+  const handleSwap = () => {
+    const [nextPickup, nextDropoff] = [dropoffLocation, pickupLocation];
+    const [nextPickupText, nextDropoffText] = [dropoff, pickup];
+    setPickup(nextPickupText);
+    setPickupLocation(nextPickup);
+    setDropoff(nextDropoffText);
+    setDropoffLocation(nextDropoff);
+    if (nextPickup) {
+      route.params?.onPickupSelect?.(nextPickup);
+    } else {
+      route.params?.onPickupClear?.();
+    }
+    if (nextDropoff) {
+      route.params?.onDropoffSelect?.(nextDropoff);
+    } else {
+      route.params?.onDropoffClear?.();
     }
   };
 
@@ -244,6 +311,7 @@ const InputLocation = () => {
       return;
     }
     setIsLocatingCurrentPosition(true);
+    const field = focusedField || activeField;
 
     Geolocation.getCurrentPosition(
       async position => {
@@ -263,33 +331,7 @@ const InputLocation = () => {
             lat: latitude,
             long: longitude,
           };
-
-          let shouldNavigate = false;
-
-          if (focusedField === 'dropoff') {
-            setDropoff(currentAddress);
-            setDropoffLocation(locationData);
-            route.params?.onDropoffSelect?.(locationData);
-
-            if (pickupLocation) {
-              shouldNavigate = true;
-            }
-          } else {
-            setPickup(currentAddress);
-            setPickupLocation(locationData);
-            route.params?.onPickupSelect?.(locationData);
-
-            if (dropoffLocation || route.params?.returnAfterPickup) {
-              shouldNavigate = true;
-            }
-          }
-
-          setFocusedField(null);
-          setSearchResults([]);
-
-          if (shouldNavigate) {
-            navigation.goBack();
-          }
+          choosePoint(field, locationData, currentAddress);
         } catch (error) {
           // Offline, timed out, or Google API error
           console.error('Reverse geocode error:', error);
@@ -334,31 +376,7 @@ const InputLocation = () => {
       lat: place.lat,
       long: place.long,
     };
-
-    let shouldNavigate = false;
-
-    if (focusedField === 'dropoff' || (!focusedField && dropoff === '')) {
-      setDropoff(place.address);
-      setDropoffLocation(locationData);
-      route.params?.onDropoffSelect?.(locationData);
-
-      if (pickupLocation) {
-        shouldNavigate = true;
-      }
-    } else {
-      setPickup(place.address);
-      setPickupLocation(locationData);
-      route.params?.onPickupSelect?.(locationData);
-
-      // Advance Booking: go back to the map ("Choose this pick up" + Pick a Date)
-      if (dropoffLocation || route.params?.returnAfterPickup) {
-        shouldNavigate = true;
-      }
-    }
-
-    if (shouldNavigate) {
-      navigation.goBack();
-    }
+    choosePoint(focusedField || activeField, locationData, place.address);
   };
 
   const handleDeleteSavedPlace = placeId => {
@@ -379,508 +397,531 @@ const InputLocation = () => {
     );
   };
 
-  const renderDropdown = () => (
-    <Portal>
-      {focusedField && searchResults.length > 0 && (
-        <View style={[styles.dropdown, { top: dropdownTop }]}>
-          <FlatList
-            data={searchResults}
-            keyExtractor={(item, index) => index.toString()}
-            keyboardShouldPersistTaps="handled"
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                onPress={() => handleSelectItem(item)}
-                style={styles.dropdownItem}>
-                <Text style={styles.dropdownText}>{item.address}</Text>
-              </TouchableOpacity>
-            )}
+  // The button: confirms the point being set, then back to the booking
+  // sheet once both are known (or the pickup alone, when only it was asked).
+  const fieldLocation = field =>
+    field === 'pickup' ? pickupLocation : dropoffLocation;
+  const confirmLabel =
+    activeField === 'pickup' ? 'Confirm pick-up' : 'Confirm drop-off';
+  const canConfirm = Boolean(fieldLocation(activeField));
+  const handleConfirm = () => {
+    Keyboard.dismiss();
+    if (activeField === 'pickup') {
+      if (dropoffLocation || route.params?.returnAfterPickup) {
+        navigation.goBack();
+      } else {
+        focusField('dropoff');
+      }
+    } else if (pickupLocation) {
+      navigation.goBack();
+    } else {
+      focusField('pickup');
+    }
+  };
+
+  const query = focusedField === 'pickup' ? pickup : dropoff;
+  const showSuggestions =
+    Boolean(focusedField) && query.length > 0 && searchResults.length > 0;
+  // Both points chosen and nothing being typed: only the card and the
+  // button, so the map shows the route. Tapping a field brings the rest back.
+  const compact = Boolean(pickupLocation && dropoffLocation) && !focusedField;
+  // distances from the other point, when it is known
+  const origin = focusedField === 'pickup' ? dropoffLocation : pickupLocation;
+
+  const renderField = field => {
+    const isPickup = field === 'pickup';
+    const value = isPickup ? pickup : dropoff;
+    const highlighted = focusedField === field || activeField === field;
+    return (
+      <View
+        style={[
+          styles.field,
+          isPickup ? null : styles.fieldGap,
+          highlighted && styles.fieldActive,
+        ]}>
+        <View style={styles.flex}>
+          <Text style={[styles.fieldLabel, highlighted && styles.labelOnWhite]}>
+            {isPickup ? 'PICK-UP' : 'DROP-OFF'}
+          </Text>
+          <TextInput
+            ref={isPickup ? pickupInputRef : dropoffInputRef}
+            value={value}
+            onChangeText={text => handleTextChange(text, field)}
+            onFocus={() => handleFieldFocus(field)}
+            onBlur={handleFieldBlur}
+            // a long address reads from its start while not being edited
+            selection={focusedField === field ? undefined : { start: 0 }}
+            placeholder={isPickup ? 'Where from?' : 'Where to?'}
+            placeholderTextColor={look.inkSoft}
+            style={styles.input}
+            autoCorrect={false}
+            autoComplete="off"
+            spellCheck={false}
+            accessibilityLabel={isPickup ? 'Pick-up' : 'Drop-off'}
           />
         </View>
-      )}
-    </Portal>
-  );
-
-  const renderSavedPlaceButton = button => {
-    // For non-"other" types, check if place exists
-    if (button.type !== 'other') {
-      const existingPlace = savedPlaces.find(
-        place => place.type === button.type,
-      );
-
-      if (existingPlace) {
-        return (
-          <TouchableOpacity
-            key={existingPlace.id}
-            style={styles.savedPlaceItem}
-            onPress={() => handleSelectSavedPlace(existingPlace)}>
-            <View style={styles.savedPlaceLeft}>
-              <Image
-                source={getIconForType(existingPlace.type)}
-                style={styles.iconSmall}
-                resizeMode="contain"
-              />
-              <View style={styles.savedPlaceTextContainer}>
-                <Text style={styles.savedPlaceLabel}>
-                  {existingPlace.label}
-                </Text>
-                <Text style={styles.savedPlaceAddress} numberOfLines={1}>
-                  {existingPlace.address}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.savedPlaceActions}>
-              <TouchableOpacity
-                onPress={() =>
-                  navigation.navigate('SaveLocationScreen', {
-                    locationType: existingPlace.type,
-                    existingPlace: existingPlace,
-                  })
-                }
-                style={styles.actionButton}>
-                <Image
-                  source={require('@/Assets/Common/Location/Edit.png')}
-                  style={styles.actionIcon}
-                  resizeMode="contain"
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => handleDeleteSavedPlace(existingPlace.id)}
-                style={styles.actionButton}>
-                <Image
-                  source={require('@/Assets/Common/Location/Delete.png')}
-                  style={styles.actionIcon}
-                  resizeMode="contain"
-                />
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        );
-      }
-    }
-
-    // For "other" type or non-existing places, always show "Add" button
-    return (
-      <TouchableOpacity
-        key={button.id}
-        style={styles.buttons}
-        onPress={() => handleAddSavedPlace(button.type)}>
-        <Image
-          source={button.icon}
-          style={styles.iconSmall}
-          resizeMode="contain"
-        />
-        <Text style={styles.iconText}>{button.label}</Text>
-      </TouchableOpacity>
+        {value.length > 0 ? (
+          <Pressable
+            onPress={() => clearPoint(field)}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel={isPickup ? 'Clear pick-up' : 'Clear drop-off'}>
+            <Icon name="close-circle" size={18} color={look.muted} />
+          </Pressable>
+        ) : null}
+      </View>
     );
   };
 
-  // Render saved place item (used for "other" type places)
-  const renderSavedPlaceItem = place => (
-    <TouchableOpacity
-      key={place.id}
-      style={styles.savedPlaceItem}
-      onPress={() => handleSelectSavedPlace(place)}>
-      <View style={styles.savedPlaceLeft}>
-        <Image
-          source={require('@/Assets/Common/Location/Home.png')}
-          style={styles.iconSmall}
-          resizeMode="contain"
-        />
-        <View style={styles.savedPlaceTextContainer}>
-          <Text style={styles.savedPlaceLabel}>{place.label}</Text>
-          <Text style={styles.savedPlaceAddress} numberOfLines={1}>
-            {place.address}
-          </Text>
-        </View>
+  const renderRail = () => (
+    <View style={styles.rail}>
+      <View style={styles.railMarks}>
+        <View style={styles.dot} />
+        <View style={styles.railLine} />
+        <View style={styles.square} />
       </View>
-      <View style={styles.savedPlaceActions}>
-        <TouchableOpacity
-          onPress={() =>
-            navigation.navigate('SaveLocationScreen', {
-              locationType: place.type,
-              existingPlace: place,
-            })
-          }
-          style={styles.actionButton}>
-          <Image
-            source={require('@/Assets/Common/Location/Edit.png')}
-            style={styles.actionIcon}
-            resizeMode="contain"
-          />
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => handleDeleteSavedPlace(place.id)}
-          style={styles.actionButton}>
-          <Image
-            source={require('@/Assets/Common/Location/Delete.png')}
-            style={styles.actionIcon}
-            resizeMode="contain"
-          />
-        </TouchableOpacity>
+      <View style={styles.flex}>
+        {renderField('pickup')}
+        {renderField('dropoff')}
       </View>
-    </TouchableOpacity>
+      <Pressable
+        onPress={handleSwap}
+        disabled={!pickupLocation && !dropoffLocation}
+        hitSlop={4}
+        accessibilityRole="button"
+        accessibilityLabel="Swap pick-up and drop-off"
+        style={({ pressed }) => [styles.swap, pressed && styles.pressed]}>
+        <Icon name="swap-vertical" size={20} color={look.ink} />
+      </Pressable>
+    </View>
   );
 
-  // Filter out "other" type places for separate rendering
-  const otherPlaces = savedPlaces.filter(place => place.type === 'other');
+  const renderRow = ({ key, icon, title, subtitle, right, onPress, label }) => (
+    <Pressable
+      key={key}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label || [title, subtitle].filter(Boolean).join(', ')}
+      style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
+      <View style={styles.rowTile}>
+        <Icon name={icon} size={20} color={look.ink} />
+      </View>
+      <View style={styles.flex}>
+        <Text style={styles.rowTitle} numberOfLines={1}>
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text style={styles.rowSubtitle} numberOfLines={1}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+      {right}
+    </Pressable>
+  );
+
+  const renderSuggestions = () => (
+    <>
+      <Text style={styles.sectionLabel}>SUGGESTIONS</Text>
+      {searchResults.map((item, index) => {
+        const km = distanceText(distanceKm(origin, item));
+        return renderRow({
+          key: item.place_id || String(index),
+          icon: 'map-marker-outline',
+          title: titleOf(item),
+          subtitle: subtitleOf(item),
+          right: km ? <Text style={styles.distance}>{km}</Text> : null,
+          onPress: () => handleSelectItem(item),
+          label: [titleOf(item), subtitleOf(item), km]
+            .filter(Boolean)
+            .join(', '),
+        });
+      })}
+    </>
+  );
+
+  const renderEditDelete = place => (
+    <View style={styles.rowActions}>
+      <Pressable
+        onPress={() =>
+          navigation.navigate('SaveLocationScreen', {
+            locationType: place.type,
+            existingPlace: place,
+          })
+        }
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel={`Edit ${place.label || 'place'}`}>
+        <Icon name="pencil-outline" size={19} color={look.inkSoft} />
+      </Pressable>
+      <Pressable
+        onPress={() => handleDeleteSavedPlace(place.id)}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel={`Delete ${place.label || 'place'}`}>
+        <Icon name="trash-can-outline" size={19} color={look.inkSoft} />
+      </Pressable>
+    </View>
+  );
+
+  const renderPlaces = () => {
+    const otherPlaces = savedPlaces.filter(place => place.type === 'other');
+    return (
+      <>
+        {renderRow({
+          key: 'current',
+          icon: 'crosshairs-gps',
+          title: isLocatingCurrentPosition
+            ? 'Locating…'
+            : 'Use my current location',
+          onPress: handleUseCurrentLocation,
+        })}
+        {renderRow({
+          key: 'map',
+          icon: 'map-outline',
+          title: 'Choose from map',
+          right: <Icon name="chevron-right" size={20} color={look.muted} />,
+          onPress: handleOpenMap,
+        })}
+
+        <Text style={styles.sectionLabel}>SAVED PLACES</Text>
+        {SAVED_TYPES.map(({ type, icon, name }) => {
+          const place = savedPlaces.find(p => p.type === type);
+          return place
+            ? renderRow({
+                key: type,
+                icon,
+                title: place.label || name,
+                subtitle: place.address,
+                right: renderEditDelete(place),
+                onPress: () => handleSelectSavedPlace(place),
+              })
+            : renderRow({
+                key: type,
+                icon,
+                title: `Add ${name}`,
+                right: <Icon name="plus" size={20} color={look.muted} />,
+                onPress: () => handleAddSavedPlace(type),
+              });
+        })}
+        {otherPlaces.map(place =>
+          renderRow({
+            key: String(place.id),
+            icon: 'map-marker-outline',
+            title: place.label || 'Saved place',
+            subtitle: place.address,
+            right: renderEditDelete(place),
+            onPress: () => handleSelectSavedPlace(place),
+          }),
+        )}
+        {renderRow({
+          key: 'other',
+          icon: 'bookmark-plus-outline',
+          title: 'Add another place',
+          right: <Icon name="plus" size={20} color={look.muted} />,
+          onPress: () => handleAddSavedPlace('other'),
+        })}
+      </>
+    );
+  };
+
+  const center = pickupLocation || dropoffLocation || DEFAULT_CENTER;
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerContainer}>
-        <View style={styles.buttonGroupContainer}>
-          <TouchableOpacity onPress={handleBack} style={styles.iconButton}>
-            <Image
-              source={require('@/Assets/Common/Back_2.png')}
-              style={styles.backIcon}
-              resizeMode="contain"
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={handleProfilePress}
-            style={styles.iconButton}>
-            <Image
-              source={require('@/Assets/Common/Location/Profile_Icon_2.png')}
-              style={styles.iconImage}
-              resizeMode="contain"
-            />
-          </TouchableOpacity>
-        </View>
+      <AppMap
+        initialLat={Number(center.lat)}
+        initialLong={Number(center.long)}
+        locationReady
+        firstMarkerLat={pickupLocation?.lat}
+        firstMarkerLong={pickupLocation?.long}
+        secondMarkerLat={dropoffLocation?.lat}
+        secondMarkerLong={dropoffLocation?.long}
+        bottomInset={sheetHeight}
+        interactive
+        style={StyleSheet.absoluteFill}
+      />
 
-        <View style={styles.locationButtonsContainer}>
-          {/* Pickup */}
-          <View style={styles.iconWithTextButton}>
-            <Image
-              source={require('@/Assets/Common/Pick_Up_Icon.png')}
-              style={styles.iconSmall}
-              resizeMode="contain"
-            />
-            <View style={styles.inputContainer}>
-              <TextInput
-                ref={pickupInputRef}
-                value={pickup}
-                onChangeText={text =>
-                  handleTextChange(text, setPickup, pickupInputRef)
-                }
-                onFocus={() => handleFieldFocus('pickup')}
-                onBlur={handleFieldBlur}
-                placeholder="Input pickup location"
-                style={styles.locationIconText}
-                placeholderTextColor={colors.onPrimary}
-                autoCorrect={false}
-                autoComplete="off"
-                spellCheck={false}
-              />
-              {pickup.length > 0 && (
-                <TouchableOpacity
-                  onPress={() => {
-                    setPickup('');
-                    setPickupLocation(null);
-                    route.params?.onPickupClear?.();
-                  }}>
-                  <Image
-                    source={require('@/Assets/Common/Close.png')}
-                    style={styles.clearIcon}
-                    resizeMode="contain"
-                  />
-                </TouchableOpacity>
-              )}
-            </View>
-            {focusedField === 'pickup' && renderDropdown()}
-          </View>
+      <Pressable
+        onPress={handleBack}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel="Back"
+        style={[styles.back, { top: topInset + 12 }]}>
+        <Icon name="chevron-left" size={28} color={look.ink} />
+      </Pressable>
 
-          {/* Dropoff */}
-          <View style={styles.iconWithTextButton}>
-            <Image
-              source={require('@/Assets/Common/Drop_Off_Icon.png')}
-              style={styles.iconSmall}
-              resizeMode="contain"
-            />
-            <View style={styles.inputContainer}>
-              <TextInput
-                ref={dropoffInputRef}
-                value={dropoff}
-                onChangeText={text =>
-                  handleTextChange(text, setDropoff, dropoffInputRef)
-                }
-                onFocus={() => handleFieldFocus('dropoff')}
-                onBlur={handleFieldBlur}
-                placeholder="Drop off to?"
-                style={styles.locationIconText}
-                placeholderTextColor={colors.onPrimary}
-                autoCorrect={false}
-                autoComplete="off"
-                spellCheck={false}
-              />
-              {dropoff.length > 0 && (
-                <TouchableOpacity
-                  onPress={() => {
-                    setDropoff('');
-                    setDropoffLocation(null);
-                    route.params?.onDropoffClear?.();
-                  }}>
-                  <Image
-                    source={require('@/Assets/Common/Close.png')}
-                    style={styles.clearIcon}
-                    resizeMode="contain"
-                  />
-                </TouchableOpacity>
-              )}
-            </View>
-            {focusedField === 'dropoff' && renderDropdown()}
+      {/* The sheet rides above the keyboard: the app draws edge to edge,
+          and recent Android leaves the window full height under it.
+          KeyboardAvoidingView pads only by what the keyboard really
+          covers, so a phone that does shrink the window is not lifted twice. */}
+      <KeyboardAvoidingView
+        behavior="padding"
+        // only while the keyboard is up: on hiding, edge to edge leaves the
+        // navigation bar's height behind as padding otherwise
+        enabled={keyboardShown}
+        pointerEvents="box-none"
+        style={[styles.sheetLayer, { paddingTop: topInset + 72 }]}>
+        <View
+          style={styles.sheet}
+          onLayout={e => setSheetHeight(e.nativeEvent.layout.height)}>
+          <View style={styles.handle} />
+          <ScrollView
+            style={styles.sheetScroll}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.sheetContent}>
+            {renderRail()}
+            {compact
+              ? null
+              : showSuggestions
+              ? renderSuggestions()
+              : renderPlaces()}
+          </ScrollView>
+          <View
+            style={[
+              styles.ctaWrap,
+              {
+                paddingBottom: keyboardShown
+                  ? 12
+                  : bottomSpace(bottomInset, 16, 16),
+              },
+            ]}>
+            <Pressable
+              onPress={handleConfirm}
+              disabled={!canConfirm}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !canConfirm }}
+              style={({ pressed }) => [
+                styles.cta,
+                !canConfirm && styles.ctaDisabled,
+                pressed && styles.pressed,
+              ]}>
+              <Text style={[styles.ctaText, !canConfirm && styles.ctaTextOff]}>
+                {confirmLabel}
+              </Text>
+            </Pressable>
           </View>
         </View>
-      </View>
-
-      <ScrollView
-        style={styles.body}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.scrollContent}>
-        <TouchableOpacity
-          style={styles.currentLocationButton}
-          onPress={handleUseCurrentLocation}
-          disabled={isLocatingCurrentPosition}>
-          <Image
-            source={require('@/Assets/Common/Location/Location.png')}
-            style={styles.iconSmall}
-            resizeMode="contain"
-          />
-          <Text style={styles.iconText}>
-            {isLocatingCurrentPosition
-              ? 'Locating...'
-              : 'Use my current location'}
-          </Text>
-        </TouchableOpacity>
-
-        <Text style={styles.savedPlacesText}>Saved Places</Text>
-        <Text style={styles.savedPlacesSubtitleText}>
-          Save your favorite places for faster booking.
-        </Text>
-
-        {/* Render Home, Work, School buttons/places */}
-        {savedLocationButtons
-          .filter(btn => btn.type !== 'other')
-          .map(button => renderSavedPlaceButton(button))}
-
-        {/* Render all "other" saved places */}
-        {otherPlaces.map(place => renderSavedPlaceItem(place))}
-
-        {/* Always show "Add Another Place" button */}
-        {renderSavedPlaceButton(
-          savedLocationButtons.find(btn => btn.type === 'other'),
-        )}
-      </ScrollView>
-
-      <View
-        style={[
-          styles.bottomButtonContainer,
-          { paddingBottom: bottomSpace(bottomInset, 20) },
-        ]}>
-        <TouchableOpacity onPress={handleOpenMap} style={styles.bottomButton}>
-          <Image
-            source={require('@/Assets/Common/Location/Map.png')}
-            style={styles.bottomButtonIcon}
-            resizeMode="contain"
-          />
-          <Text style={styles.bottomButtonText}>Choose from Map</Text>
-        </TouchableOpacity>
-      </View>
+      </KeyboardAvoidingView>
     </View>
   );
 };
 
 export default InputLocation;
 
-const getStyles = ({ colors }) =>
+const getStyles = look =>
   StyleSheet.create({
-    container: { flex: 1, backgroundColor: 'white' },
-    headerContainer: {
-      backgroundColor: colors.primary,
-      paddingTop: 60,
-      paddingBottom: 20,
-      paddingLeft: 10,
-      paddingRight: 30,
-    },
-    buttonGroupContainer: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-    },
-    iconButton: {
-      width: 52,
-      height: 52,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    backIcon: { width: 23, height: 23 },
-    iconImage: { width: 51, height: 51 },
-    locationButtonsContainer: { paddingHorizontal: 30 },
-    iconWithTextButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginTop: 20,
-    },
-    iconSmall: { width: 19, height: 19, marginRight: 12 },
-    inputContainer: {
+    container: {
       flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      borderBottomWidth: 0,
+      backgroundColor: look.surface,
     },
-    clearIcon: {
-      width: 16,
-      height: 16,
-      marginLeft: 20,
-      tintColor: colors.onPrimary,
-    },
-    locationIconText: {
-      flex: 1,
-      fontFamily: 'Poppins SemiBold',
-      color: colors.onPrimary,
-      fontSize: 15,
-      fontWeight: '600',
-    },
-    body: {
-      paddingHorizontal: 30,
-      flex: 1,
-      marginBottom: 67, // Reserve space for the fixed button (47 height + 20 bottom margin)
-    },
-    scrollContent: {
-      paddingBottom: 20,
-    },
-    currentLocationButton: {
-      backgroundColor: colors.grey2,
-      flexDirection: 'row',
-      alignItems: 'center',
-      padding: 12,
-      borderRadius: 10,
-      marginTop: 8,
-      marginBottom: 33,
-    },
-    iconText: {
-      fontFamily: 'Poppins Medium',
-      color: colors.grey3,
-      fontSize: 16,
-      fontWeight: '600',
-    },
-    savedPlacesText: {
-      fontFamily: 'Poppins Medium',
-      fontSize: 14,
-      fontWeight: '500',
-      marginBottom: 4,
-    },
-    savedPlacesSubtitleText: {
-      fontFamily: 'Poppins Regular',
-      fontSize: 8,
-      fontWeight: '400',
-      marginBottom: 12,
-    },
-    buttons: {
-      backgroundColor: colors.grey2,
-      flexDirection: 'row',
-      alignItems: 'center',
-      padding: 12,
-      borderRadius: 10,
-      marginVertical: 5,
-    },
-    savedPlaceItem: {
-      backgroundColor: colors.grey2,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      padding: 12,
-      borderRadius: 10,
-      marginVertical: 5,
-    },
-    savedPlaceLeft: {
-      flexDirection: 'row',
-      alignItems: 'center',
+    flex: {
       flex: 1,
     },
-    savedPlaceTextContainer: {
-      flex: 1,
-      marginRight: 8,
+    pressed: {
+      opacity: 0.85,
     },
-    savedPlaceLabel: {
-      fontFamily: 'Poppins SemiBold',
-      fontSize: 14,
-      fontWeight: '600',
-      color: colors.grey3,
-      marginBottom: 2,
-    },
-    savedPlaceAddress: {
-      fontFamily: 'Poppins Regular',
-      fontSize: 11,
-      color: colors.grey3,
-      opacity: 0.7,
-    },
-    savedPlaceActions: {
-      flexDirection: 'row',
-      alignItems: 'center',
-    },
-    actionButton: {
-      padding: 8,
-      marginLeft: 4,
-    },
-    actionIcon: {
-      width: 16,
-      height: 16,
-      tintColor: colors.grey3,
-    },
-    bottomButtonContainer: {
+    back: {
       position: 'absolute',
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: 'white',
-      paddingBottom: 20,
+      left: 20,
+      width: 48,
+      height: 48,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: look.surface,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.12,
+      shadowRadius: 10,
+      elevation: 6,
+    },
+    // the layer the sheet sits at the bottom of; never higher than just
+    // under the back button
+    sheetLayer: {
+      ...StyleSheet.absoluteFillObject,
+      justifyContent: 'flex-end',
+    },
+    sheet: {
+      flexShrink: 1,
       paddingTop: 10,
-      shadowColor: colors.shadow,
-      shadowOffset: { width: 0, height: -2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 3,
-      elevation: 5,
+      backgroundColor: look.surface,
+      borderTopLeftRadius: look.radiusSheet,
+      borderTopRightRadius: look.radiusSheet,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -10 },
+      shadowOpacity: 0.13,
+      shadowRadius: 22,
+      elevation: 16,
     },
-    bottomButton: {
-      height: 47,
-      backgroundColor: 'white',
+    handle: {
+      alignSelf: 'center',
+      width: 38,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: look.hairline,
+      marginBottom: 14,
+    },
+    sheetScroll: {
+      flexGrow: 0,
+      flexShrink: 1,
+    },
+    sheetContent: {
+      paddingHorizontal: 20,
+      paddingBottom: 8,
+    },
+    // the two points in one card
+    rail: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: colors.grey2,
-      elevation: 3,
-    },
-    bottomButtonIcon: { width: 20, height: 20, marginRight: 10 },
-    bottomButtonText: {
-      fontSize: 14,
-      fontWeight: '500',
-      fontFamily: 'Poppins Medium',
-      color: colors.grey3,
-    },
-    dropdown: {
-      position: 'absolute',
-      left: 30,
-      right: 30,
-      maxHeight: 500,
-      backgroundColor: 'white',
-      borderRadius: 8,
-      shadowColor: colors.shadow,
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.1,
-      shadowRadius: 3,
-      elevation: 5,
-      zIndex: 1000,
-      paddingHorizontal: 10,
-    },
-    dropdownItem: {
       padding: 12,
-      borderBottomWidth: 1,
-      borderColor: colors.onPrimary,
+      borderRadius: look.radiusCard,
+      backgroundColor: look.soft,
     },
-    dropdownText: {
-      fontSize: 14,
+    railMarks: {
+      alignSelf: 'stretch',
+      alignItems: 'center',
+      // the dot and the square sit level with the middle of each field
+      paddingVertical: 24,
+      marginRight: 10,
+    },
+    railLine: {
+      flex: 1,
+      width: 2,
+      marginVertical: 4,
+      backgroundColor: look.hairline,
+    },
+    dot: {
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+      backgroundColor: '#084CF7',
+    },
+    square: {
+      width: 10,
+      height: 10,
+      borderRadius: 2,
+      backgroundColor: look.ink,
+    },
+    field: {
+      minHeight: 58,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: look.radiusTile - 2,
+      borderWidth: 1.5,
+      borderColor: 'transparent',
+    },
+    fieldGap: {
+      marginTop: 6,
+    },
+    fieldActive: {
+      backgroundColor: look.surface,
+      borderColor: look.accent,
+    },
+    // Label role; inkSoft, not muted, on `soft`
+    fieldLabel: {
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 11,
+      lineHeight: 14,
+      letterSpacing: 1.2,
+      color: look.inkSoft,
+    },
+    labelOnWhite: {
+      color: look.muted,
+    },
+    input: {
+      padding: 0,
+      fontFamily: 'Poppins Medium',
+      fontSize: 15,
+      lineHeight: 20,
+      color: look.ink,
+    },
+    swap: {
+      width: 40,
+      height: 40,
+      marginLeft: 10,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: look.surface,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 6,
+      elevation: 2,
+    },
+    // Label role
+    sectionLabel: {
+      marginTop: 20,
+      marginBottom: 6,
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 11,
+      lineHeight: 14,
+      letterSpacing: 1.2,
+      color: look.muted,
+    },
+    row: {
+      minHeight: 64,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 14,
+      paddingVertical: 8,
+    },
+    rowTile: {
+      width: 44,
+      height: 44,
+      borderRadius: look.radiusTile - 2,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: look.soft,
+    },
+    rowTitle: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 15,
+      lineHeight: 20,
+      letterSpacing: -0.2,
+      color: look.ink,
+    },
+    rowSubtitle: {
       fontFamily: 'Poppins Regular',
-      color: colors.grey3,
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.muted,
+    },
+    rowActions: {
+      flexDirection: 'row',
+      gap: 16,
+    },
+    distance: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.inkSoft,
+    },
+    ctaWrap: {
+      paddingHorizontal: 20,
+      paddingTop: 10,
+    },
+    cta: {
+      minHeight: 58,
+      borderRadius: look.radiusCard - 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: look.accent,
+    },
+    ctaDisabled: {
+      backgroundColor: look.soft,
+    },
+    ctaText: {
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 16,
+      lineHeight: 22,
+      color: look.onAccent,
+    },
+    ctaTextOff: {
+      color: look.muted,
     },
   });

@@ -1,7 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import mod from '../tripText.js';
-const { tripLengthText, distanceText, tripChipText, fareNoteText } = mod;
+const { tripLengthText, distanceText, distanceKm, tripChipText, fareNoteText } = mod;
+
+test('the straight-line distance between two places', () => {
+  // Manila City Hall to Makati, about 6.6 km
+  const km = distanceKm({ lat: 14.5995, long: 120.9842 }, { lat: '14.5547', long: '121.0244' });
+  assert.ok(km > 6.4 && km < 6.8, String(km));
+  assert.equal(distanceText(km), '6.6 km');
+  assert.equal(distanceKm({ lat: 14.5, long: 121 }, { lat: 14.5, long: 121 }), 0);
+  assert.equal(distanceKm(null, { lat: 14.5, long: 121 }), null);
+  assert.equal(distanceKm({ lat: 'x', long: 121 }, { lat: 14.5, long: 121 }), null);
+});
 
 test('a trip length in minutes and hours', () => {
   assert.equal(tripLengthText(28), '28 min');

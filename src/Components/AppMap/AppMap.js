@@ -66,6 +66,8 @@ const AppMap = forwardRef(
       bottomInset = 0,
       onMapPress,
       interactive = true,
+      // the person's own position, Google's blue dot (needs location access)
+      showsUser = true,
       style,
     },
     ref,
@@ -75,6 +77,9 @@ const AppMap = forwardRef(
     const mapRef = useRef(null);
     const [mapReady, setMapReady] = useState(false);
     const mapHeightRef = useRef(0); // dp, for the overview framing
+    const mapWidthRef = useRef(0); // dp
+    // where the map's blue dot last put the person
+    const userCoordRef = useRef(null);
     const [routeCoords, setRouteCoords] = useState([]);
     // Last time the passenger panned/pinched; auto-framing pauses after it.
     const lastTouchAtRef = useRef(0);
@@ -192,6 +197,22 @@ const AppMap = forwardRef(
     }, [riderShown]);
 
     useImperativeHandle(ref, () => ({
+      // The locate button: back to where the person is, as the map's own
+      // blue dot knows it (else as the caller does).
+      centerOn: fallback => {
+        const { latitude, longitude } = userCoordRef.current || fallback || {};
+        if (mapRef.current && latitude != null && longitude != null) {
+          mapRef.current.animateToRegion(
+            {
+              latitude: Number(latitude),
+              longitude: Number(longitude),
+              latitudeDelta: 0.02,
+              longitudeDelta: 0.02,
+            },
+            400,
+          );
+        }
+      },
       fitToMarkers: () => {
         if (mapRef.current && firstMarkerLat && secondMarkerLat) {
           mapRef.current.fitToCoordinates(
@@ -225,6 +246,22 @@ const AppMap = forwardRef(
         return;
       }
 
+      // A region that puts one point in the middle of what the sheet leaves
+      // visible, rather than the middle of the whole map. The map fits a
+      // square region to its width, so it shows delta / width latitude per dp.
+      const regionAbove = (lat, long, delta = 0.05) => {
+        const width = mapWidthRef.current;
+        const height = mapHeightRef.current;
+        const covered = Math.min(Math.max(0, bottomInset || 0), height * 0.85);
+        const shift = width > 0 ? (delta * covered) / (2 * width) : 0;
+        return {
+          latitude: lat - shift,
+          longitude: long,
+          latitudeDelta: delta,
+          longitudeDelta: delta,
+        };
+      };
+
       if (firstMarkerLat && secondMarkerLat) {
         mapRef.current.fitToCoordinates(
           [
@@ -238,28 +275,20 @@ const AppMap = forwardRef(
             },
           ],
           {
-            edgePadding: { top: 100, right: 50, bottom: 100, left: 50 },
+            // Above the booking sheet, not behind it: it can cover most of
+            // the map (the same padding as the rider overview).
+            edgePadding: overviewPadding(mapHeightRef.current, bottomInset),
             animated: true,
           },
         );
       } else if (firstMarkerLat) {
         mapRef.current.animateToRegion(
-          {
-            latitude: parseFloat(firstMarkerLat),
-            longitude: parseFloat(firstMarkerLong),
-            latitudeDelta: 0.05,
-            longitudeDelta: 0.05,
-          },
+          regionAbove(parseFloat(firstMarkerLat), parseFloat(firstMarkerLong)),
           500,
         );
       } else {
         mapRef.current.animateToRegion(
-          {
-            latitude: initialLat,
-            longitude: initialLong,
-            latitudeDelta: 0.05,
-            longitudeDelta: 0.05,
-          },
+          regionAbove(Number(initialLat), Number(initialLong)),
           500,
         );
       }
@@ -274,6 +303,8 @@ const AppMap = forwardRef(
       initialLong,
       hasRiderCoords,
       isLiveLeg,
+      // the sheet grew or shrank: frame the trip above it again
+      bottomInset,
     ]);
 
     // While a rider is tracked.
@@ -374,7 +405,17 @@ const AppMap = forwardRef(
         legKey = `preview:${firstMarkerLat},${firstMarkerLong}-${secondMarkerLat},${secondMarkerLong}`;
       }
 
-      if (!legKey || legKey === lastFetchedLegKeyRef.current) {
+      // No leg any more (a point was cleared, or the trip ended): take the
+      // old line off the map, and fetch afresh if the same leg comes back.
+      if (!legKey) {
+        if (currentLegKeyRef.current !== null) {
+          currentLegKeyRef.current = null;
+          lastFetchedLegKeyRef.current = null;
+          setRouteCoords([]);
+        }
+        return;
+      }
+      if (legKey === lastFetchedLegKeyRef.current) {
         return;
       }
 
@@ -530,6 +571,7 @@ const AppMap = forwardRef(
         style={[styles.container, style]}
         onLayout={e => {
           mapHeightRef.current = e.nativeEvent.layout.height;
+          mapWidthRef.current = e.nativeEvent.layout.width;
         }}>
         <MapView
           ref={mapRef}
@@ -562,6 +604,15 @@ const AppMap = forwardRef(
           rotateEnabled={interactive}
           pitchEnabled={interactive}
           toolbarEnabled={interactive}
+          // where the person is: the blue dot, once location is allowed
+          showsUserLocation={Boolean(locationReady) && showsUser}
+          showsMyLocationButton={false}
+          onUserLocationChange={e => {
+            const coordinate = e?.nativeEvent?.coordinate;
+            if (coordinate?.latitude != null) {
+              userCoordRef.current = coordinate;
+            }
+          }}
           showsPointsOfInterest={true}
           // Flat, clean map (no 3D building blocks) so the route stands out.
           showsBuildings={false}
