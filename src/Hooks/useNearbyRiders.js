@@ -21,10 +21,10 @@ const near = value =>
 // owner, 2026-11-22: "call only the api when the riders nearby is clicked",
 // "make sure that the api call for rider nearby only call once when we click
 // the button"; Utils/nearbyAsker.js keeps to that). show(point) asks for the
-// online riders within 2 km of the point who are not booked or in transit
-// (the backend's NearbyRiders); what comes back stays for 30 s, then goes by
-// itself, and hide() takes it away sooner. `nearby` is null while nothing is
-// shown, else { looking: true }, { count, riders: [{ lat, long }] },
+// online riders within reach of the point (4 km, the backend's NearbyRiders)
+// who are not booked or in transit; what comes back stays for 30 s, then goes
+// by itself, and hide() takes it away sooner. `nearby` is null while nothing
+// is shown, else { looking: true }, { count, riders: [{ lat, long }], reachKm },
 // { failed: true }, or { unknown: true } (no point to ask about).
 export default function useNearbyRiders() {
   const { request } = useApiRequest();
@@ -49,6 +49,8 @@ export default function useNearbyRiders() {
           ? {
               count: Number(data.count),
               riders: Array.isArray(data.riders) ? data.riders : [],
+              // how far the backend looked, for the label
+              reachKm: data.reachKm ?? null,
             }
           : null;
       },

@@ -120,6 +120,7 @@ import { services as SERVICE_OPTIONS } from './Components/ServiceList';
 import useNoRidersTimer from '@/Hooks/useNoRidersTimer';
 import useSearchReach from '@/Hooks/useSearchReach';
 import useNearbyRiders from '@/Hooks/useNearbyRiders';
+import { ridersNearbyText } from '@/Utils/ridersNearbyText';
 import { FARE_DEBOUNCE_MS, fareKey, shouldPrice } from '@/Utils/fareInquiry';
 import useRiderEtaPoll from '@/Hooks/useRiderEtaPoll';
 import useRiderLocationPoll from '@/Hooks/useRiderLocationPoll';
@@ -2212,8 +2213,8 @@ const HomeScreen = () => {
   const mapRef = useRef(null);
 
   // "Riders nearby", for now (the owner, 2026-11-22): a button on the map
-  // that shows the online riders within 2 km who are not booked or in
-  // transit, around the pickup, else around the person. One ask per press;
+  // that shows the online riders within 4 km (the backend's reach) who are
+  // not booked or in transit, around the pickup, else around the person. One ask per press;
   // the riders go by themselves after 30 s, or at the next press. Only while
   // the booking sheet is up.
   const { nearby, show: showRiders, hide: hideRiders } = useNearbyRiders();
@@ -2242,21 +2243,8 @@ const HomeScreen = () => {
         : mapRef.current?.userPoint() ?? null,
     );
   };
-  let ridersLabel = 'Riders nearby';
-  if (nearby?.unknown) {
-    ridersLabel = 'Your location is not known yet';
-  } else if (nearby?.failed) {
-    ridersLabel = 'Couldn’t load riders';
-  } else if (nearby?.looking) {
-    ridersLabel = 'Looking for riders…';
-  } else if (nearby?.riders) {
-    ridersLabel =
-      nearby.count === 0
-        ? 'No riders within 2 km'
-        : `${nearby.count} ${
-            nearby.count === 1 ? 'rider' : 'riders'
-          } within 2 km`;
-  }
+  // "3 riders within 4 km": the reach comes with the answer
+  const ridersLabel = ridersNearbyText(nearby);
 
   // Android's back does what the back button does while a ride is chosen,
   // and what it always did otherwise.
@@ -2691,7 +2679,7 @@ New reference: ${activeBooking.ref_code}`
           </Pressable>
         ) : null}
 
-        {/* "Riders nearby", for now: shows the riders within 2 km for 30 s */}
+        {/* "Riders nearby", for now: shows the riders within 4 km for 30 s */}
         {sheetShown ? (
           <Pressable
             onPress={toggleRiders}
