@@ -5,6 +5,8 @@ import { useTheme } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { bottomSpace } from '@/Utils/bottomSpace';
+import { modern } from '@/Theme/modern';
+import ServiceList from './Components/ServiceList';
 
 const PAYMENT_METHOD_CONFIG = {
   cash: {
@@ -19,16 +21,16 @@ const PAYMENT_METHOD_CONFIG = {
 
 const BottomModal = ({
   onLayout,
+  services,
   selectedService,
+  onSelectService,
   onBackToEdit,
-  onBookPressed,
   onInquireBooking,
   onCreateBooking,
   onCancelBooking,
   onBackToConfirm,
   onPickupChange,
   onDropoffChange,
-  onChangeService,
   pickup,
   dropoff,
   isBooked,
@@ -51,8 +53,10 @@ const BottomModal = ({
 }) => {
   // The navigation bar may cover the bottom of the screen: keep the bottom content clear of it
   const { bottom: bottomInset } = useSafeAreaInsets();
-  const { colors } = useTheme();
-  const styles = getStyles({ colors });
+  const theme = useTheme();
+  const { colors } = theme;
+  const look = modern(theme);
+  const styles = getStyles({ colors, look });
   const navigation = useNavigation();
 
   const paymentConfig =
@@ -165,41 +169,50 @@ const BottomModal = ({
         { paddingBottom: bottomSpace(bottomInset, 30) },
       ]}
       onLayout={onLayout}>
-      {selectedService ? (
-        <>
-          {/* service header */}
-          <View style={styles.serviceHeader}>
-            {isBooked && !isConfirmed ? (
-              <View style={styles.serviceHeaderBooked}>
-                <TouchableOpacity onPress={onBackToEdit} disabled={isLoading}>
-                  <Text style={styles.arrow}>
-                    {'< '}
-                    <Text style={styles.modalTitle}>Back</Text>
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity
-                onPress={onChangeService}
-                disabled={isConfirmed}
-                style={styles.serviceTitleBtn}>
-                <Text style={styles.modalTitle}>
-                  {selectedService.title}
-                  <Text style={styles.arrow}>{' >'}</Text>
+      {/* header: the title while choosing, Back while the fare is up */}
+      {(!isBooked || !isConfirmed || showMinimizeButton) && (
+        <View style={styles.serviceHeader}>
+          {isBooked && !isConfirmed ? (
+            <View style={styles.serviceHeaderBooked}>
+              <TouchableOpacity onPress={onBackToEdit} disabled={isLoading}>
+                <Text style={styles.arrow}>
+                  {'< '}
+                  <Text style={styles.modalTitle}>Back</Text>
                 </Text>
               </TouchableOpacity>
-            )}
-            {showMinimizeButton ? (
-              <TouchableOpacity
-                testID="advance-tracking-minimize"
-                onPress={onMinimizePress}
-                style={styles.minimizeButton}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Text style={styles.minimizeButtonText}>Close</Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
+            </View>
+          ) : !isBooked ? (
+            <Text style={styles.sheetTitle} maxFontSizeMultiplier={1.3}>
+              Choose a ride
+            </Text>
+          ) : (
+            <View />
+          )}
+          {showMinimizeButton ? (
+            <TouchableOpacity
+              testID="advance-tracking-minimize"
+              onPress={onMinimizePress}
+              style={styles.minimizeButton}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.minimizeButtonText}>Close</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      )}
 
+      {/* the rides; once the booking is placed, only the chosen one */}
+      <ServiceList
+        services={services}
+        selectedService={selectedService}
+        fare={inquireBookingResponse}
+        onSelect={onSelectService}
+        disabled={isLoading}
+        selectedOnly={isConfirmed}
+        style={styles.serviceList}
+      />
+
+      {selectedService ? (
+        <>
           {/* pickup and dropoff */}
           <View style={styles.locationColumn}>
             <View style={styles.locationGroup}>
@@ -313,19 +326,12 @@ const BottomModal = ({
           {renderActionButton()}
         </>
       ) : (
-        <>
-          <TouchableOpacity onPress={onBookPressed}>
-            <Text style={styles.modalTitle}>
-              Choose a service <Text style={styles.arrow}>{'>'}</Text>
-            </Text>
-          </TouchableOpacity>
-          <AppButton
-            title={isOnline ? 'Book' : 'No Internet'}
-            isBold
-            buttonColor={colors.grey5}
-            disabled
-          />
-        </>
+        <AppButton
+          title={isOnline ? 'Book' : 'No Internet'}
+          isBold
+          buttonColor={colors.grey5}
+          disabled
+        />
       )}
     </View>
   );
@@ -333,7 +339,7 @@ const BottomModal = ({
 
 export default BottomModal;
 
-const getStyles = ({ colors }) =>
+const getStyles = ({ colors, look }) =>
   StyleSheet.create({
     modalContainer: {
       position: 'absolute',
@@ -369,9 +375,18 @@ const getStyles = ({ colors }) =>
       alignItems: 'center',
       marginBottom: 20,
     },
-    serviceTitleBtn: {
+    // the Title role of docs/booking-redesign-spec.md
+    sheetTitle: {
       flex: 1,
       paddingRight: 8,
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 22,
+      lineHeight: 27,
+      letterSpacing: -0.5,
+      color: look.ink,
+    },
+    serviceList: {
+      marginBottom: 20,
     },
     minimizeButton: {
       paddingHorizontal: 12,

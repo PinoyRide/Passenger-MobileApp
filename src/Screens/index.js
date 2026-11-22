@@ -9,7 +9,7 @@ export { default as TAC } from './TermsScreen/TAC';
 export { default as HomeScreen } from './HomeScreen/HomeScreen';
 export { default as BottomModal } from './HomeScreen/BottomModal';
 export { default as PaymentMethodModal } from './HomeScreen/Components/PaymentMethodModal';
-export { default as ServiceModal } from './HomeScreen/Components/ServiceModal';
+export { default as ServiceList } from './HomeScreen/Components/ServiceList';
 export { default as InputLocation } from './Location/InputLocation';
 export { default as MapSelectionScreen } from './Location/MapSelectionScreen';
 export { default as SaveLocationScreen } from './Location/SaveLocationScreen';

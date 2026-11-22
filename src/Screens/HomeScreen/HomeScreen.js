@@ -66,7 +66,6 @@ import {
 } from '@/Redux/Slices/userSlice';
 import { AppUtil, Constants } from '@/Utils';
 import usePostRequest from '@/Services/Api';
-import ServiceModal from './Components/ServiceModal';
 import PaymentMethodModal from './Components/PaymentMethodModal';
 import BookingStatusModal from './Components/BookingStatusModal';
 import NoteToRiderModal from './Components/NoteToRiderModal';
@@ -108,7 +107,7 @@ import {
   shouldShowRiderFoundAlert,
   transformBooking,
 } from '@/Hooks/bookingTransform';
-import { services as SERVICE_OPTIONS } from './Components/ServiceModal';
+import { services as SERVICE_OPTIONS } from './Components/ServiceList';
 import useNoRidersTimer from '@/Hooks/useNoRidersTimer';
 import useRiderEtaPoll from '@/Hooks/useRiderEtaPoll';
 import useRiderLocationPoll from '@/Hooks/useRiderLocationPoll';
@@ -195,7 +194,6 @@ const HomeScreen = () => {
   const [showSuccess, setShowSuccess] = useState(false);
   const [showRiderFound, setShowRiderFound] = useState(false);
   const riderAlertShownRef = useRef(false);
-  const [showServiceModal, setShowServiceModal] = useState(false);
 
   // Modal states (not persisted)
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -250,7 +248,6 @@ const HomeScreen = () => {
     2: 'In transit. Do not use your phone',
   };
 
-  const riderFoundTimeout = useRef(null);
   const [showWaitingBanner, setShowWaitingBanner] = useState(false);
   const [riderArrivedAt, setRiderArrivedAt] = useState(null);
   const [showSafetyGuide, setShowSafetyGuide] = useState(false);
@@ -709,44 +706,26 @@ const HomeScreen = () => {
     cancelAdvance.loading ||
     retryBooking.loading;
 
-  const onBookPressed = async () => {
-    // "booking should not go through when there is no internet".
-    const online = await checkIsOnline();
-    if (!online) {
-      Alert.alert(
-        OFFLINE_ALERT_TITLE,
-        'You need an internet connection to book a ride. Please reconnect and try again.',
-      );
+  // A ride picked in the booking sheet's list (ServiceList). Picking another
+  // one while a fare is up drops that fare and asks for the new ride's, so the
+  // fare on screen, and Confirm, always belong to the ride that is picked.
+  // The fare inquiry checks the connection and location itself.
+  const handleSelectService = service => {
+    if (
+      service?.id == null ||
+      String(service.id) === String(selectedService?.id)
+    ) {
       return;
     }
-
-    // Check location permission before allowing booking
-    const permission = await ensureLocationPermission();
-
-    if (permission !== 'granted') {
-      if (permission === 'blocked') {
-        Alert.alert(
-          'Location Required',
-          'Location access is blocked. Please enable it in Settings to book a ride.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => openSettings() },
-          ],
-        );
-      } else {
-        Alert.alert(
-          'Location Required',
-          'Location access is required to book a ride. Please enable location services.',
-          [{ text: 'OK' }],
-        );
-      }
-      return;
+    dispatch(setSelectedService(service));
+    if (
+      pickupLocation &&
+      dropoffLocation &&
+      (isBooked || inquireBookingResponse)
+    ) {
+      dispatch(setInquireBookingResponse(null));
+      triggerInquireBooking(service.id);
     }
-
-    setShowServiceModal(true);
-    riderFoundTimeout.current = setTimeout(() => {
-      // setShowRiderFound(true);
-    }, 15000);
   };
 
   const handleTopRightPress = () => {
@@ -796,9 +775,6 @@ const HomeScreen = () => {
     triggerGetPromoList();
 
     return () => {
-      if (riderFoundTimeout.current) {
-        clearTimeout(riderFoundTimeout.current);
-      }
       stopWatching();
     };
   }, []);
@@ -2484,8 +2460,9 @@ New reference: ${activeBooking.ref_code}`
             bookingStatus === 5) && (
             <BottomModal
               onLayout={e => setModalHeight(e.nativeEvent.layout.height)}
+              services={SERVICE_OPTIONS}
               selectedService={selectedService}
-              onBookPressed={onBookPressed}
+              onSelectService={handleSelectService}
               pickup={pickupLocation}
               dropoff={dropoffLocation}
               onPickupChange={location => {
@@ -2500,7 +2477,6 @@ New reference: ${activeBooking.ref_code}`
               onDropoffChange={location =>
                 dispatch(setDropoffLocation(location))
               }
-              onChangeService={() => setShowServiceModal(true)}
               onInquireBooking={() => {
                 if (requireCompleteProfile()) {
                   triggerInquireBooking();
@@ -2570,7 +2546,6 @@ New reference: ${activeBooking.ref_code}`
             pickup={pickupLocation}
             dropoff={dropoffLocation}
             selectedService={selectedService}
-            onChangeService={() => setShowServiceModal(true)}
             vehicle={bookingVehicle}
             confirmedBookingView={confirmedBookingView}
             statusBannerText={
@@ -2608,23 +2583,6 @@ New reference: ${activeBooking.ref_code}`
           onClose={() => setShowNoteModal(false)}
           onSave={handleNoteSave}
           initialNote={noteToRider}
-        />
-
-        <ServiceModal
-          visible={showServiceModal}
-          onClose={() => setShowServiceModal(false)}
-          onSelect={service => {
-            dispatch(setSelectedService(service));
-            setShowServiceModal(false);
-            if (
-              pickupLocation &&
-              dropoffLocation &&
-              service?.id != null &&
-              (isBooked || inquireBookingResponse)
-            ) {
-              triggerInquireBooking(service.id);
-            }
-          }}
         />
       </View>
     </>
