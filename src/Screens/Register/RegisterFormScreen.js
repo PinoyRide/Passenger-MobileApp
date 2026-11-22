@@ -18,19 +18,25 @@ import useApiRequest from '@/Services/ApiV2';
 import { Constants } from '@/Utils';
 import { consentBody } from '@/Utils/consent';
 import { handedCode } from '@/Utils/handedCode';
-import { refusalField, registrationErrors } from '@/Utils/registerForm';
+import {
+  refusalField,
+  registrationErrors,
+  registrationFields,
+} from '@/Utils/registerForm';
 
-// Register: the mobile number and the two consents. The code that follows
-// proves the number and makes the account, signed in; the profile (names,
-// email, an optional photo) comes after and can be skipped for now.
-// Everything that could stop the registration is checked before a code is
-// sent: here, then by the backend.
+// Register: the passenger's details first, the mobile number last, every field
+// required (the owner, 2026-11-22). Everything that could stop the
+// registration is checked before a code is sent; the code screen then creates
+// the account and sends the passenger to log in.
 const RegisterFormScreen = () => {
   const { colors } = useTheme();
   const styles = getStyles({ colors });
   const navigation = useNavigation();
   const sendCode = useApiRequest();
 
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
   const [mobile, setMobile] = useState('');
   const [mobileValid, setMobileValid] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
@@ -39,8 +45,19 @@ const RegisterFormScreen = () => {
   const [alertMessage, setAlertMessage] = useState('');
   const [showAlert, setShowAlert] = useState(false);
 
+  // A field's message goes away as soon as it is changed
+  const changed = (field, set) => value => {
+    set(value);
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: '' }));
+    }
+  };
+
   const handleNext = async () => {
     const problems = registrationErrors({
+      firstName,
+      lastName,
+      email,
       mobile,
       mobileValid,
       acceptedTerms,
@@ -51,10 +68,11 @@ const RegisterFormScreen = () => {
       return;
     }
 
+    const details = registrationFields({ firstName, lastName, email });
     const { response, error, offline } = await sendCode.request(
       'POST',
       Constants.API.OTP_REGISTER,
-      { mobileNo: mobile, userType: 'customer' },
+      { mobileNo: mobile, userType: 'customer', ...details },
     );
 
     if (offline) {
@@ -66,7 +84,7 @@ const RegisterFormScreen = () => {
     }
 
     if (error || !response) {
-      // Already registered, signed in as a rider: shown under the number
+      // Number or email already taken, a missing name: shown where it belongs
       const { field, message } = refusalField(error);
       if (field) {
         setErrors(prev => ({ ...prev, [field]: message }));
@@ -84,6 +102,7 @@ const RegisterFormScreen = () => {
       handedCode: handedCode(response.data),
       mode: 'register',
       consent: consentBody({ acceptedTerms, acceptedPrivacy }),
+      registration: details,
     });
   };
 
@@ -120,19 +139,35 @@ const RegisterFormScreen = () => {
           showsVerticalScrollIndicator={false}>
           <View style={styles.pageContainer}>
             <Text style={styles.intro}>
-              Your mobile number is your account. We will text it a code to
-              confirm it is yours.
+              Riders see your name so they can find you at pickup.
             </Text>
 
             <AppTextInput
+              label="First Name"
+              value={firstName}
+              onChangeText={changed('firstName', setFirstName)}
+              placeholder="e.g. Juan"
+              error={errors.firstName}
+            />
+            <AppTextInput
+              label="Last Name"
+              value={lastName}
+              onChangeText={changed('lastName', setLastName)}
+              placeholder="e.g. Dela Cruz"
+              error={errors.lastName}
+            />
+            <AppTextInput
+              label="Email"
+              value={email}
+              onChangeText={changed('email', setEmail)}
+              placeholder="e.g. juan@email.com"
+              inputMode="email"
+              error={errors.email}
+            />
+            <AppTextInput
               label="Mobile"
               value={mobile}
-              onChangeText={value => {
-                setMobile(value);
-                if (errors.mobile) {
-                  setErrors(prev => ({ ...prev, mobile: '' }));
-                }
-              }}
+              onChangeText={changed('mobile', setMobile)}
               onValidationChange={setMobileValid}
               inputMode="phone"
               placeholder="9XX-XXX-XXXX"
@@ -169,8 +204,8 @@ const RegisterFormScreen = () => {
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>
-              After the code you can add your name and photo, or skip that for
-              now.
+              We will send a code to your mobile number to confirm it is yours.
+              Then log in with the same number.
             </Text>
             <AppButton
               title={sendCode.loading ? 'Please wait…' : 'Next'}

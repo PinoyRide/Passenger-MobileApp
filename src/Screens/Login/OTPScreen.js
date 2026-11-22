@@ -19,6 +19,7 @@ import { signedInRoutes } from '@/Utils/consent';
 import { Constants } from '@/Utils';
 import { handedCode } from '@/Utils/handedCode';
 import { SMS, sentTo } from '@/Utils/codeChannel';
+import { afterRegistering } from '@/Utils/registerForm';
 import DeviceInfo from 'react-native-device-info';
 import { useDispatch, useSelector } from 'react-redux';
 import { selectUserInfo, setUserInfo } from '@/Redux/Slices/userSlice';
@@ -31,7 +32,8 @@ const OTPScreen = () => {
   const styles = getStyles({ colors });
   const navigation = useNavigation();
   const route = useRoute();
-  const { mobileNumber, otpSent, mode, consent, emailHint } = route.params;
+  const { mobileNumber, otpSent, mode, consent, registration, emailHint } =
+    route.params;
   const isRegister = mode === 'register';
   // How the login code was sent: a text, or an email (chosen on LoginScreen).
   // A registration code is always texted.
@@ -110,8 +112,8 @@ const OTPScreen = () => {
         otpCode: code,
         appVersion: DeviceInfo.getVersion(),
         // registering: the Terms and Privacy Policy acceptance is recorded with the account,
-        // which is made signed in; the profile comes next and can be skipped for now
-        ...(isRegister ? { ...consent } : {}),
+        // with the form's names and email; the passenger then logs in (signIn: false)
+        ...(isRegister ? { ...consent, ...registration, signIn: false } : {}),
       },
     );
 
@@ -125,19 +127,19 @@ const OTPScreen = () => {
       setShowAlert(true);
       return;
     }
-    // Signed in: by logging in, or by registering (the new account comes back signed in)
-    if (
-      loginUser.response?.data &&
-      (isRegister || loginUser.response.code === 200)
-    ) {
+    if (isRegister && loginUser.response?.data) {
+      // The account is made: log in with it, the number filled in
+      navigation.reset(afterRegistering(mobileNumber));
+      return;
+    }
+    if (loginUser.response?.code === 200 && loginUser.response.data) {
       dispatch(setUserInfo(toStoredUser(loginUser.response.data)));
     }
   }, [loginUser.response, loginUser.error]);
 
-  // Redirect after login / registration. An account that has not accepted the current Terms and
-  // Privacy Policy is asked first. An incomplete profile (no name yet) goes straight to
-  // CompleteProfileScreen, with Home underneath: it can be skipped for now, and booking asks
-  // for the name when it is still missing.
+  // Redirect after login. An account that has not accepted the current Terms and Privacy Policy
+  // is asked first. An incomplete profile (no name: an account from before the form) goes to
+  // CompleteProfileScreen, with Home underneath so Back still works.
   useEffect(() => {
     if (!userInfo) {
       return;
