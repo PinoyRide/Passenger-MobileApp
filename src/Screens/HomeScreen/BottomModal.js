@@ -4,7 +4,11 @@ import { useTheme } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSelector } from 'react-redux';
-import { selectSavedPlaces } from '@/Redux/Slices/userSlice';
+import {
+  selectRecentPlaces,
+  selectSavedPlaces,
+} from '@/Redux/Slices/userSlice';
+import { subtitleOf, titleOf } from '@/Utils/recentPlaces';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { bottomSpace } from '@/Utils/bottomSpace';
 import { formatPeso } from '@/Utils/formatPeso';
@@ -267,6 +271,17 @@ const BottomModal = ({
       openPlaces({ dropoffNow: target });
     }
   };
+  // A recent drop-off or pick-up (the owner, 2026-11-23: "so the passenger
+  // wont be searching again"): one tap makes it the destination, as Home
+  // does; no search, no paid lookup.
+  const recentPlaces = useSelector(selectRecentPlaces);
+  const goToRecent = place => {
+    const target = { address: place.address, lat: place.lat, long: place.long };
+    onDropoffChange?.(target);
+    if (!pickup) {
+      openPlaces({ dropoffNow: target });
+    }
+  };
   const savedLabel = (type, name) => {
     const place = savedPlaces.find(p => p.type === type);
     return place ? `${name}: ${place.address}` : `Add your ${name} address`;
@@ -337,6 +352,39 @@ const BottomModal = ({
           </Pressable>
         ))}
       </View>
+      {recentPlaces.length > 0 ? (
+        <View style={styles.recentList}>
+          {recentPlaces.slice(0, 3).map((place, index) => {
+            const subtitle = subtitleOf(place);
+            return (
+              <Pressable
+                key={`${place.lat},${place.long}`}
+                onPress={() => goToRecent(place)}
+                accessibilityRole="button"
+                accessibilityLabel={`Recent place: ${place.address}`}
+                style={({ pressed }) => [
+                  styles.recentRow,
+                  index > 0 && styles.recentRowLine,
+                  pressed && styles.pressed,
+                ]}>
+                <View style={styles.recentIcon}>
+                  <Icon name="history" size={18} color={look.inkSoft} />
+                </View>
+                <View style={styles.recentText}>
+                  <Text style={styles.recentTitle} numberOfLines={1}>
+                    {titleOf(place)}
+                  </Text>
+                  {subtitle ? (
+                    <Text style={styles.recentSubtitle} numberOfLines={1}>
+                      {subtitle}
+                    </Text>
+                  ) : null}
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
     </>
   );
 
@@ -804,6 +852,43 @@ const getStyles = (look, blue) =>
       fontSize: 13,
       lineHeight: 18,
       color: look.ink,
+    },
+    recentList: {
+      marginTop: 10,
+    },
+    recentRow: {
+      minHeight: 52,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingVertical: 7,
+    },
+    recentRowLine: {
+      borderTopWidth: 1,
+      borderTopColor: look.hairline,
+    },
+    recentIcon: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: look.soft,
+    },
+    recentText: {
+      flex: 1,
+    },
+    recentTitle: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 14.5,
+      lineHeight: 20,
+      color: look.ink,
+    },
+    recentSubtitle: {
+      fontFamily: 'Poppins Regular',
+      fontSize: 12.5,
+      lineHeight: 17,
+      color: look.muted,
     },
     addedDot: {
       width: 6,

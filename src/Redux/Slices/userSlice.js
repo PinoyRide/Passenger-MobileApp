@@ -67,6 +67,8 @@ const initialState = {
   // replace.
   sessionToken: null,
   savedPlaces: [], // Array of saved locations
+  // the drop-offs and pick-ups of recent trips (recentPlaces.js)
+  recentPlaces: [],
 
   // ✅ NEW: Customer booking state (persisted across app restarts)
   activeBooking: null,
@@ -117,6 +119,7 @@ const userSlice = createSlice({
       state.acknowledgedScheduledIds = [];
       state.minimizedAdvanceBookingIds = [];
       state.parkedAdvanceBookings = [];
+      state.recentPlaces = [];
     },
     setHasShownLoginSuccess: (state, action) => {
       state.hasShownLoginSuccess = action.payload;
@@ -159,6 +162,9 @@ const userSlice = createSlice({
     },
     clearSavedPlaces: state => {
       state.savedPlaces = [];
+    },
+    setRecentPlaces: (state, action) => {
+      state.recentPlaces = Array.isArray(action.payload) ? action.payload : [];
     },
 
     // ✅ NEW: Customer Booking Actions
@@ -353,6 +359,7 @@ export const {
   updateSavedPlace,
   removeSavedPlace,
   clearSavedPlaces,
+  setRecentPlaces,
   // ✅ NEW: Booking actions
   setActiveBooking,
   setBookingStatus,
@@ -382,6 +389,7 @@ export const selectSessionToken = state => state.user.sessionToken;
 export const selectHasShownLoginSuccess = state =>
   state.user.hasShownLoginSuccess;
 export const selectSavedPlaces = state => state.user.savedPlaces;
+export const selectRecentPlaces = state => state.user.recentPlaces || [];
 
 // ✅ NEW: Booking selectors
 export const selectActiveBooking = state => state.user.activeBooking;

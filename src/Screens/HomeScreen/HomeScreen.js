@@ -58,7 +58,9 @@ import {
   selectParkedAdvanceBookings,
   selectPickupLocation,
   selectRatedBookingIds,
+  selectRecentPlaces,
   selectRiderDetails,
+  selectSavedPlaces,
   selectSelectedService,
   selectUserInfo,
   setActiveBooking,
@@ -69,9 +71,11 @@ import {
   setIsBooked,
   setIsConfirmed,
   setPickupLocation,
+  setRecentPlaces,
   setRiderDetails,
   setSelectedService,
 } from '@/Redux/Slices/userSlice';
+import { recentPlacesFrom, withBooking } from '@/Utils/recentPlaces';
 import { AppUtil, Constants } from '@/Utils';
 import usePostRequest from '@/Services/Api';
 import PaymentMethodModal from './Components/PaymentMethodModal';
@@ -162,6 +166,11 @@ const HomeScreen = () => {
   const riderDetails = useSelector(selectRiderDetails);
   const pickupLocation = useSelector(selectPickupLocation);
   const dropoffLocation = useSelector(selectDropoffLocation);
+  const recentPlaces = useSelector(selectRecentPlaces);
+  const savedPlaces = useSelector(selectSavedPlaces);
+  // read by the history check, which is a callback made once
+  const savedPlacesRef = useRef(savedPlaces);
+  savedPlacesRef.current = savedPlaces;
   const selectedService = useSelector(selectSelectedService);
   const isBooked = useSelector(selectIsBooked);
   const isConfirmed = useSelector(selectIsConfirmed);
@@ -431,6 +440,11 @@ const HomeScreen = () => {
     if (!Array.isArray(bookings)) {
       return;
     }
+    // The same answer gives the recent places of the Where to? sheet and the
+    // place picker (recentPlaces.js): no request of their own.
+    dispatch(
+      setRecentPlaces(recentPlacesFrom(bookings, savedPlacesRef.current)),
+    );
     const ongoing =
       bookings.find(b => Number(b.status) === 2) ||
       bookings.find(b => Number(b.status) === 1) ||
@@ -1501,6 +1515,11 @@ const HomeScreen = () => {
       dispatch(setIsBooked(true));
       dispatch(setIsConfirmed(true));
       dispatch(setActiveBooking(results?.data));
+      dispatch(
+        setRecentPlaces(
+          withBooking(recentPlaces, results?.data, savedPlacesRef.current),
+        ),
+      );
       setShowWaitingBanner(true);
     }
   };

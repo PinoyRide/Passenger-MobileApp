@@ -22,6 +22,7 @@ import { Constants } from '@/Utils';
 import { fetchWithTimeout } from '@/Utils/Network';
 import {
   removeSavedPlace,
+  selectRecentPlaces,
   selectSavedPlaces,
   setDropoffLocation as storeDropoff,
   setPickupLocation as storePickup,
@@ -34,6 +35,10 @@ import {
   sessionFor,
   suggestionsFrom,
 } from '@/Utils/placeSession';
+import {
+  subtitleOf as recentSubtitle,
+  titleOf as recentTitle,
+} from '@/Utils/recentPlaces';
 import { modern } from '@/Theme/modern';
 
 // Manila, while neither point is known.
@@ -80,6 +85,7 @@ const InputLocation = () => {
   const route = useRoute();
   const dispatch = useDispatch();
   const savedPlaces = useSelector(selectSavedPlaces) || [];
+  const recentPlaces = useSelector(selectRecentPlaces);
 
   const [pickup, setPickup] = useState('');
   const [dropoff, setDropoff] = useState('');
@@ -651,6 +657,28 @@ const InputLocation = () => {
           right: <Icon name="chevron-right" size={20} color={look.muted} />,
           onPress: handleOpenMap,
         })}
+
+        {recentPlaces.length > 0 ? (
+          <>
+            {/* the drop-offs and pick-ups of recent trips, for either point:
+                no search, no paid lookup (recentPlaces.js) */}
+            <Text style={styles.sectionLabel}>RECENT</Text>
+            {recentPlaces.slice(0, 5).map(place =>
+              renderRow({
+                key: `recent:${place.lat},${place.long}`,
+                icon: 'history',
+                title: recentTitle(place),
+                subtitle: recentSubtitle(place) || undefined,
+                onPress: () =>
+                  choosePoint(
+                    focusedField || activeField,
+                    place,
+                    place.address,
+                  ),
+              }),
+            )}
+          </>
+        ) : null}
 
         <Text style={styles.sectionLabel}>SAVED PLACES</Text>
         {SAVED_TYPES.map(({ type, icon, name }) => {
