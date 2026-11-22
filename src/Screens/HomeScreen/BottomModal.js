@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -120,9 +120,10 @@ const BottomModal = ({
     },
   ];
 
-  // The same three steps as before; only the look changed. "No Internet"
-  // moved into the fare caption, so the button always names its action.
-  // "Book Motorcycle", "Book Car": the button names the ride it books.
+  // "No Internet" is in the fare caption, so the button always names its
+  // action. "Book Motorcycle", "Book Car": the button names the ride it books,
+  // and books an instant ride at the fare shown. Confirm is only for a
+  // scheduled ride, whose estimated fare shows first after its time is picked.
   const ride = serviceById(selectedService?.id);
   const actionButtons = [
     {
@@ -148,6 +149,46 @@ const BottomModal = ({
     },
   ];
   const action = actionButtons.find(b => b.visible);
+
+  // Minimized (the owner, 2026-11-22: "i should be able to minimize it also
+  // for me to explore the map"): only the handle and one line stay, and the
+  // map gets the room. Tap the handle, or drag it down or up; the next step of
+  // the booking opens the sheet again.
+  let step = 'whereTo';
+  if (searching && routeComplete) {
+    step = 'searching';
+  } else if (routeComplete) {
+    step = isConfirmed ? 'placed' : confirming ? 'confirming' : 'choosing';
+  }
+  const [minimized, setMinimized] = useState(false);
+  useEffect(() => {
+    setMinimized(false);
+  }, [step]);
+  const drag = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponderCapture: (_, g) =>
+          Math.abs(g.dy) > 8 && Math.abs(g.dy) > Math.abs(g.dx),
+        onPanResponderRelease: (_, g) => {
+          if (g.dy > 24) {
+            setMinimized(true);
+          } else if (g.dy < -24) {
+            setMinimized(false);
+          }
+        },
+      }),
+    [],
+  );
+  const minimizedLine = {
+    whereTo: 'Where to?',
+    choosing:
+      ride?.short && fare
+        ? `${ride.short} · ${formatPeso(fare.total_amount)}`
+        : 'Choose a ride',
+    confirming: 'Confirm your booking',
+    searching: 'Finding your rider',
+    placed: 'Your booking',
+  }[step];
 
   // The line under "Total fare".
   const fareCaption = () => {
@@ -525,8 +566,37 @@ const BottomModal = ({
         { paddingBottom: bottomSpace(bottomInset, 24, 24) },
       ]}
       onLayout={onLayout}>
-      <View style={styles.handle} />
-      {searching && routeComplete ? (
+      <View {...drag.panHandlers}>
+        <Pressable
+          onPress={() => setMinimized(m => !m)}
+          hitSlop={{ top: 10, bottom: 4, left: 60, right: 60 }}
+          accessibilityRole="button"
+          accessibilityLabel={
+            minimized ? 'Show the booking sheet' : 'Minimize the booking sheet'
+          }
+          style={styles.handleArea}>
+          <View style={styles.handle} />
+        </Pressable>
+        {minimized ? (
+          <Pressable
+            onPress={() => setMinimized(false)}
+            accessibilityRole="button"
+            accessibilityLabel={`${minimizedLine}. Show the booking sheet`}
+            style={({ pressed }) => [
+              styles.minimizedRow,
+              pressed && styles.pressed,
+            ]}>
+            <Text
+              style={styles.minimizedText}
+              numberOfLines={1}
+              maxFontSizeMultiplier={1.3}>
+              {minimizedLine}
+            </Text>
+            <Icon name="chevron-up" size={24} color={look.ink} />
+          </Pressable>
+        ) : null}
+      </View>
+      {minimized ? null : searching && routeComplete ? (
         renderSearching()
       ) : routeComplete ? (
         <View style={styles.stack}>
@@ -576,13 +646,31 @@ const getStyles = (look, blue) =>
       shadowRadius: 22,
       elevation: 16,
     },
+    // the handle, with room around it to be tapped or dragged
+    handleArea: {
+      alignSelf: 'stretch',
+      alignItems: 'center',
+      paddingTop: 2,
+      paddingBottom: 14,
+    },
     handle: {
-      alignSelf: 'center',
       width: 38,
       height: 4,
       borderRadius: 2,
       backgroundColor: look.hairline,
-      marginBottom: 14,
+    },
+    minimizedRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      minHeight: 44,
+    },
+    minimizedText: {
+      flex: 1,
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 18,
+      lineHeight: 24,
+      color: look.ink,
     },
     stack: {
       gap: 16,

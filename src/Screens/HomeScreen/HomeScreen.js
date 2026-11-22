@@ -17,6 +17,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { modern } from '@/Theme/modern';
 import { distanceKm, tripChipText } from '@/Utils/tripText';
 import { REACH_M } from '@/Utils/radarPing';
+import { formatPeso } from '@/Utils/formatPeso';
 import BottomModal from './BottomModal';
 import {
   PUSH_BOOKING_UPDATE_EVENT,
@@ -1166,8 +1167,9 @@ const HomeScreen = () => {
 
   // The trip a fare is asked for (Utils/fareInquiry.js), and what each
   // inquiry was for. `purpose` 'price' is the sheet pricing the trip by
-  // itself; 'book' is the Book press or a scheduled booking, which also opens
-  // the Confirm step. A fare is used only for the trip it was asked for.
+  // itself; 'book' is the Book press, which then books an instant ride, or a
+  // scheduled booking, which opens the Confirm step. A fare is used only for
+  // the trip it was asked for.
   const fareKeyNow = fareKey({
     pickup: pickupLocation,
     dropoff: dropoffLocation,
@@ -1306,12 +1308,39 @@ const HomeScreen = () => {
     }
 
     if (results?.code === 200 && results?.data) {
+      // the fare on the sheet for this same trip, before this answer replaces it
+      const tripKey = request?.key ?? fareKeyNow;
+      const shown =
+        pricedKeyRef.current === tripKey ? inquireBookingResponse : null;
       // save to Redux instead of local state
-      pricedKeyRef.current = request?.key ?? fareKeyNow;
+      pricedKeyRef.current = tripKey;
       setFareProblem(null);
       dispatch(setInquireBookingResponse(results.data));
-      if (!byItself) {
+      if (byItself) {
+        return;
+      }
+      if (scheduledAt) {
+        // A scheduled ride's fare shows here for the first time, as an
+        // estimate: its Confirm step books it.
         dispatch(setIsBooked(true));
+        return;
+      }
+      // An instant ride: Book books (the owner, 2026-11-22: a Confirm after
+      // "Book Motorcycle" "is redundant"), at the fare the sheet showed. One
+      // that changed since, or was not on the sheet yet, is shown instead, and
+      // the next press books it.
+      const sameFare =
+        shown &&
+        Number(shown.total_amount) === Number(results.data.total_amount);
+      if (sameFare) {
+        triggerCreateBooking(results.data);
+      } else if (shown) {
+        setAlertMessage(
+          `The fare is now ${formatPeso(
+            results.data.total_amount,
+          )}. Press Book again to book at this fare.`,
+        );
+        setShowAlert(true);
       }
     } else if (results?.code === 200) {
       // BUG-1: a 200 with no fare data must not open the summary
@@ -1353,25 +1382,34 @@ const HomeScreen = () => {
   };
 
   //CREATE BOOKING
-  const triggerCreateBooking = async () => {
-    if (createBooking.loading) {
+  // A booking on its way, from the press until the server answers: the checks
+  // before the request take a moment, and a second press must not book twice.
+  const bookingInFlightRef = useRef(false);
+  // `fareNow`: the fare just priced for this trip (Book), before the sheet's
+  // copy of it has caught up; the Confirm press uses the sheet's.
+  const triggerCreateBooking = async fareNow => {
+    if (createBooking.loading || bookingInFlightRef.current) {
       return;
     }
+    const fare =
+      fareNow?.total_amount != null ? fareNow : inquireBookingResponse;
     if (!requireCompleteProfile()) {
       return;
     }
 
     // BUG-1: never build payment_details from an empty fare
-    if (!inquireBookingResponse) {
+    if (!fare) {
       setAlertMessage(FARE_UNAVAILABLE_MESSAGE);
       setShowAlert(true);
       return;
     }
 
+    bookingInFlightRef.current = true;
     // block — this is the actual booking-creation call, the one that
     // absolutely must not go through while offline.
     const online = await checkIsOnline();
     if (!online) {
+      bookingInFlightRef.current = false;
       Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
       return;
     }
@@ -1379,6 +1417,7 @@ const HomeScreen = () => {
     const permission = await ensureLocationPermission();
 
     if (permission !== 'granted') {
+      bookingInFlightRef.current = false;
       Alert.alert(
         'Location Required',
         'Location access is required to create booking.',
@@ -1389,20 +1428,20 @@ const HomeScreen = () => {
 
     const payment_details = {
       type: selectedPayment.toLowerCase(),
-      distance_km_round: inquireBookingResponse?.distance_km_round,
-      minimum_fare: inquireBookingResponse?.minimum_fare,
-      pesos_per_km: inquireBookingResponse?.pesos_per_km,
-      booking_fee: inquireBookingResponse?.booking_fee,
-      base_amount: inquireBookingResponse?.base_amount,
-      commission: inquireBookingResponse?.commission,
-      rider_net_amount: inquireBookingResponse?.rider_net_amount,
-      promo_discount: inquireBookingResponse?.promo_discount,
+      distance_km_round: fare?.distance_km_round,
+      minimum_fare: fare?.minimum_fare,
+      pesos_per_km: fare?.pesos_per_km,
+      booking_fee: fare?.booking_fee,
+      base_amount: fare?.base_amount,
+      commission: fare?.commission,
+      rider_net_amount: fare?.rider_net_amount,
+      promo_discount: fare?.promo_discount,
       tip: 0,
-      total_amount_wo_promo: inquireBookingResponse?.total_amount_wo_promo,
-      total_amount: inquireBookingResponse?.total_amount,
+      total_amount_wo_promo: fare?.total_amount_wo_promo,
+      total_amount: fare?.total_amount,
     };
 
-    const all_payment_details = inquireBookingResponse;
+    const all_payment_details = fare;
 
     const postdata = {
       booking_type: String(selectedService?.id ?? ''),
@@ -1430,6 +1469,7 @@ const HomeScreen = () => {
 
   const handleCreateBookingRequest = () => {
     if (createBooking.error) {
+      bookingInFlightRef.current = false;
       setAlertMessage(createBooking.error);
       setShowAlert(true);
       return;
@@ -1438,12 +1478,15 @@ const HomeScreen = () => {
     if (!createBooking.response) {
       return;
     }
+    bookingInFlightRef.current = false;
 
     const results = createBooking?.response;
     AppUtil.debugDeep(results);
 
     if (results?.code === 200) {
-      // save to Redux (automatically persisted)
+      // save to Redux (automatically persisted); booked straight from Book,
+      // an instant ride never went through the Confirm step
+      dispatch(setIsBooked(true));
       dispatch(setIsConfirmed(true));
       dispatch(setActiveBooking(results?.data));
       setShowWaitingBanner(true);
@@ -1977,14 +2020,16 @@ const HomeScreen = () => {
   };
 
   // The back button above the map while a ride is being chosen (the design
-  // canvas): from Confirm back to choosing; from choosing back to "Where
-  // to?", the drop-off cleared and the pickup kept.
+  // canvas): from Confirm back to choosing; from choosing back to a clean
+  // "Where to?", both points cleared (the owner, 2026-11-22: the pickup pin
+  // stayed on the map after going back).
   const handleSheetBack = () => {
     if (isBooked && !isConfirmed) {
       handleBackToEdit();
       return;
     }
     dispatch(setDropoffLocation(null));
+    dispatch(setPickupLocation(null));
   };
 
   const handleRideNow = () => {
@@ -2158,18 +2203,8 @@ const HomeScreen = () => {
   // the riders (or the search) on the map: the next press takes them away;
   // after a failure, it tries again
   const ridersOn = Boolean(nearby?.looking || nearby?.riders);
-  // each answer brings its riders, and the point they are around, into view
-  const ridersAtRef = useRef(null);
-  const ridersFramedRef = useRef(true);
-  useEffect(() => {
-    if (ridersFramedRef.current || !nearby?.riders) {
-      return;
-    }
-    ridersFramedRef.current = true;
-    if (nearby.riders.length > 0) {
-      mapRef.current?.showPoints([ridersAtRef.current, ...nearby.riders]);
-    }
-  }, [nearby]);
+  // The dots only: the map stays where it is (the owner, 2026-11-22: "it
+  // should not affect any, just make it show riders").
   const toggleRiders = () => {
     if (ridersOn) {
       hideRiders();
@@ -2177,13 +2212,13 @@ const HomeScreen = () => {
     }
     // the map's own blue dot last: the location watch may have no position
     // yet when the map does
-    ridersAtRef.current = pickupLocation
-      ? { lat: pickupLocation.lat, long: pickupLocation.long }
-      : userLocation
-      ? { lat: userLocation.latitude, long: userLocation.longitude }
-      : mapRef.current?.userPoint() ?? null;
-    ridersFramedRef.current = false;
-    showRiders(ridersAtRef.current);
+    showRiders(
+      pickupLocation
+        ? { lat: pickupLocation.lat, long: pickupLocation.long }
+        : userLocation
+        ? { lat: userLocation.latitude, long: userLocation.longitude }
+        : mapRef.current?.userPoint() ?? null,
+    );
   };
   let ridersLabel = 'Riders nearby';
   if (nearby?.unknown) {
@@ -2854,6 +2889,9 @@ New reference: ${activeBooking.ref_code}`
                 dispatch(setDropoffLocation(location))
               }
               onInquireBooking={() => {
+                if (bookingInFlightRef.current) {
+                  return;
+                }
                 if (requireCompleteProfile()) {
                   triggerInquireBooking();
                 }
