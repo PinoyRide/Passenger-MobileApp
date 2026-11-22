@@ -1,11 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import mod from '../radarPing.js';
-const { REACH_M, SWEEP_MS, ringsAt, boundsAround } = mod;
-
-test('the ping reaches 1.5 km, as far as a new booking is offered', () => {
-  assert.equal(REACH_M, 1500);
-});
+const { SWEEP_MS, ringsAt, boundsAround } = mod;
 
 test('a ring starts at the pickup, fully drawn, and fades out at the edge', () => {
   const [first] = ringsAt(0);

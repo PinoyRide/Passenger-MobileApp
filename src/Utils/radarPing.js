@@ -1,11 +1,9 @@
 // The radar ping while a rider is being found (the owner, 2026-11-22: "make a
 // radar ping 1.5 km for me", on "Finding your rider"): rings sweep out from
-// the pickup to the reach of a new booking, one after another, each fading as
-// it grows (Components/AppMap/AppMap.js draws them).
+// the pickup to the reach of the request, one after another, each fading as
+// it grows (Components/AppMap/AppMap.js draws them). The reach widens while
+// nobody accepts: Utils/searchReach.js.
 
-// How far a new booking is offered to riders: the backend's
-// BookingRules.RiderRadiusKm, 1.5 km. Change the two together.
-const REACH_M = 1500;
 // One ring's sweep, and how many rings are out at once (evenly spaced).
 const SWEEP_MS = 2400;
 const RINGS = 2;
@@ -32,4 +30,4 @@ const boundsAround = (lat, long, radiusM) => {
   ];
 };
 
-module.exports = { REACH_M, SWEEP_MS, ringsAt, boundsAround };
+module.exports = { SWEEP_MS, ringsAt, boundsAround };

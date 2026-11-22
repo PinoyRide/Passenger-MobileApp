@@ -16,7 +16,6 @@ import { openSettings } from 'react-native-permissions';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { modern } from '@/Theme/modern';
 import { distanceKm, tripChipText } from '@/Utils/tripText';
-import { REACH_M } from '@/Utils/radarPing';
 import { formatPeso } from '@/Utils/formatPeso';
 import BottomModal from './BottomModal';
 import {
@@ -116,6 +115,7 @@ import {
 } from '@/Hooks/bookingTransform';
 import { services as SERVICE_OPTIONS } from './Components/ServiceList';
 import useNoRidersTimer from '@/Hooks/useNoRidersTimer';
+import useSearchReach from '@/Hooks/useSearchReach';
 import useNearbyRiders from '@/Hooks/useNearbyRiders';
 import { FARE_DEBOUNCE_MS, fareKey, shouldPrice } from '@/Utils/fareInquiry';
 import useRiderEtaPoll from '@/Hooks/useRiderEtaPoll';
@@ -2326,12 +2326,6 @@ const HomeScreen = () => {
     statusNum === 0 &&
     !scheduledAt &&
     !activeBooking?.is_advance;
-  // Meanwhile the map pings out from the pickup to the reach of the request
-  // (the owner, 2026-11-22: "make a radar ping 1.5 km for me").
-  const radar =
-    searchingSheet && pickupLocation
-      ? { lat: pickupLocation.lat, long: pickupLocation.long, radiusM: REACH_M }
-      : null;
   // The banner over the map steps aside when the sheet says the same: the
   // rider's arrival time under "Jomar is on the way", or "Finding your rider"
   // (a re-pooled booking's new reference still shows in the banner).
@@ -2498,6 +2492,25 @@ New reference: ${activeBooking.ref_code}`
     waiting: stillUnaccepted,
     serverOffsetMs: bookLater.serverOffsetMs,
   });
+
+  // While a rider is found, the map pings out from the pickup to the reach of
+  // the request, which widens while nobody accepts (the owner, 2026-11-22:
+  // "make a radar ping 1.5 km for me", then 3 km and 5 km); the map follows
+  // it, the whole circle in view.
+  const searchKm = useSearchReach({
+    booking: activeBooking,
+    startedAt: noRiders.startedAt,
+    active: searchingSheet,
+    offsetMs: bookLater.serverOffsetMs,
+  });
+  const radar =
+    searchingSheet && pickupLocation
+      ? {
+          lat: pickupLocation.lat,
+          long: pickupLocation.long,
+          radiusM: searchKm * 1000,
+        }
+      : null;
 
   const handleNoRidersTryAgain = async () => {
     if (!stillUnaccepted) {
