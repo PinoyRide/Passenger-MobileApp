@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import mod from '../serviceList.js';
-const { NO_FARE, serviceRows } = mod;
+const { NO_FARE, serviceRows, tripTimeText } = mod;
 
 const services = [
   { id: 1, title: 'Motorcycle', meta: '1 seat', badge: 'FASTEST' },
@@ -10,8 +10,9 @@ const services = [
 ];
 const fareFor = bookingType => ({
   booking_type: bookingType,
-  pretty_total_amount: '₱128.00',
-  pretty_eta_pickup_to_dropoff: '25 mins',
+  total_amount: 128,
+  pretty_total_amount: 'P128.00',
+  eta_pickup_to_dropoff_minutes: 28,
 });
 
 test('nothing chosen yet: every row shows its meta line and a dash', () => {
@@ -26,16 +27,27 @@ test('nothing chosen yet: every row shows its meta line and a dash', () => {
   );
 });
 
-test('the chosen ride shows its fare and trip time once priced; the others a dash', () => {
+test('the chosen ride shows its fare in pesos and its trip time once priced; the others a dash', () => {
   const rows = serviceRows({ services, selectedId: 2, fare: fareFor('2') });
   assert.deepEqual(
     rows.map(r => [r.selected, r.meta, r.fare]),
     [
       [false, '1 seat', NO_FARE],
-      [true, '25 mins · 4 seats', '₱128.00'],
+      [true, '28 min trip · 4 seats', '₱128.00'],
       [false, '6 seats', NO_FARE],
     ],
   );
+});
+
+test('the trip time reads as a trip, never as the wait for a rider', () => {
+  assert.equal(tripTimeText(28), '28 min trip');
+  assert.equal(tripTimeText('7'), '7 min trip');
+  assert.equal(tripTimeText(60), '1 hr trip');
+  assert.equal(tripTimeText(75), '1 hr 15 min trip');
+  assert.equal(tripTimeText(0), '');
+  assert.equal(tripTimeText(undefined), '');
+  const noTime = serviceRows({ services, selectedId: 1, fare: { ...fareFor(1), eta_pickup_to_dropoff_minutes: null } });
+  assert.equal(noTime[0].meta, '1 seat');
 });
 
 test('a fare priced for another ride is never shown on the chosen one', () => {
@@ -44,6 +56,11 @@ test('a fare priced for another ride is never shown on the chosen one', () => {
   assert.equal(rows[2].fare, NO_FARE);
   assert.equal(rows[2].meta, '6 seats');
   assert.equal(rows[1].fare, NO_FARE, 'nor on the ride it was priced for, which is not chosen');
+});
+
+test('a fare without an amount shows a dash, not ₱0.00', () => {
+  const rows = serviceRows({ services, selectedId: 1, fare: { ...fareFor(1), total_amount: null } });
+  assert.equal(rows[0].fare, NO_FARE);
 });
 
 test('ids match whether they come as numbers or strings', () => {
@@ -59,6 +76,6 @@ test('a placed booking keeps only the chosen ride', () => {
 
 test('a screen reader hears the name, badge, meta and fare, never the dash', () => {
   const priced = serviceRows({ services, selectedId: 1, fare: fareFor(1) });
-  assert.equal(priced[0].label, 'Motorcycle, fastest, 25 mins · 1 seat, ₱128.00');
+  assert.equal(priced[0].label, 'Motorcycle, fastest, 28 min trip · 1 seat, ₱128.00');
   assert.equal(priced[1].label, 'Car (4 Seaters), 4 seats');
 });

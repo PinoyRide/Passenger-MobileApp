@@ -109,6 +109,7 @@ import {
 } from '@/Hooks/bookingTransform';
 import { services as SERVICE_OPTIONS } from './Components/ServiceList';
 import useNoRidersTimer from '@/Hooks/useNoRidersTimer';
+import { FARE_DEBOUNCE_MS, fareKey, shouldPrice } from '@/Utils/fareInquiry';
 import useRiderEtaPoll from '@/Hooks/useRiderEtaPoll';
 import useRiderLocationPoll from '@/Hooks/useRiderLocationPoll';
 import useAdvanceBookingDiscovery from '@/Hooks/useAdvanceBookingDiscovery';
@@ -706,10 +707,9 @@ const HomeScreen = () => {
     cancelAdvance.loading ||
     retryBooking.loading;
 
-  // A ride picked in the booking sheet's list (ServiceList). Picking another
-  // one while a fare is up drops that fare and asks for the new ride's, so the
-  // fare on screen, and Confirm, always belong to the ride that is picked.
-  // The fare inquiry checks the connection and location itself.
+  // A ride picked in the booking sheet's list (ServiceList). The sheet prices
+  // it by itself (the fare effect after showChoosePickupPanel), which drops a
+  // fare asked for another ride, so Confirm always books the ride picked.
   const handleSelectService = service => {
     if (
       service?.id == null ||
@@ -718,14 +718,6 @@ const HomeScreen = () => {
       return;
     }
     dispatch(setSelectedService(service));
-    if (
-      pickupLocation &&
-      dropoffLocation &&
-      (isBooked || inquireBookingResponse)
-    ) {
-      dispatch(setInquireBookingResponse(null));
-      triggerInquireBooking(service.id);
-    }
   };
 
   const handleTopRightPress = () => {
@@ -1163,17 +1155,53 @@ const HomeScreen = () => {
     handleGetPromoList();
   }, [getPromoList.response, getPromoList.error]);
 
+  // The trip a fare is asked for (Utils/fareInquiry.js), and what each
+  // inquiry was for. `purpose` 'price' is the sheet pricing the trip by
+  // itself; 'book' is the Book press or a scheduled booking, which also opens
+  // the Confirm step. A fare is used only for the trip it was asked for.
+  const fareKeyNow = fareKey({
+    pickup: pickupLocation,
+    dropoff: dropoffLocation,
+    serviceId: selectedService?.id,
+    promoId: selectedPromo?.id,
+    scheduledAt,
+  });
+  const inquiryRef = useRef(null); // { key, purpose } of the inquiry sent last
+  const inquiryPendingRef = useRef(null); // purpose of one still in its checks
+  const pricedKeyRef = useRef(null); // the trip the stored fare is for
+  const handledFareRef = useRef(null); // the last answer applied
+  // A refusal for a trip ({ key, message }): shown under the fare, and that
+  // trip is not asked for again by itself.
+  const [fareProblem, setFareProblem] = useState(null);
+
   //INQUIRE BOOKING
-  const triggerInquireBooking = async (bookingTypeOverride = null) => {
+  const triggerInquireBooking = async (
+    bookingTypeOverride = null,
+    purpose = 'book',
+  ) => {
     // guard against a double-tap firing a second request before the
     // button's disabled state has re-rendered.
     if (inquireBooking.loading) {
       return;
     }
+    // An inquiry still in its checks below: a Book press rides on it.
+    if (inquiryPendingRef.current) {
+      if (purpose === 'book') {
+        inquiryPendingRef.current = 'book';
+      }
+      return;
+    }
+    inquiryPendingRef.current = purpose;
+    const settle = () => {
+      const settled = inquiryPendingRef.current;
+      inquiryPendingRef.current = null;
+      return settled;
+    };
 
     // block — no fare inquiry, no booking, without a connection.
     const online = await checkIsOnline();
     if (!online) {
+      settle();
       Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
       return;
     }
@@ -1181,6 +1209,7 @@ const HomeScreen = () => {
     const permission = await ensureLocationPermission();
 
     if (permission !== 'granted') {
+      settle();
       Alert.alert(
         'Location Required',
         'Location access is required to inquire booking.',
@@ -1196,6 +1225,7 @@ const HomeScreen = () => {
       ? bookingTypeOverride
       : selectedService?.id;
     if (bookingType == null || bookingType === '') {
+      settle();
       setAlertMessage('Please choose a vehicle type first.');
       setShowAlert(true);
       return;
@@ -1214,6 +1244,16 @@ const HomeScreen = () => {
     if (scheduledAt) {
       postdata.scheduled_pickup_at = scheduledAt.toISOString();
     }
+    inquiryRef.current = {
+      key: fareKey({
+        pickup: pickupLocation,
+        dropoff: dropoffLocation,
+        serviceId: bookingType,
+        promoId: selectedPromo?.id,
+        scheduledAt,
+      }),
+      purpose: settle(),
+    };
     inquireBooking.makePostRequest(
       Constants.ENDPOINT.INQUIRE_BOOKING,
       postdata,
@@ -1221,7 +1261,18 @@ const HomeScreen = () => {
   };
 
   const handleInquireBookingRequest = () => {
+    const request = inquiryRef.current;
+    // priced by the sheet itself: nobody pressed anything, so no alert
+    const byItself = request?.purpose === 'price';
+
     if (inquireBooking.error) {
+      setFareProblem({
+        key: request?.key ?? fareKeyNow,
+        message: inquireBooking.error,
+      });
+      if (byItself) {
+        return;
+      }
       setAlertMessage(inquireBooking.error);
       setShowAlert(true);
       return;
@@ -1232,16 +1283,37 @@ const HomeScreen = () => {
     }
 
     const results = inquireBooking?.response;
+    // Each answer once: the error clearing at the next request re-runs this
+    // with the previous answer still in place.
+    if (results === handledFareRef.current) {
+      return;
+    }
+    handledFareRef.current = results;
     AppUtil.debugDeep(results?.data);
+
+    // Asked for a trip that has changed since: the new trip is priced next.
+    if (request && request.key !== fareKeyNow) {
+      return;
+    }
 
     if (results?.code === 200 && results?.data) {
       // save to Redux instead of local state
+      pricedKeyRef.current = request?.key ?? fareKeyNow;
+      setFareProblem(null);
       dispatch(setInquireBookingResponse(results.data));
-      dispatch(setIsBooked(true));
+      if (!byItself) {
+        dispatch(setIsBooked(true));
+      }
     } else if (results?.code === 200) {
       // BUG-1: a 200 with no fare data must not open the summary
-      setAlertMessage(FARE_UNAVAILABLE_MESSAGE);
-      setShowAlert(true);
+      setFareProblem({
+        key: request?.key ?? fareKeyNow,
+        message: FARE_UNAVAILABLE_MESSAGE,
+      });
+      if (!byItself) {
+        setAlertMessage(FARE_UNAVAILABLE_MESSAGE);
+        setShowAlert(true);
+      }
     }
   };
 
@@ -1941,6 +2013,51 @@ const HomeScreen = () => {
     // 4 = last booking cancelled; Home is idle again (same as BottomModal)
     (bookingStatus === 0 || bookingStatus === 4);
 
+  // Price the trip by itself as soon as pickup, drop-off and a ride are all
+  // set, and again, debounced, when one of them, the promo or the pickup time
+  // changes; not on the Book press (docs/booking-redesign-spec.md, "Service
+  // list"). A fare kept for another trip, or from before the app restarted,
+  // is dropped first: Confirm books the stored fare's own figures. Nothing is
+  // priced once the booking is placed.
+  const fareHeld = isConfirmed || Boolean(activeBooking?.id);
+  const triggerInquireBookingRef = useRef(triggerInquireBooking);
+  triggerInquireBookingRef.current = triggerInquireBooking;
+  useEffect(() => {
+    if (fareHeld) {
+      return undefined;
+    }
+    if (inquireBookingResponse && pricedKeyRef.current !== fareKeyNow) {
+      pricedKeyRef.current = null;
+      dispatch(setInquireBookingResponse(null));
+      return undefined; // runs again without it
+    }
+    const ask = shouldPrice({
+      key: fareKeyNow,
+      held: showChoosePickupPanel || !isOnline || !locationReady,
+      loading: inquireBooking.loading,
+      pricedKey: inquireBookingResponse ? pricedKeyRef.current : null,
+      failedKey: fareProblem?.key ?? null,
+    });
+    if (!ask) {
+      return undefined;
+    }
+    const timer = setTimeout(
+      () => triggerInquireBookingRef.current(null, 'price'),
+      FARE_DEBOUNCE_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [
+    dispatch,
+    fareHeld,
+    fareKeyNow,
+    inquireBookingResponse,
+    showChoosePickupPanel,
+    isOnline,
+    locationReady,
+    inquireBooking.loading,
+    fareProblem,
+  ]);
+
   const pickDatePromptedRef = useRef(false);
   useEffect(() => {
     if (!advanceBookingFlow || !bookLater.enabled || scheduledAt) {
@@ -2509,8 +2626,17 @@ New reference: ${activeBooking.ref_code}`
               selectedPayment={selectedPayment}
               selectedPromo={selectedPromo}
               noteToRider={noteToRider}
-              inquireBookingResponse={inquireBookingResponse}
+              // only the fare for the trip on screen (a placed booking keeps its own)
+              inquireBookingResponse={
+                fareHeld || pricedKeyRef.current === fareKeyNow
+                  ? inquireBookingResponse
+                  : null
+              }
+              fareProblem={
+                fareProblem?.key === fareKeyNow ? fareProblem.message : null
+              }
               isLoading={isLoading}
+              isPricing={inquireBooking.loading}
               permissionStatus={permissionStatus}
               // lets the modal disable Book/Confirm buttons while offline
               // too (defense-in-depth on top of the checks in the triggers)

@@ -2,27 +2,46 @@
 // Pure (no RN imports) so it runs under `node --test`.
 //
 // The fare comes from the fare inquiry (INQUIRE_BOOKING), which prices one
-// ride type at a time. So only the chosen ride shows a fare, with the trip
-// time in front of its meta line, and only when the inquiry was for that ride
-// (`booking_type`): a fare left over from another ride is never shown on this
-// one. Every other row shows a dash (docs/booking-redesign-spec.md, "Service
-// list", option 3).
+// ride type at a time, as soon as the trip is complete (Utils/fareInquiry.js).
+// So only the chosen ride shows a fare, with the trip time in front of its
+// meta line, and only when the inquiry was for that ride (`booking_type`): a
+// fare left over from another ride is never shown on this one. Every other
+// row shows a dash (docs/booking-redesign-spec.md, "Service list", option 3).
+const { formatPeso } = require('./formatPeso');
 
 const NO_FARE = '—';
 
 const sameId = (a, b) => a != null && b != null && String(a) === String(b);
+
+// The trip's length, worded as a trip so it does not read as the wait for a
+// rider: "28 min trip", "1 hr 15 min trip". '' when unknown.
+function tripTimeText(minutes) {
+  const m = Math.round(Number(minutes));
+  if (!Number.isFinite(m) || m <= 0) {
+    return '';
+  }
+  if (m < 60) {
+    return `${m} min trip`;
+  }
+  const hours = Math.floor(m / 60);
+  const rest = m % 60;
+  return rest ? `${hours} hr ${rest} min trip` : `${hours} hr trip`;
+}
 
 // The inquiry's fare and trip time for this ride, or null when it was not priced.
 function pricedFor(service, fare) {
   if (!fare || !sameId(fare.booking_type, service.id)) {
     return null;
   }
-  if (!fare.pretty_total_amount) {
+  if (fare.total_amount == null || fare.total_amount === '') {
+    return null;
+  }
+  if (!Number.isFinite(Number(fare.total_amount))) {
     return null;
   }
   return {
-    amount: fare.pretty_total_amount,
-    tripTime: fare.pretty_eta_pickup_to_dropoff || '',
+    amount: formatPeso(fare.total_amount),
+    tripTime: tripTimeText(fare.eta_pickup_to_dropoff_minutes),
   };
 }
 
@@ -63,4 +82,5 @@ function serviceRows({
 module.exports = {
   NO_FARE,
   serviceRows,
+  tripTimeText,
 };

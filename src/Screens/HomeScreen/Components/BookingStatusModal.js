@@ -21,6 +21,7 @@ import { getBookingVehicle } from '@/Hooks/bookingVehicle';
 import { getRiderPhoto } from '@/Hooks/bookingTransform';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { bottomSpace } from '@/Utils/bottomSpace';
+import { formatPeso } from '@/Utils/formatPeso';
 
 const UNREAD_POLL_INTERVAL_MS = 5000;
 
@@ -47,14 +48,6 @@ const parseJsonField = value => {
     }
   }
   return value;
-};
-
-const formatPeso = amount => {
-  const n = Number(amount);
-  if (Number.isNaN(n)) {
-    return '₱0.00';
-  }
-  return `₱${n.toFixed(2)}`;
 };
 
 const BookingStatusModal = ({
