@@ -87,7 +87,7 @@ const BookingStatusModal = ({
   const { bottom: bottomInset } = useSafeAreaInsets();
   const theme = useTheme();
   const look = modern(theme);
-  const styles = getStyles(look, theme.colors.blue ?? '#084CF7');
+  const styles = getStyles(look);
   const navigation = useNavigation();
   const userInfo = useSelector(selectUserInfo);
   const [expanded, setExpanded] = useState(true);
@@ -477,7 +477,6 @@ const BookingStatusModal = ({
 
             {found || showTripDetails ? (
               <View style={styles.routeLine}>
-                <View style={styles.dot} />
                 <Text style={styles.routeName} numberOfLines={1}>
                   {placeName(pickup, bookingDetails?.pickup_location)}
                 </Text>
@@ -487,7 +486,6 @@ const BookingStatusModal = ({
                   color={look.muted}
                   style={styles.routeArrow}
                 />
-                <View style={styles.square} />
                 <Text style={styles.routeName} numberOfLines={1}>
                   {placeName(dropoff, bookingDetails?.dropoff_location)}
                 </Text>
@@ -537,7 +535,7 @@ const BookingStatusModal = ({
 
 export default BookingStatusModal;
 
-const getStyles = (look, blue) =>
+const getStyles = look =>
   StyleSheet.create({
     overlay: {
       position: 'absolute',
@@ -699,19 +697,8 @@ const getStyles = (look, blue) =>
       lineHeight: 20,
       color: look.onGold,
     },
-    dot: {
-      width: 10,
-      height: 10,
-      borderRadius: 5,
-      backgroundColor: blue,
-    },
-    square: {
-      width: 10,
-      height: 10,
-      borderRadius: 2,
-      backgroundColor: look.ink,
-    },
-    // the trip as a soft pill (the design): dot, pick-up, arrow, square, drop-off
+    // the trip as a soft pill, words only (the design, "8 · Rider found"):
+    // pick-up, arrow, drop-off
     routeLine: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -722,8 +709,7 @@ const getStyles = (look, blue) =>
     },
     routeName: {
       flexShrink: 1,
-      marginLeft: 8,
-      fontFamily: 'Poppins Medium',
+      fontFamily: 'Poppins SemiBold',
       fontSize: 13,
       lineHeight: 18,
       color: look.ink,

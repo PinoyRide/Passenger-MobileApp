@@ -258,6 +258,18 @@ const AppMap = forwardRef(
       setPickupTracksViewChanges(true);
     }, [firstMarkerLat, firstMarkerLong]);
 
+    // While the rider comes, the pick-up is a plain View (the blue dot below,
+    // no image onLoad): paint it, then lock it. Leaving that look paints the
+    // pin again (its image's onLoad locks it).
+    useEffect(() => {
+      setPickupTracksViewChanges(true);
+      if (!riderComing) {
+        return undefined;
+      }
+      const t = setTimeout(() => setPickupTracksViewChanges(false), 1000);
+      return () => clearTimeout(t);
+    }, [riderComing, firstMarkerLat, firstMarkerLong]);
+
     useEffect(() => {
       setDropoffTracksViewChanges(true);
     }, [secondMarkerLat, secondMarkerLong]);
@@ -837,12 +849,18 @@ const AppMap = forwardRef(
               title="Pickup"
               anchor={{ x: 0.5, y: 0.5 }}
               tracksViewChanges={pickupTracksViewChanges}>
-              <Image
-                source={require('@/Assets/Common/Pick_Up_Icon.png')}
-                style={styles.pinIcon}
-                resizeMode="contain"
-                onLoad={() => lockAfterPaint(setPickupTracksViewChanges)}
-              />
+              {riderComing ? (
+                // where the rider is coming to: a blue dot in a white ring,
+                // as the owner's design draws it ("8 · Rider found")
+                <View style={styles.pickupDot} />
+              ) : (
+                <Image
+                  source={require('@/Assets/Common/Pick_Up_Icon.png')}
+                  style={styles.pinIcon}
+                  resizeMode="contain"
+                  onLoad={() => lockAfterPaint(setPickupTracksViewChanges)}
+                />
+              )}
             </Marker>
           )}
 
@@ -905,14 +923,25 @@ const AppMap = forwardRef(
 
           {lineCoords.length > 1 &&
             (riderComing ? (
-              // round caps turn the dashes into dots (react-native-maps)
-              <Polyline
-                coordinates={lineCoords}
-                strokeColor={RIDER_INK}
-                strokeWidth={6}
-                lineCap="round"
-                lineDashPattern={[1, 14]}
-              />
+              // dots on a white line, so they read over any street (the
+              // design); round caps turn the dashes into dots (react-native-maps)
+              <>
+                <Polyline
+                  coordinates={lineCoords}
+                  strokeColor="#FFFFFF"
+                  strokeWidth={12}
+                  lineCap="round"
+                  zIndex={1}
+                />
+                <Polyline
+                  coordinates={lineCoords}
+                  strokeColor={RIDER_INK}
+                  strokeWidth={6}
+                  lineCap="round"
+                  lineDashPattern={[1, 14]}
+                  zIndex={2}
+                />
+              </>
             ) : (
               <Polyline
                 coordinates={lineCoords}
@@ -953,6 +982,8 @@ export default AppMap;
 // The rider's marker and dotted line while they come: black on the map,
 // which stays light in the dark look too
 const RIDER_INK = '#17171C';
+// the pick-up's dot meanwhile: the design's blue (the rider's initials circle)
+const PICKUP_BLUE = '#3A5AF6';
 
 const getStyles = ({ colors, look }) =>
   StyleSheet.create({
@@ -964,6 +995,14 @@ const getStyles = ({ colors, look }) =>
       justifyContent: 'center',
       backgroundColor: RIDER_INK,
       borderWidth: 3,
+      borderColor: '#FFFFFF',
+    },
+    pickupDot: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: PICKUP_BLUE,
+      borderWidth: 4,
       borderColor: '#FFFFFF',
     },
     container: { flex: 1 },
