@@ -5,9 +5,15 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { modern } from '@/Theme/modern';
 
 // A short message the person has to answer before going on: a title, one
-// or two sentences, one button.
-//   icon         a MaterialCommunityIcons name, shown above the title
-//   dismissable  false when the back button must not close it
+// or two sentences, and one or two buttons.
+//   icon           a MaterialCommunityIcons name, shown above the title
+//   confirmText    the filled button. Give it the SAFE answer when the other
+//                  one carries a risk the person cannot undo.
+//   secondaryText  an optional quiet button under it, for the answer that
+//                  needs more intent than a tap on the obvious one
+//   note           an optional line under the buttons: what the risky answer
+//                  costs, or what is recorded
+//   dismissable    false when the back button must not close it
 const AlertBox = ({
   title,
   message,
@@ -15,6 +21,9 @@ const AlertBox = ({
   visible,
   setVisible,
   confirmText = 'Confirm',
+  secondaryText,
+  onSecondary,
+  note,
   dismissable = true,
   icon,
 }) => {
@@ -25,6 +34,13 @@ const AlertBox = ({
     setVisible(false);
     if (onConfirm) {
       onConfirm();
+    }
+  };
+
+  const handleSecondary = () => {
+    setVisible(false);
+    if (onSecondary) {
+      onSecondary();
     }
   };
 
@@ -55,6 +71,16 @@ const AlertBox = ({
             accessibilityRole="button">
             <Text style={styles.confirmText}>{confirmText}</Text>
           </TouchableOpacity>
+          {secondaryText ? (
+            <TouchableOpacity
+              onPress={handleSecondary}
+              style={styles.secondaryButton}
+              activeOpacity={0.7}
+              accessibilityRole="button">
+              <Text style={styles.secondaryLabel}>{secondaryText}</Text>
+            </TouchableOpacity>
+          ) : null}
+          {note ? <Text style={styles.note}>{note}</Text> : null}
         </View>
       </View>
     </Modal>
@@ -124,5 +150,26 @@ const getStyles = look =>
       fontSize: 15,
       lineHeight: 21,
       color: look.onAccent,
+    },
+    secondaryButton: {
+      height: 46,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 8,
+    },
+    secondaryLabel: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 14.5,
+      lineHeight: 21,
+      color: look.muted,
+    },
+    note: {
+      fontFamily: 'Poppins Regular',
+      fontSize: 11.5,
+      lineHeight: 17,
+      color: look.muted,
+      textAlign: 'center',
+      marginTop: 10,
     },
   });
