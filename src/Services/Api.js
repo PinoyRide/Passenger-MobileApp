@@ -223,7 +223,13 @@ const usePostRequest = () => {
         setIsOffline(true);
         setLoading(false);
       }
-      return { response: null, error: OFFLINE_MESSAGE, offline: true };
+      // notSent: nothing left the phone (a cash-out can say so plainly)
+      return {
+        response: null,
+        error: OFFLINE_MESSAGE,
+        offline: true,
+        notSent: true,
+      };
     }
 
     try {

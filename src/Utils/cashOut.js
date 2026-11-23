@@ -162,6 +162,14 @@ function afterCashOut(answer, amount) {
   if (!answer || answer.forceUpdate || answer.stale) {
     return {};
   }
+  // no connection before sending: nothing left the phone, nothing moved
+  if (answer.notSent) {
+    return {
+      refusal:
+        answer.error ||
+        'No internet connection. Nothing was sent: connect and try again.',
+    };
+  }
   // no answer at all (the wait ran out, or the line dropped): the cash out
   // may have reached Pinoy Ride and PayCools all the same
   if (answer.offline) {

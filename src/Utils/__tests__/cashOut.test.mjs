@@ -154,3 +154,14 @@ test('a cash-out with no answer may have gone through: check before sending agai
 test('a cash-out waits longer for its answer than other requests', () => {
   assert.ok(CASH_OUT_TIMEOUT_MS >= 60000);
 });
+
+// The review of 2026-11-24: an offline press was told "may have gone
+// through" although nothing was sent.
+test('a cash-out never sent (no connection) says so, not "may have gone through"', () => {
+  const next = afterCashOut(
+    { response: null, error: 'No internet connection.', offline: true, notSent: true },
+    150,
+  );
+  assert.equal(next.refusal, 'No internet connection.');
+  assert.doesNotMatch(next.refusal, /may have gone through/);
+});
