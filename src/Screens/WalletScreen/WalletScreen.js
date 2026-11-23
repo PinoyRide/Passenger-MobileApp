@@ -22,11 +22,12 @@ import TransactionRow, { EmptyTransactions } from './TransactionRow';
 import appAlert from '@/Utils/appAlert';
 
 // The Wallet page, as the owner's design draws it (2026-11-22): the balance
-// and whether the wallet is active, Cash in / Send / Transfer, activating the
+// and whether the wallet is active, Cash in / Cash out, activating the
 // wallet, and the latest transactions. Activating is the PayCools identity
 // check, opened in the browser; until PayCools is switched on the server says
-// it is not available yet. Nothing requires an active wallet yet. Send and
-// Transfer do not exist yet (PayCools has no sending between people).
+// it is not available yet. Nothing requires an active wallet yet. There is no
+// sending money to another person (the owner, 2026-11-23: "remove"; PayCools
+// has no sending between people either).
 const WalletScreen = () => {
   const look = modern(useTheme());
   const styles = getStyles(look);
@@ -101,16 +102,6 @@ const WalletScreen = () => {
       gold: true,
       onPress: () =>
         navigation.navigate('CashInScreen', { available_balance: balance }),
-    },
-    {
-      id: 'send',
-      label: 'Send',
-      icon: 'arrow-top-right',
-      onPress: () =>
-        appAlert(
-          'Send',
-          'Sending money from your wallet to someone else is coming soon.',
-        ),
     },
     // Cash out (the owner, 2026-11-23: "since they can cash in they can also
     // cash out"): through PayCools to any e-wallet or bank it pays out to, at
