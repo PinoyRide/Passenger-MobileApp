@@ -9,6 +9,8 @@ const {
   rideQuestion,
   endedAwayNotice,
   canSubmit,
+  tagsFor,
+  feedbackText,
 } = mod;
 
 test('the question names the rider when the page knows them', () => {
@@ -61,6 +63,29 @@ test('no notice for a trip that ended at its drop-off', () => {
   );
   assert.equal(endedAwayNotice({ ended_away: true }), null);
   assert.equal(endedAwayNotice(undefined), null);
+});
+
+test('the tags follow the score: praise at 4-5, problems at 1-3', () => {
+  assert.equal(tagsFor(5).ask, 'What went well?');
+  assert.ok(tagsFor(4).tags.includes('Safe driving'));
+  assert.equal(tagsFor(3).ask, 'What went wrong?');
+  assert.ok(tagsFor(1).tags.includes('Late'));
+  assert.deepEqual(tagsFor(0), { ask: '', tags: [] });
+  // no tag is in both
+  assert.equal(
+    tagsFor(5).tags.filter(tag => tagsFor(2).tags.includes(tag)).length,
+    0,
+  );
+});
+
+test('the words sent: the tags picked, then the note', () => {
+  assert.equal(
+    feedbackText(['Safe driving', 'Friendly'], ' Thank you! '),
+    'Safe driving, Friendly. Thank you!',
+  );
+  assert.equal(feedbackText([], 'Great ride'), 'Great ride');
+  assert.equal(feedbackText(['Late'], ''), 'Late');
+  assert.equal(feedbackText([], ''), '');
 });
 
 test('submit waits for a star and for the last send', () => {

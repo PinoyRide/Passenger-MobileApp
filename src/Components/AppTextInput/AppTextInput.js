@@ -77,6 +77,9 @@ const AppTextInput = ({
   containerStyle,
   inputStyle,
   autoCapitalize, // undefined keeps RN's default for existing callers
+  // a comment box that starts at its minHeight and grows as it is typed,
+  // instead of four lines from the start
+  grow = false,
 }) => {
   const theme = useTheme();
   const { colors } = theme;
@@ -309,7 +312,7 @@ const AppTextInput = ({
           ]}
           keyboardType={getKeyboardType()}
           multiline={isComment}
-          numberOfLines={isComment ? 4 : 1}
+          numberOfLines={isComment ? (grow ? undefined : 4) : 1}
           textAlignVertical={isComment ? 'top' : 'center'}
           editable={editable}
           autoCapitalize={autoCapitalize}

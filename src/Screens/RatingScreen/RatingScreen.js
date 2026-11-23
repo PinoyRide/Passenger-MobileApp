@@ -33,8 +33,10 @@ import {
   RATING_WORDS,
   canSubmit,
   endedAwayNotice,
+  feedbackText,
   placeName,
   rideQuestion,
+  tagsFor,
 } from '@/Utils/ratingPage';
 import { modern } from '@/Theme/modern';
 
@@ -88,6 +90,8 @@ const RatingScreen = () => {
 
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
+  const [tags, setTags] = useState([]);
+  const asked = tagsFor(rating);
   const [alert, setAlert] = useState(null);
   const [showReport, setShowReport] = useState(false);
   const [reported, setReported] = useState(false);
@@ -124,7 +128,7 @@ const RatingScreen = () => {
     rateBooking.makePostRequest(Constants.ENDPOINT.RATE_BOOKING, {
       booking_id: bookingId,
       rate: rating,
-      compliment: comment.trim(),
+      compliment: feedbackText(tags, comment),
     });
   };
 
@@ -242,7 +246,14 @@ const RatingScreen = () => {
             {[1, 2, 3, 4, 5].map(star => (
               <Pressable
                 key={star}
-                onPress={() => setRating(star)}
+                onPress={() => {
+                  // praise and problems are different tags: crossing 3/4 drops
+                  // the ones picked
+                  if (tagsFor(star).ask !== asked.ask) {
+                    setTags([]);
+                  }
+                  setRating(star);
+                }}
                 hitSlop={6}
                 accessibilityRole="button"
                 accessibilityLabel={`${star} ${star === 1 ? 'star' : 'stars'}`}
@@ -259,12 +270,34 @@ const RatingScreen = () => {
           {rating > 0 ? (
             <View style={styles.said}>
               <Text style={styles.ratingWord}>{RATING_WORDS[rating]}</Text>
+              <Text style={styles.ask}>{asked.ask}</Text>
+              <View style={styles.tags}>
+                {asked.tags.map(tag => {
+                  const on = tags.includes(tag);
+                  return (
+                    <Pressable
+                      key={tag}
+                      onPress={() =>
+                        setTags(picked =>
+                          on ? picked.filter(t => t !== tag) : [...picked, tag],
+                        )
+                      }
+                      style={[styles.tag, on && styles.tagOn]}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: on }}>
+                      <Text style={[styles.tagText, on && styles.tagTextOn]}>
+                        {tag}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
               <AppTextInput
-                placeholder={
-                  rating >= 4
-                    ? 'Add a compliment (optional)'
-                    : 'What could have been better? (optional)'
-                }
+                placeholder="Anything else? (optional)"
+                // one line high, growing as it is typed: the trip and its
+                // fare notice stay in view under the tags
+                inputStyle={styles.note}
+                grow
                 value={comment}
                 onChangeText={setComment}
                 inputMode="comment"
@@ -425,8 +458,44 @@ const getStyles = look =>
     said: {
       marginTop: 8,
     },
-    ratingWord: {
+    ask: {
       marginBottom: 10,
+      fontFamily: 'Poppins Regular',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.muted,
+      textAlign: 'center',
+    },
+    tags: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: 'center',
+      gap: 8,
+      marginBottom: 4,
+    },
+    tag: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: look.radiusPill,
+      borderWidth: 1,
+      borderColor: look.hairline,
+      backgroundColor: look.soft,
+    },
+    tagOn: {
+      borderColor: look.accent,
+      backgroundColor: look.chip,
+    },
+    tagText: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.inkSoft,
+    },
+    tagTextOn: {
+      color: look.chipInk,
+    },
+    ratingWord: {
+      marginBottom: 2,
       fontFamily: 'Poppins Medium',
       fontSize: 15,
       lineHeight: 20,
@@ -435,7 +504,10 @@ const getStyles = look =>
     },
     spacer: {
       flex: 1,
-      minHeight: 24,
+      minHeight: 16,
+    },
+    note: {
+      minHeight: 52,
     },
     trip: {
       padding: 16,

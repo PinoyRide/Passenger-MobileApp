@@ -39,6 +39,37 @@ const endedAwayNotice = booking => {
   };
 };
 
+// The tags under the stars follow the score (the owner's design, 2026-11-23:
+// "'Add a compliment' assumed the trip went well. Tags now follow the score:
+// praise at 4-5, problems at 1-3"). The question above them, and the tags.
+const PRAISE = [
+  'Safe driving',
+  'Friendly',
+  'On time',
+  'Clean vehicle',
+  'Knew the way',
+];
+const PROBLEMS = [
+  'Unsafe driving',
+  'Late',
+  'Rude',
+  'Took a long way',
+  'Vehicle condition',
+];
+const tagsFor = rating =>
+  rating >= 4
+    ? { ask: 'What went well?', tags: PRAISE }
+    : rating >= 1
+    ? { ask: 'What went wrong?', tags: PROBLEMS }
+    : { ask: '', tags: [] };
+
+// What is sent as the rating's words: the tags picked, then the note.
+// "Safe driving, Friendly. Thank you!"
+const feedbackText = (tags, note) =>
+  [(tags || []).join(', '), String(note || '').trim()]
+    .filter(Boolean)
+    .join('. ');
+
 // Submit waits for a star, and for the last send to finish.
 const canSubmit = (rating, sending) =>
   Number.isInteger(rating) && rating >= 1 && rating <= 5 && !sending;
@@ -50,4 +81,6 @@ module.exports = {
   rideQuestion,
   endedAwayNotice,
   canSubmit,
+  tagsFor,
+  feedbackText,
 };
