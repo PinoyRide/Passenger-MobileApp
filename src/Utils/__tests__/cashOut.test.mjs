@@ -15,6 +15,7 @@ const {
   cashOutRequest,
   maskedAccount,
   afterCashOut,
+  CASH_OUT_TIMEOUT_MS,
 } = mod;
 
 const answered = data => ({
@@ -139,4 +140,17 @@ test('an update screen or a newer request takes over', () => {
   assert.deepEqual(afterCashOut({ forceUpdate: true }), {});
   assert.deepEqual(afterCashOut({ stale: true }), {});
   assert.deepEqual(afterCashOut(null), {});
+});
+
+// Overnight review 2026-11-23: a slow cash-out timed out on the phone as
+// "No internet connection" while it went through, and a second press sent a
+// second one.
+test('a cash-out with no answer may have gone through: check before sending again', () => {
+  const next = afterCashOut({ response: null, error: 'No internet connection.', offline: true }, 150);
+  assert.match(next.refusal, /may have gone through/);
+  assert.match(next.refusal, /before you try again/);
+});
+
+test('a cash-out waits longer for its answer than other requests', () => {
+  assert.ok(CASH_OUT_TIMEOUT_MS >= 60000);
 });

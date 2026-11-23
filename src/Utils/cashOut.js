@@ -148,9 +148,24 @@ function maskedAccount(channel, account) {
 //   { complete: { status, reference, amount } }  taken (processing) or paid (completed)
 //   { refusal: message }                         not taken: say why, stay here
 //   {}                                           nothing to do (another screen took over)
+// How long a cash-out waits for its answer: the API takes the money from
+// the wallet, then waits up to 30 s for PayCools. Other requests give up after
+// 15 s and call it a lost connection, which a cash-out that went through must
+// never be told (overnight review 2026-11-23).
+const CASH_OUT_TIMEOUT_MS = 90000;
+
+const UNCONFIRMED =
+  'No answer came back, so this cash out may have gone through. ' +
+  "Check your wallet's balance and transactions before you try again.";
+
 function afterCashOut(answer, amount) {
   if (!answer || answer.forceUpdate || answer.stale) {
     return {};
+  }
+  // no answer at all (the wait ran out, or the line dropped): the cash out
+  // may have reached Pinoy Ride and PayCools all the same
+  if (answer.offline) {
+    return { refusal: UNCONFIRMED };
   }
   const data = answer.response?.data;
   if (answer.error || !data) {
@@ -175,6 +190,7 @@ function afterCashOut(answer, amount) {
 }
 
 module.exports = {
+  CASH_OUT_TIMEOUT_MS,
   GCASH,
   MAX_NAME,
   MINIMUM_CASH_OUT,

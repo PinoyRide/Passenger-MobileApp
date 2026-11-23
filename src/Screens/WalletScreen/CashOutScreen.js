@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -23,6 +23,7 @@ import { Constants } from '@/Utils';
 import { selectUserInfo } from '@/Redux/Slices/userSlice';
 import { bottomSpace } from '@/Utils/bottomSpace';
 import {
+  CASH_OUT_TIMEOUT_MS,
   GCASH,
   MINIMUM_CASH_OUT,
   accountError,
@@ -216,17 +217,26 @@ const CashOutScreen = ({ route }) => {
     }
   };
 
-  // Sent once; "done" only when the backend says PayCools has the order
+  // Sent once; "done" only when the backend says PayCools has the order.
+  // One cash-out per press: the loading state lets a quick second tap
+  // through (overnight review 2026-11-23).
+  const sendingRef = useRef(false);
   const handleSubmit = async () => {
-    if (cashOut.loading) {
+    if (cashOut.loading || sendingRef.current) {
       return;
     }
-    const answer = await cashOut.makePostRequest(
-      Constants.ENDPOINT.CASH_OUT,
-      cashOutRequest({ amount: value, channel, account, name }),
-      {},
-      'json',
-    );
+    sendingRef.current = true;
+    let answer;
+    try {
+      answer = await cashOut.makePostRequest(
+        Constants.ENDPOINT.CASH_OUT,
+        cashOutRequest({ amount: value, channel, account, name }),
+        { timeout: CASH_OUT_TIMEOUT_MS },
+        'json',
+      );
+    } finally {
+      sendingRef.current = false;
+    }
     const next = afterCashOut(answer, value);
     if (next.refusal) {
       setAlertMessage(next.refusal);
