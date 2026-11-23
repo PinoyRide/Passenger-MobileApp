@@ -153,11 +153,22 @@ const SettingsScreen = () => {
             badge={genderOf(userInfo?.gender)?.icon}
             badgeLabel={genderOf(userInfo?.gender)?.label}
           />
+          {/* a long name takes a second line, and the number stays on one
+              (QA RD-APP-01: names were cut and "7271" fell to a line of its
+              own on narrow phones) */}
           <View style={styles.flex}>
-            <Text style={styles.name} numberOfLines={1}>
+            <Text style={styles.name} numberOfLines={2}>
               {name || 'Complete your profile'}
             </Text>
-            {mobile ? <Text style={styles.mobile}>{mobile}</Text> : null}
+            {mobile ? (
+              <Text
+                style={styles.mobile}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                maxFontSizeMultiplier={1.3}>
+                {mobile}
+              </Text>
+            ) : null}
           </View>
           <Pressable
             onPress={() => navigation.navigate('CompleteProfileScreen')}
