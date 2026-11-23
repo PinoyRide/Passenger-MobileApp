@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Linking,
   Platform,
@@ -121,15 +121,31 @@ const RatingScreen = () => {
     });
   };
 
-  const handleSubmit = () => {
-    if (!ready) {
+  // One rating per press: two quick taps both got past the loading state
+  // and saved two ratings (overnight review 2026-11-23). Let go only when
+  // the rating did not go through, so it can be sent again.
+  const submittingRef = useRef(false);
+  const handleSubmit = async () => {
+    if (!ready || submittingRef.current) {
       return;
     }
-    rateBooking.makePostRequest(Constants.ENDPOINT.RATE_BOOKING, {
-      booking_id: bookingId,
-      rate: rating,
-      compliment: feedbackText(tags, comment),
-    });
+    submittingRef.current = true;
+    let sent = false;
+    try {
+      const result = await rateBooking.makePostRequest(
+        Constants.ENDPOINT.RATE_BOOKING,
+        {
+          booking_id: bookingId,
+          rate: rating,
+          compliment: feedbackText(tags, comment),
+        },
+      );
+      sent = Boolean(result?.response) && !result?.error;
+    } finally {
+      if (!sent) {
+        submittingRef.current = false;
+      }
+    }
   };
 
   // The trip's end in booking_issues, where the fare is reviewed

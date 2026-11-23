@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useCallback } from 'react';
 import {
   BackHandler,
   Image,
@@ -11,7 +11,7 @@ import {
 import Container from '@/Components/Container/Container';
 import ProfileAvatar from '@/Components/ProfileAvatar/ProfileAvatar';
 import { useTheme } from 'react-native-paper';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { selectUserInfo } from '@/Redux/Slices/userSlice';
 import { useSelector } from 'react-redux';
 import { displayMobile, fullNameOf } from '@/Utils/personName';
@@ -27,17 +27,21 @@ const ProfileScreen = () => {
   // the photo (the owner, 2026-11-23: "display in profile also having a badge")
   const gender = genderOf(userInfo?.gender);
 
-  // Intercept hardware back button
-  useEffect(() => {
-    const backHandler = BackHandler.addEventListener(
-      'hardwareBackPress',
-      () => {
-        navigation.goBack();
-        return true;
-      },
-    );
-    return () => backHandler.remove();
-  }, [navigation]);
+  // Back while this page is on screen only: registered for good, it also
+  // answered Back on Edit profile and removed this page from under it
+  // (overnight review 2026-11-23).
+  useFocusEffect(
+    useCallback(() => {
+      const backHandler = BackHandler.addEventListener(
+        'hardwareBackPress',
+        () => {
+          navigation.goBack();
+          return true;
+        },
+      );
+      return () => backHandler.remove();
+    }, [navigation]),
+  );
 
   const toTitleCase = str => {
     if (!str) {

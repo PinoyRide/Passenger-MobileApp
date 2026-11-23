@@ -34,7 +34,16 @@ const HANDLED_IDS_KEY = 'push_handled_message_ids_v1';
 const HANDLED_IDS_MAX = 30;
 const BANNER_MS = 5000;
 // Routes where a logged-in user may be sent from a notification tap.
-const NOT_READY_ROUTES = ['Splash', 'OnboardingScreen', 'LandingScreen'];
+// A push tapped on these waits: the person is not in the app yet. The Terms
+// screen (asked to accept before going on) and Update Required were skipped
+// by a tapped push until the overnight review of 2026-11-23.
+const NOT_READY_ROUTES = [
+  'Splash',
+  'OnboardingScreen',
+  'LandingScreen',
+  'GeneralTermsScreen',
+  'UpdateRequiredScreen',
+];
 
 const colors = LightTheme.colors;
 const topInset = initialWindowMetrics?.insets?.top ?? 0;

@@ -73,7 +73,10 @@ const OTPScreen = () => {
       {
         mobileNo: number,
         userType: 'customer',
-        ...(isRegister ? {} : { channel }),
+        // a registration code is asked for with the whole form, as the form
+        // screen asked for the first one (without it, "Request a new OTP"
+        // was always refused: overnight review 2026-11-23)
+        ...(isRegister ? registration : { channel }),
       },
     );
 

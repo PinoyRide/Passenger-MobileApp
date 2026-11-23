@@ -141,10 +141,15 @@ const BookingStatusModal = ({
   const [unreadCount, setUnreadCount] = useState(0);
   const unreadPollRef = useRef(null);
 
+  // Whether a rider has the booking, not the rider's details themselves: the
+  // 2-second trip poll stores a new details object each time, which restarted
+  // this poll (and its first fetch) every 2 s instead of every 5 (overnight
+  // review 2026-11-23).
+  const hasRider = Boolean(riderDetails);
   useEffect(() => {
     const bookingId = bookingDetails?.id;
 
-    if (!bookingId || !riderDetails) {
+    if (!bookingId || !hasRider) {
       setUnreadCount(0);
       if (unreadPollRef.current) {
         clearInterval(unreadPollRef.current);
@@ -183,7 +188,7 @@ const BookingStatusModal = ({
         unreadPollRef.current = null;
       }
     };
-  }, [bookingDetails?.id, riderDetails]);
+  }, [bookingDetails?.id, hasRider]);
   // ─────────────────────────────────────────────────────────────────────
 
   const resolvedVehicle =

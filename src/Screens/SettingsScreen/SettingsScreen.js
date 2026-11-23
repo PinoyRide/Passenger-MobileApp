@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   BackHandler,
   Pressable,
@@ -50,16 +50,22 @@ const SettingsScreen = () => {
   const [promoIds, setPromoIds] = useState([]);
   const [showSafetyGuide, setShowSafetyGuide] = useState(false);
 
-  useEffect(() => {
-    const backHandler = BackHandler.addEventListener(
-      'hardwareBackPress',
-      () => {
-        navigation.popToTop();
-        return true;
-      },
-    );
-    return () => backHandler.remove();
-  }, [navigation]);
+  // Back goes home while this page is the one on screen. Kept only while it
+  // is focused: registered for good, it also answered Back on the pages
+  // opened from here (History, Wallet, Settings), which then jumped home
+  // (overnight review 2026-11-23).
+  useFocusEffect(
+    useCallback(() => {
+      const backHandler = BackHandler.addEventListener(
+        'hardwareBackPress',
+        () => {
+          navigation.popToTop();
+          return true;
+        },
+      );
+      return () => backHandler.remove();
+    }, [navigation]),
+  );
 
   // the balance and the promos, read again each time the page shows
   useFocusEffect(

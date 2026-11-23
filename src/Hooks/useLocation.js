@@ -132,6 +132,14 @@ export const useLocationWatch = (enabled = false) => {
       setPermissionStatus(permission);
 
       if (permission === 'granted') {
+        // One watch at a time: Home starts watching on every focus, and each
+        // earlier high-accuracy watch kept running (overnight review
+        // 2026-11-23). Cleared right before the new one, with no await
+        // between, so two calls at once cannot leave one behind either.
+        if (watchIdRef.current !== null) {
+          Geolocation.clearWatch(watchIdRef.current);
+          watchIdRef.current = null;
+        }
         const watchId = Geolocation.watchPosition(
           position => {
             setLocation({
