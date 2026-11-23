@@ -2,8 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import mod from '../placeSession.js';
 
-const { SESSION_MAX_MS, newToken, sessionFor, nearOf, suggestionsFrom, placeFrom } =
-  mod;
+const {
+  SESSION_MAX_MS,
+  newToken,
+  sessionFor,
+  nearOf,
+  suggestionsFrom,
+  placeFrom,
+} = mod;
 
 test('a session token is a UUID v4, as Google asks', () => {
   assert.match(
@@ -37,7 +43,12 @@ test('suggestions come without coordinates, with their distance', () => {
       address: 'SM North EDSA\nNorth Ave, QC',
       distanceMeters: 5230,
     },
-    { placeId: 'B', displayName: 'SM Megamall', description: 'SM Megamall', address: 'SM Megamall' },
+    {
+      placeId: 'B',
+      displayName: 'SM Megamall',
+      description: 'SM Megamall',
+      address: 'SM Megamall',
+    },
     { displayName: 'no id' },
   ]);
   assert.deepEqual(
@@ -53,10 +64,21 @@ test('suggestions come without coordinates, with their distance', () => {
 
 test('the picked place takes its location from places/details', () => {
   const [picked] = suggestionsFrom([
-    { placeId: 'A', displayName: 'SM North EDSA', description: 'SM North EDSA, QC', address: 'SM North EDSA\nQC' },
+    {
+      placeId: 'A',
+      displayName: 'SM North EDSA',
+      description: 'SM North EDSA, QC',
+      address: 'SM North EDSA\nQC',
+    },
   ]);
   const place = placeFrom(
-    { placeId: 'A', displayName: 'SM North EDSA', address: 'SM North EDSA\nNorth Ave, Quezon City', lat: 14.656, long: 121.03 },
+    {
+      placeId: 'A',
+      displayName: 'SM North EDSA',
+      address: 'SM North EDSA\nNorth Ave, Quezon City',
+      lat: 14.656,
+      long: 121.03,
+    },
     picked,
   );
   assert.equal(place.lat, 14.656);
@@ -65,4 +87,36 @@ test('the picked place takes its location from places/details', () => {
   assert.equal(place.address, 'SM North EDSA\nQC');
   assert.equal(placeFrom(null, picked), null);
   assert.equal(placeFrom({ lat: 'x', long: 1 }, picked), null);
+});
+
+test('a saved place is its name, then its address (once)', () => {
+  const { placeLine } = mod;
+  assert.equal(
+    placeLine({
+      display_name: 'Makati Square',
+      address: 'GF Chino Roces Ave, Makati City',
+    }),
+    'Makati Square, GF Chino Roces Ave, Makati City',
+  );
+  assert.equal(
+    placeLine({
+      display_name: 'SM Megamall',
+      address: 'SM Megamall, EDSA, Mandaluyong',
+    }),
+    'SM Megamall, EDSA, Mandaluyong',
+  );
+  assert.equal(placeLine({ display_name: 'Pembo', address: '' }), 'Pembo');
+  assert.equal(
+    placeLine({ description: 'Taguig, Metro Manila' }),
+    'Taguig, Metro Manila',
+  );
+});
+
+test('how far a suggestion is', () => {
+  const { distanceLabel } = mod;
+  assert.equal(distanceLabel(0.45), '450 m');
+  assert.equal(distanceLabel(2.44), '2.4 km');
+  assert.equal(distanceLabel(3), '3 km');
+  assert.equal(distanceLabel(null), '');
+  assert.equal(distanceLabel('x'), '');
 });
