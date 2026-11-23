@@ -2,4 +2,4 @@
 // screens: the Account page's "PinoyRide 2.0.44 · build 52". A self-update
 // carries its version but not its build number, so bump-version.js writes it
 // here too (scripts/version-places.js).
-export const APP_BUILD = 87;
+export const APP_BUILD = 88;
