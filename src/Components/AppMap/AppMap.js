@@ -84,6 +84,17 @@ const NearbyDot = ({ coordinate }) => {
 const RADAR_FRAME_MS = 40;
 const RADAR_STILL_MS = SWEEP_MS * 0.3;
 const gold = alpha => `rgba(254, 193, 7, ${alpha.toFixed(3)})`;
+// Directions answers that will not change if asked again, and how many more
+// times any other failed answer is asked (each is a paid call).
+const FINAL_DIRECTIONS_STATUSES = [
+  'ZERO_RESULTS',
+  'NOT_FOUND',
+  'REQUEST_DENIED',
+  'INVALID_REQUEST',
+  'MAX_ROUTE_LENGTH_EXCEEDED',
+];
+const MAX_DIRECTIONS_RETRIES = 3;
+
 const RadarPing = ({ center, radiusM }) => {
   const [still, setStill] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -555,6 +566,8 @@ const AppMap = forwardRef(
     const currentLegKeyRef = useRef(null);
     const lastRerouteAtRef = useRef(0);
     const retryTimerRef = useRef(null);
+    // failed Directions answers for the leg being drawn: { key, count }
+    const failedTriesRef = useRef({ key: null, count: 0 });
     const [rerouteTick, setRerouteTick] = useState(0);
     // The line ahead while the rider was last on it, and the stretches of road
     // they left on this leg, which reroutes keep off (Utils/closedRoad: a road
@@ -669,13 +682,28 @@ const AppMap = forwardRef(
               ]
             : routeFromDirections(data);
           if (!parsed.ok) {
-            // Rejected/empty response: leave the leg unfetched and retry.
-            console.warn('Directions failed:', data && data.status);
-            lastFetchedLegKeyRef.current = null;
+            const status = data && data.status;
+            console.warn('Directions failed:', status);
             clearTimeout(retryTimerRef.current);
+            // Each try is a paid call: an answer that will not change is not
+            // asked again, others at most MAX_DIRECTIONS_RETRIES more times,
+            // further apart each time. It was every 5 s for as long as the
+            // map was open (overnight review 2026-11-23). A new leg starts the
+            // count again.
+            const failed = failedTriesRef.current;
+            const tries = failed.key === legKey ? failed.count + 1 : 1;
+            failedTriesRef.current = { key: legKey, count: tries };
+            if (
+              FINAL_DIRECTIONS_STATUSES.includes(status) ||
+              tries > MAX_DIRECTIONS_RETRIES
+            ) {
+              lastFetchedLegKeyRef.current = legKey; // not asked again
+              return;
+            }
+            lastFetchedLegKeyRef.current = null;
             retryTimerRef.current = setTimeout(
               () => setRerouteTick(t => t + 1),
-              5000,
+              5000 * 2 ** (tries - 1),
             );
             return;
           }
@@ -704,6 +732,7 @@ const AppMap = forwardRef(
             }
           }
           lastFetchedLegKeyRef.current = legKey;
+          failedTriesRef.current = { key: null, count: 0 };
         } catch (e) {
           lastFetchedLegKeyRef.current = null;
           console.error('Error fetching route:', e);
