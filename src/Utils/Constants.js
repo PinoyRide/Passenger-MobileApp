@@ -103,6 +103,10 @@ const BASE_DEV = {
   MODULES_IDENTIFIERS: {},
 };
 
-const Constants = { ...BASE_DEV, IS_DEV };
+// The blink of the face check is asked of riders only (the owner, 2026-11-23:
+// "For the rider"; Utils/livenessCheck.js): a passenger's photo is optional.
+const FACE_CHECK_BLINK = false;
+
+const Constants = { ...BASE_DEV, IS_DEV, FACE_CHECK_BLINK };
 
 export default Constants;

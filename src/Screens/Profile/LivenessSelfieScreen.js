@@ -21,18 +21,19 @@ import FaceDetection from '@react-native-ml-kit/face-detection';
 import { Constants as AppConstants } from '@/Utils';
 import {
   PICTURE_SIZE,
-  STEPS,
   advance,
   describeFace,
   faceProblem,
   isGoodPortrait,
   start,
+  stepsFor,
   stepsPassed,
 } from '@/Utils/livenessCheck';
 
 // Takes the passenger's profile photo, and makes sure a real person is taking
 // it of themselves: they are asked to look straight, turn their head a little
-// one way, then the other, then look straight again (see livenessCheck.js).
+// one way, then the other, to shut their eyes and open them again (riders,
+// FACE_CHECK_BLINK), then look straight again (see livenessCheck.js).
 // The camera is sampled a few times a second and each sample is scanned for a
 // face on the phone itself; nothing leaves the phone until the final photo is
 // saved with the profile. Nothing has to be pressed: the oval turns gold when
@@ -48,9 +49,19 @@ const PROMPTS = {
   straight: 'Look straight at the camera',
   firstTurn: 'Slowly turn your head to one side',
   otherTurn: 'Now slowly turn to the other side',
+  blink: 'Close your eyes for a second, then open them',
   finish: 'Look straight at the camera again',
+  // after the blink: the photo that goes on the profile
+  portrait: 'Now look at the camera for your profile photo',
   done: 'Hold still…',
 };
+
+// Riders also blink (Constants.FACE_CHECK_BLINK: the owner, 2026-11-23; see
+// livenessCheck.js). The same screen in both apps.
+const CHECK = { blink: Boolean(AppConstants.FACE_CHECK_BLINK) };
+const CHECK_STEPS = stepsFor(CHECK);
+const promptFor = step =>
+  PROMPTS[step === 'finish' && CHECK.blink ? 'portrait' : step];
 
 const PROBLEMS = {
   no_face: "We can't see your face. Hold the phone in front of you.",
@@ -134,7 +145,7 @@ const LivenessSelfieScreen = () => {
   const [cameraReady, setCameraReady] = useState(false);
   const restartsRef = useRef(0);
 
-  const checkRef = useRef(start(Date.now()));
+  const checkRef = useRef(start(Date.now(), CHECK));
   const [step, setStep] = useState('straight');
   const [problem, setProblem] = useState(null);
   // One face, the right size, inside the oval: the oval turns gold.
@@ -186,7 +197,7 @@ const LivenessSelfieScreen = () => {
     let stopped = false;
     let failures = 0;
     let samples = 0;
-    checkRef.current = start(Date.now());
+    checkRef.current = start(Date.now(), CHECK);
     setStep('straight');
     setProblem(null);
     setFaceInPlace(false);
@@ -278,6 +289,7 @@ const LivenessSelfieScreen = () => {
             checkRef.current = {
               ...checkRef.current,
               step: 'finish',
+              held: 0,
               stepStartedAt: Date.now(),
             };
             setStep('finish');
@@ -404,9 +416,9 @@ const LivenessSelfieScreen = () => {
     );
   }
 
-  const passed = stepsPassed({ step });
+  const passed = stepsPassed({ step, steps: CHECK_STEPS });
   const message = problem ? PROBLEMS[problem] : null;
-  const allPassed = finished || passed >= STEPS.length;
+  const allPassed = finished || passed >= CHECK_STEPS.length;
   // gold: the face is in place and doing what was asked
   const settled = faceInPlace && !message;
 
@@ -460,7 +472,7 @@ const LivenessSelfieScreen = () => {
         ) : (
           <>
             <View style={styles.steps} accessibilityLabel="Progress">
-              {STEPS.map((name, index) => (
+              {CHECK_STEPS.map((name, index) => (
                 <View
                   key={name}
                   style={[
@@ -472,7 +484,7 @@ const LivenessSelfieScreen = () => {
               ))}
             </View>
             <Text style={styles.prompt} accessibilityLiveRegion="polite">
-              {PROMPTS[step]}
+              {promptFor(step)}
             </Text>
             <Text style={[styles.hint, message && styles.hintProblem]}>
               {message || 'This checks that the photo is really you.'}
