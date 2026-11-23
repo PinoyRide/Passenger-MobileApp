@@ -2,10 +2,14 @@ import React from 'react';
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import useAutoClose, { NOTICE_READ_MS } from '@/Hooks/useAutoClose';
 import { modern } from '@/Theme/modern';
+import { isNotice } from '@/Utils/alertShape';
 
 // A short message the person has to answer before going on: a title, one
-// or two sentences, and one or two buttons.
+// or two sentences, and one or two buttons. With one button that only closes
+// it, it is a notice, and it closes itself once read (Utils/alertShape.js
+// isNotice, Hooks/useAutoClose NOTICE_READ_MS).
 //   icon           a MaterialCommunityIcons name, shown above the title
 //   confirmText    the filled button. Give it the SAFE answer when the other
 //                  one carries a risk the person cannot undo.
@@ -29,6 +33,13 @@ const AlertBox = ({
 }) => {
   const look = modern(useTheme());
   const styles = getStyles(look);
+
+  // a notice closes itself once read; a box that asks waits for the person
+  useAutoClose(
+    visible && isNotice({ onConfirm, secondaryText, dismissable }),
+    () => setVisible(false),
+    NOTICE_READ_MS,
+  );
 
   const handleConfirm = () => {
     setVisible(false);

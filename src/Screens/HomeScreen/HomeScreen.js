@@ -129,7 +129,7 @@ import {
   serviceById,
 } from './Components/ServiceList';
 import useNoRidersTimer from '@/Hooks/useNoRidersTimer';
-import useAutoClose from '@/Hooks/useAutoClose';
+import useAutoClose, { NOTICE_READ_MS } from '@/Hooks/useAutoClose';
 import useSearchReach from '@/Hooks/useSearchReach';
 import useNearbyRiders from '@/Hooks/useNearbyRiders';
 import { ridersNearbyText } from '@/Utils/ridersNearbyText';
@@ -262,11 +262,17 @@ const HomeScreen = () => {
   // even when the date is already set (date-first order).
   const [pickupConfirmPending, setPickupConfirmPending] = useState(false);
   const [showAdvanceAccepted, setShowAdvanceAccepted] = useState(false);
-  // Boxes nobody answers close after 3 minutes (Hooks/useAutoClose).
+  // Boxes nobody answers close by themselves (Hooks/useAutoClose): a notice
+  // once read (an AlertBox notice does it itself), the others after 3
+  // minutes. "We found you a Rider!" and "Congratulations" only close.
   useAutoClose(showAlert, () => setShowAlert(false));
   useAutoClose(showPushNotice, () => setShowPushNotice(false));
-  useAutoClose(showRiderFound, () => setShowRiderFound(false));
-  useAutoClose(showAdvanceAccepted, () => setShowAdvanceAccepted(false));
+  useAutoClose(showRiderFound, () => setShowRiderFound(false), NOTICE_READ_MS);
+  useAutoClose(
+    showAdvanceAccepted,
+    () => setShowAdvanceAccepted(false),
+    NOTICE_READ_MS,
+  );
   const paymentBeforeScheduleRef = useRef(null);
 
   // 🔍 Diagnostic: confirms whether riderLocation state is actually updating.

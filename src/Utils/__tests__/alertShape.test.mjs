@@ -1,9 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import mod from '../alertShape.js';
 
-const { alertShape } = mod;
+const { alertShape, isNotice } = mod;
 const noop = () => {};
+const app = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+const read = path => readFileSync(join(app, path), 'utf8');
 
 test('a notice with no button gets one: OK, filled', () => {
   const box = alertShape('Location is off', 'Pinoy Ride needs your location.');
@@ -90,4 +95,47 @@ test('the options carry over: not dismissable, onDismiss, icon and note', () => 
   assert.equal(box.onDismiss, gone);
   assert.equal(box.icon, 'phone');
   assert.equal(box.note, 'Only in an emergency.');
+});
+
+// The owner, 2026-11-23, of "Trip Passed On" and "Booking update": "if i do
+// nothing this always stays in my screen".
+test('a notice is one button that only closes the box', () => {
+  assert.equal(isNotice(alertShape('Location is off', 'Turn it on.')), true);
+  assert.equal(isNotice(alertShape('Saved', '', [{ text: 'OK' }])), true);
+  // an action on the button, a second answer, or Back must not close it
+  assert.equal(
+    isNotice(alertShape('Saved', '', [{ text: 'Continue', onPress: noop }])),
+    false,
+  );
+  assert.equal(
+    isNotice(
+      alertShape('Log Out', '', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Log Out', onPress: noop },
+      ]),
+    ),
+    false,
+  );
+  assert.equal(
+    isNotice(alertShape('Wait', '', [], { cancelable: false })),
+    false,
+  );
+  // AlertBox's own props
+  assert.equal(isNotice({}), true);
+  assert.equal(isNotice({ onConfirm: noop }), false);
+  assert.equal(isNotice({ secondaryText: 'Cancel' }), false);
+});
+
+test('a notice closes itself once read, a box that asks after 3 minutes', () => {
+  assert.match(
+    read('src/Components/AlertBox/AlertBox.js'),
+    /useAutoClose\(\s*visible &&\s*isNotice\(/,
+  );
+  assert.match(
+    read('src/Components/AlertBox/AlertHost.js'),
+    /isNotice\(box\) \? NOTICE_READ_MS : NOTICE_AUTO_CLOSE_MS/,
+  );
+  const timing = read('src/Hooks/useAutoClose.js');
+  assert.match(timing, /NOTICE_READ_MS = 10 \* 1000;/);
+  assert.match(timing, /NOTICE_AUTO_CLOSE_MS = 3 \* 60 \* 1000;/);
 });

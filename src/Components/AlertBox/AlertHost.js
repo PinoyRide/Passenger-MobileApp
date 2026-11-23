@@ -1,6 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import AlertBox from '@/Components/AlertBox/AlertBox';
-import useAutoClose from '@/Hooks/useAutoClose';
+import useAutoClose, {
+  NOTICE_AUTO_CLOSE_MS,
+  NOTICE_READ_MS,
+} from '@/Hooks/useAutoClose';
+import { isNotice } from '@/Utils/alertShape';
 import { closeAlert, subscribeAlerts } from '@/Utils/appAlert';
 
 // Draws what Utils/appAlert.js is asked to show, one box at a time. Mounted
@@ -10,9 +14,10 @@ import { closeAlert, subscribeAlerts } from '@/Utils/appAlert';
 // the boxes answered with a button: closing them is not a dismissal
 const answered = new WeakSet();
 
-// A dismissal (the back button, or three minutes unanswered: useAutoClose)
-// runs the asker's onDismiss, as the platform's dialog does; a button runs
-// its own answer instead.
+// A dismissal (the back button, or nobody answering: useAutoClose, once read
+// for a notice, after three minutes for a question) runs the asker's
+// onDismiss, as the platform's dialog does; a button runs its own answer
+// instead.
 const close = box => {
   closeAlert();
   setTimeout(() => {
@@ -23,7 +28,11 @@ const close = box => {
 };
 
 const Shown = ({ box }) => {
-  useAutoClose(true, () => close(box));
+  useAutoClose(
+    true,
+    () => close(box),
+    isNotice(box) ? NOTICE_READ_MS : NOTICE_AUTO_CLOSE_MS,
+  );
   const answer = run => () => {
     answered.add(box);
     if (run) {

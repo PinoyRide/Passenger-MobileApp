@@ -55,4 +55,11 @@ const alertShape = (title, message, buttons, options) => {
   };
 };
 
-module.exports = { alertShape };
+// A notice: one button that only closes the box, which Back may close too.
+// It closes itself once read (Hooks/useAutoClose, NOTICE_READ_MS). A second
+// answer, an action on the button, or a box Back must not close: it waits for
+// the person. Takes alertShape's box or AlertBox's own props.
+const isNotice = ({ onConfirm, secondaryText, dismissable } = {}) =>
+  !onConfirm && !secondaryText && dismissable !== false;
+
+module.exports = { alertShape, isNotice };
