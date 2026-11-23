@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { routeFromDirections } from '../../Utils/routeDirections';
+import { remember, routeAvoiding, stillClosed } from '../../Utils/closedRoad';
 import {
   followCamera,
   followsByDefault,
@@ -535,6 +536,26 @@ const AppMap = forwardRef(
     const lastRerouteAtRef = useRef(0);
     const retryTimerRef = useRef(null);
     const [rerouteTick, setRerouteTick] = useState(0);
+    // The line ahead while the rider was last on it, and the stretches of road
+    // they left on this leg, which reroutes keep off (Utils/closedRoad: a road
+    // left may be closed, and Google may not know).
+    const lastAheadRef = useRef(null);
+    const closedStretchesRef = useRef([]);
+
+    useEffect(() => {
+      if (tracked.onRoute && tracked.remaining) {
+        lastAheadRef.current = tracked.remaining;
+      }
+    }, [tracked.onRoute, tracked.remaining]);
+
+    useEffect(() => {
+      if (riderFix) {
+        closedStretchesRef.current = stillClosed(closedStretchesRef.current, {
+          latitude: riderFix.latitude,
+          longitude: riderFix.longitude,
+        });
+      }
+    }, [riderFix]);
 
     useEffect(() => {
       // The key identifies the leg, not the rider's live position, so it only
@@ -570,6 +591,8 @@ const AppMap = forwardRef(
       if (currentLegKeyRef.current !== legKey) {
         currentLegKeyRef.current = legKey;
         setRouteCoords([]);
+        lastAheadRef.current = null;
+        closedStretchesRef.current = [];
       }
 
       const fetchRoute = async () => {
@@ -599,13 +622,32 @@ const AppMap = forwardRef(
           return;
         }
 
+        // The rider's own legs: traffic as it is now, as the Rider app asks,
+        // so both maps draw the same road (and the rider is not "off" a line
+        // drawn through a jam). Roads the rider left on this leg: Google's
+        // other ways too, the same request at the same price, and the fastest
+        // that keeps off them is drawn.
+        const avoid = riderLeg ? closedStretchesRef.current : [];
+        const extra = riderLeg
+          ? `&departure_time=now${avoid.length ? '&alternatives=true' : ''}`
+          : '';
         inFlightLegKeyRef.current = legKey;
         try {
           const response = await fetchWithTimeout(
-            `https://maps.googleapis.com/maps/api/directions/json?origin=${originLat},${originLong}&destination=${destinationLat},${destinationLong}&mode=driving&key=${Constants.GOOGLE_MAP_API_KEY}`,
+            `https://maps.googleapis.com/maps/api/directions/json?origin=${originLat},${originLong}&destination=${destinationLat},${destinationLong}&mode=driving${extra}&key=${Constants.GOOGLE_MAP_API_KEY}`,
           );
           const data = await response.json();
-          const parsed = routeFromDirections(data);
+          const choices = ((data && data.routes) || []).map(route =>
+            routeFromDirections({ ...data, routes: [route] }),
+          );
+          const parsed = choices.length
+            ? choices[
+                routeAvoiding(
+                  choices.map(choice => choice.coords),
+                  avoid,
+                )
+              ]
+            : routeFromDirections(data);
           if (!parsed.ok) {
             // Rejected/empty response: leave the leg unfetched and retry.
             console.warn('Directions failed:', data && data.status);
@@ -684,6 +726,11 @@ const AppMap = forwardRef(
         return;
       }
       lastRerouteAtRef.current = now;
+      closedStretchesRef.current = remember(
+        closedStretchesRef.current,
+        lastAheadRef.current,
+      );
+      lastAheadRef.current = null;
       lastFetchedLegKeyRef.current = null;
       setRerouteTick(t => t + 1);
     }, [isLiveLeg, routeCoords, tracked.onRoute, tracked.offRouteMeters]);

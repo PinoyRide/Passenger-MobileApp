@@ -26,6 +26,8 @@ const SHARED = [
   'src/Components/TripActions/TripActions.js',
   'src/Hooks/useAutoClose.js',
   'src/Utils/arrivalText.js',
+  'src/Utils/closedRoad.js',
+  'src/Utils/__tests__/closedRoad.test.mjs',
   'src/Utils/__tests__/arrivalText.test.mjs',
   'src/Utils/personName.js',
   'src/Utils/cashOut.js',
