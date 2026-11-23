@@ -64,6 +64,8 @@ const SHARED = [
   'src/Utils/__tests__/sharedUi.test.mjs',
   'src/Utils/paymentWait.js',
   'src/Utils/__tests__/paymentWait.test.mjs',
+  // the payment-done picture (AppTransactionComplete)
+  'src/Assets/Common/Success_Image.png',
   // the iOS project's config plugins (npx expo prebuild --platform ios)
   'plugins/withFirebaseConfigure.js',
   'plugins/withPodsForXcode27.js',
@@ -81,12 +83,22 @@ const skip = existsSync(other)
   ? false
   : 'the other app is not next to this one';
 
+// Pictures are compared byte for byte; text as text, so a failure shows the lines.
+const PICTURE = /\.(png|jpe?g|webp|gif)$/i;
+
 for (const file of SHARED) {
   test(`${file} is the same in both apps`, { skip }, () => {
     assert.ok(
       existsSync(join(other, file)),
       `${file} is missing in ${basename(other)}`,
     );
+    if (PICTURE.test(file)) {
+      assert.ok(
+        readFileSync(join(root, file)).equals(readFileSync(join(other, file))),
+        `${file} differs between the apps: copy it to ${basename(other)}`,
+      );
+      return;
+    }
     assert.equal(
       readFileSync(join(root, file), 'utf8'),
       readFileSync(join(other, file), 'utf8'),

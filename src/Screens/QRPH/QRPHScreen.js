@@ -135,6 +135,7 @@ const QRPHScreen = () => {
                 status: result.status,
                 timestamp: result?.ts || new Date().toISOString(),
                 paymentMethod: 'QRPH',
+                transactionId: result?.transactionId || result?.transaction_id,
               },
             },
           },
