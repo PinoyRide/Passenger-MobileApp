@@ -268,9 +268,11 @@ const HomeScreen = () => {
   // minutes. "Congratulations" only closes.
   useAutoClose(showAlert, () => setShowAlert(false));
   useAutoClose(showPushNotice, () => setShowPushNotice(false));
+  // closed as its own button closes it, so it is not shown again on the next
+  // poll (it came back every 12 s or so: overnight review 2026-11-23)
   useAutoClose(
     showAdvanceAccepted,
-    () => setShowAdvanceAccepted(false),
+    () => handleAdvanceAcceptedClose(),
     NOTICE_READ_MS,
   );
   const paymentBeforeScheduleRef = useRef(null);
@@ -307,6 +309,14 @@ const HomeScreen = () => {
     setTripSheetMinimized(false);
   }, [bookingStatus, activeBooking?.id]);
   const [penaltyPreview, setPenaltyPreview] = useState(null);
+  // The "Cancel ride" box closes once the trip starts or ends: its Yes would
+  // have cancelled a trip under way (overnight review 2026-11-23; the server
+  // refuses that now too).
+  useEffect(() => {
+    if (penaltyPreview && [2, 3].includes(Number(bookingStatus))) {
+      setPenaltyPreview(null);
+    }
+  }, [bookingStatus, penaltyPreview]);
   const [cancelPreviewLoading, setCancelPreviewLoading] = useState(false);
   const cancelSubmitGuard = useCancellationSubmitGuard();
   const [penaltyLoading, setPenaltyLoading] = useState(false);
@@ -1193,6 +1203,13 @@ const HomeScreen = () => {
   };
 
   useEffect(() => {
+    // A request starting clears its last error, which re-ran this with the
+    // last answer as if it were new (a cancelled booking came back, a new one
+    // was wiped): wait for this request's own answer (overnight review
+    // 2026-11-23).
+    if (checkActiveBooking.loading) {
+      return;
+    }
     handleRestoredBooking();
   }, [checkActiveBooking.response, checkActiveBooking.error]);
 
@@ -1564,6 +1581,13 @@ const HomeScreen = () => {
   };
 
   useEffect(() => {
+    // A request starting clears its last error, which re-ran this with the
+    // last answer as if it were new (a cancelled booking came back, a new one
+    // was wiped): wait for this request's own answer (overnight review
+    // 2026-11-23).
+    if (createBooking.loading) {
+      return;
+    }
     handleCreateBookingRequest();
   }, [createBooking.response, createBooking.error]);
 
@@ -1608,6 +1632,16 @@ const HomeScreen = () => {
     }
 
     const { code, data } = response;
+
+    // An answer about another booking (asked for before this one took its
+    // place) is not this booking's state (overnight review 2026-11-23).
+    if (
+      data?.id != null &&
+      activeBooking?.id != null &&
+      String(data.id) !== String(activeBooking.id)
+    ) {
+      return;
+    }
 
     if (
       code === 200 &&
@@ -1729,6 +1763,13 @@ const HomeScreen = () => {
   };
 
   useEffect(() => {
+    // A request starting clears its last error, which re-ran this with the
+    // last answer as if it were new (a cancelled booking came back, a new one
+    // was wiped): wait for this request's own answer (overnight review
+    // 2026-11-23).
+    if (getBookingDetails.loading) {
+      return;
+    }
     handleGetBookingDetails();
   }, [getBookingDetails.response, getBookingDetails.error]);
 
@@ -1991,6 +2032,13 @@ const HomeScreen = () => {
   };
 
   useEffect(() => {
+    // A request starting clears its last error, which re-ran this with the
+    // last answer as if it were new (a cancelled booking came back, a new one
+    // was wiped): wait for this request's own answer (overnight review
+    // 2026-11-23).
+    if (updateBookingStatus.loading) {
+      return;
+    }
     handleUpdateBookingStatus();
   }, [updateBookingStatus.response, updateBookingStatus.error]);
 
