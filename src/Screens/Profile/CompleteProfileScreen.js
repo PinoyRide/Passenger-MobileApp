@@ -20,6 +20,8 @@ import { withCameraPermission } from '@/Utils/Permissions';
 import { selectUserInfo, setUserInfo } from '@/Redux/Slices/userSlice';
 import { modern } from '@/Theme/modern';
 import appAlert from '@/Utils/appAlert';
+import GenderChoice from '@/Components/GenderChoice/GenderChoice';
+import { genderOf } from '@/Utils/gender';
 
 // Name: what a passenger must have before booking (the backend refuses bookings otherwise).
 // Shown right after registering, and it can be skipped for now (the owner, 2026-11-22):
@@ -42,6 +44,9 @@ const CompleteProfileScreen = () => {
   const [mname, setMname] = useState(userInfo?.mname || ekyc.middle_name || '');
   const [lname, setLname] = useState(userInfo?.lname || ekyc.last_name || '');
   const [email, setEmail] = useState(userInfo?.email || '');
+  // required (the owner, 2026-11-23: "Require gender so we can display in
+  // profile"); accounts made before have none until saved here
+  const [gender, setGender] = useState(genderOf(userInfo?.gender)?.value || '');
   const [newSelfie, setNewSelfie] = useState(null); // { uri, type, fileName } from the camera
   const [errors, setErrors] = useState({});
 
@@ -97,6 +102,9 @@ const CompleteProfileScreen = () => {
     if (!lname.trim()) {
       next.lname = 'Last name is required';
     }
+    if (!genderOf(gender)) {
+      next.gender = 'Choose your gender';
+    }
     setErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -114,6 +122,7 @@ const CompleteProfileScreen = () => {
         mname: mname.trim() || null,
         lname: lname.trim(),
         email: email.trim() || null,
+        gender,
       },
     );
     if (error || !response) {
@@ -243,6 +252,14 @@ const CompleteProfileScreen = () => {
           onChangeText={setLname}
           placeholder="e.g. Dela Cruz"
           error={errors.lname}
+        />
+        <GenderChoice
+          value={gender}
+          onChange={value => {
+            setGender(value);
+            setErrors(prev => ({ ...prev, gender: '' }));
+          }}
+          error={errors.gender}
         />
         <AppTextInput
           label="Email"

@@ -14,7 +14,8 @@ import { useTheme } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { selectUserInfo } from '@/Redux/Slices/userSlice';
 import { useSelector } from 'react-redux';
-import { displayMobile } from '@/Utils/personName';
+import { displayMobile, fullNameOf } from '@/Utils/personName';
+import { genderOf } from '@/Utils/gender';
 
 const ProfileScreen = () => {
   const { colors } = useTheme();
@@ -22,6 +23,9 @@ const ProfileScreen = () => {
   const navigation = useNavigation();
   const userInfo = useSelector(selectUserInfo);
   const ekyc = userInfo?.ekyc_details;
+  // the gender the passenger chose (registration or Edit), and its badge on
+  // the photo (the owner, 2026-11-23: "display in profile also having a badge")
+  const gender = genderOf(userInfo?.gender);
 
   // Intercept hardware back button
   useEffect(() => {
@@ -73,6 +77,10 @@ const ProfileScreen = () => {
       label: 'Email Address',
       value: userInfo?.email?.trim() || 'Not added yet',
     },
+    {
+      label: 'Gender',
+      value: gender?.label || 'Not set yet',
+    },
   ];
 
   return (
@@ -88,7 +96,13 @@ const ProfileScreen = () => {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Profile Photo */}
         <View style={styles.avatarContainer}>
-          <ProfileAvatar uri={userInfo?.selfie || ekyc?.selfie} size={90} />
+          <ProfileAvatar
+            uri={userInfo?.selfie || ekyc?.selfie}
+            name={fullNameOf(userInfo)}
+            size={90}
+            badge={gender?.icon}
+            badgeLabel={gender?.label}
+          />
           {/* <TouchableOpacity style={styles.cameraButton} onPress={() => {}}>
             <Image
               source={require('@/Assets/Common/Camera.png')}
@@ -103,7 +117,7 @@ const ProfileScreen = () => {
           onPress={() => navigation.navigate('CompleteProfileScreen')}>
           <Text style={styles.editButtonText}>
             {userInfo?.profile_complete
-              ? 'Edit name or photo'
+              ? 'Edit profile'
               : 'Complete your profile'}
           </Text>
         </TouchableOpacity>

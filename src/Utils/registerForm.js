@@ -2,21 +2,25 @@
 // sends, and where a refusal from the backend is shown. Pure (no RN imports)
 // so it runs under `node --test`.
 //
-// Register is a form: names, email, the mobile number last, and the two
-// consents, every one of them required (the owner, 2026-11-22: "bring back
+// Register is a form: names, gender, email, the mobile number last, and the
+// two consents, every one of them required (the owner, 2026-11-22: "bring back
 // this form, make all fields there as required"). Everything that could stop
 // the registration is checked before a code is sent (each code is a paid text
 // message): here first, then by the backend, which checks the same and
 // whether the number or the email is already taken. After the code the
 // passenger is sent to log in.
 
+const { genderOf } = require('./gender');
+
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// The form's problems, by field: { firstName, lastName, email, mobile, consent }.
+// The form's problems, by field: { firstName, lastName, gender, email,
+// mobile, consent }.
 // Empty when it can be sent.
 function registrationErrors({
   firstName,
   lastName,
+  gender,
   email,
   mobile,
   mobileValid,
@@ -29,6 +33,9 @@ function registrationErrors({
   }
   if (!String(lastName || '').trim()) {
     errors.lastName = 'Last name is required';
+  }
+  if (!genderOf(gender)) {
+    errors.gender = 'Choose your gender';
   }
   const address = String(email || '').trim();
   if (!address) {
@@ -49,10 +56,11 @@ function registrationErrors({
 }
 
 // The form as the backend takes it (otp/register, then customers/register).
-function registrationFields({ firstName, lastName, email }) {
+function registrationFields({ firstName, lastName, gender, email }) {
   return {
     firstName: String(firstName || '').trim(),
     lastName: String(lastName || '').trim(),
+    gender: genderOf(gender)?.value || '',
     email: String(email || '').trim(),
   };
 }
@@ -69,6 +77,9 @@ function refusalField(message) {
   }
   if (/first name|last name/i.test(text)) {
     return { field: 'firstName', message: text };
+  }
+  if (/gender/i.test(text)) {
+    return { field: 'gender', message: text };
   }
   return {
     field: null,

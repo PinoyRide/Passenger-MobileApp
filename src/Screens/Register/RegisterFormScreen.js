@@ -13,6 +13,7 @@ import { useTheme } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { AlertBox, AppButton, AppTextInput, Container } from '@/Components';
 import ConsentCheck from '@/Components/ConsentCheck/ConsentCheck';
+import GenderChoice from '@/Components/GenderChoice/GenderChoice';
 import useApiRequest from '@/Services/ApiV2';
 import { Constants } from '@/Utils';
 import { consentBody } from '@/Utils/consent';
@@ -25,7 +26,8 @@ import {
 import appAlert from '@/Utils/appAlert';
 
 // Register: the passenger's details first, the mobile number last, every field
-// required (the owner, 2026-11-22). Everything that could stop the
+// required (the owner, 2026-11-22), gender among them (2026-11-23: "Require
+// gender so we can display in profile"). Everything that could stop the
 // registration is checked before a code is sent; the code screen then creates
 // the account and sends the passenger to log in.
 const RegisterFormScreen = () => {
@@ -36,6 +38,7 @@ const RegisterFormScreen = () => {
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [gender, setGender] = useState('');
   const [email, setEmail] = useState('');
   const [mobile, setMobile] = useState('');
   const [mobileValid, setMobileValid] = useState(false);
@@ -57,6 +60,7 @@ const RegisterFormScreen = () => {
     const problems = registrationErrors({
       firstName,
       lastName,
+      gender,
       email,
       mobile,
       mobileValid,
@@ -68,7 +72,7 @@ const RegisterFormScreen = () => {
       return;
     }
 
-    const details = registrationFields({ firstName, lastName, email });
+    const details = registrationFields({ firstName, lastName, gender, email });
     const { response, error, offline } = await sendCode.request(
       'POST',
       Constants.API.OTP_REGISTER,
@@ -155,6 +159,11 @@ const RegisterFormScreen = () => {
               onChangeText={changed('lastName', setLastName)}
               placeholder="e.g. Dela Cruz"
               error={errors.lastName}
+            />
+            <GenderChoice
+              value={gender}
+              onChange={changed('gender', setGender)}
+              error={errors.gender}
             />
             <AppTextInput
               label="Email"

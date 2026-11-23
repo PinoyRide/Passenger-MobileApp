@@ -1,6 +1,7 @@
 import React from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { modern } from '@/Theme/modern';
 import { initialsOf } from '@/Utils/personName';
 
@@ -8,8 +9,39 @@ import { initialsOf } from '@/Utils/personName';
 // is given and known (the owner's Account design, 2026-11-22: "JR"), else a
 // plain "no photo yet" figure. Never a sample photo of somebody else: a new
 // account must not look like it already has a picture.
-const ProfileAvatar = ({ uri, size = 60, style, name }) => {
+//   badge       a MaterialCommunityIcons name, drawn in a small round badge
+//               on the photo's lower right (the passenger's gender, the
+//               owner, 2026-11-23: "display in profile also having a badge")
+//   badgeLabel  what a screen reader says for it
+const ProfileAvatar = ({ uri, size = 60, style, name, badge, badgeLabel }) => {
   const look = modern(useTheme());
+  if (!badge) {
+    return <Face uri={uri} size={size} style={style} name={name} look={look} />;
+  }
+  const dot = Math.max(20, Math.round(size * 0.34));
+  return (
+    <View style={[{ width: size, height: size }, style]}>
+      <Face uri={uri} size={size} name={name} look={look} />
+      <View
+        style={[
+          styles.badge,
+          {
+            width: dot,
+            height: dot,
+            borderRadius: dot / 2,
+            backgroundColor: look.card,
+            borderColor: look.surface,
+          },
+        ]}
+        accessible
+        accessibilityLabel={badgeLabel}>
+        <Icon name={badge} size={Math.round(dot * 0.6)} color={look.chipInk} />
+      </View>
+    </View>
+  );
+};
+
+const Face = ({ uri, size, style, name, look }) => {
   const round = { width: size, height: size, borderRadius: size / 2 };
   if (uri) {
     return <Image source={{ uri }} style={[round, style]} />;
@@ -78,5 +110,13 @@ const styles = StyleSheet.create({
   initialsText: {
     fontFamily: 'Poppins SemiBold',
     includeFontPadding: false,
+  },
+  badge: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
   },
 });

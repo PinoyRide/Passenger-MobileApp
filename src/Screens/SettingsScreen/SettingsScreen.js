@@ -21,6 +21,7 @@ import useApiRequest from '@/Services/ApiV2';
 import { Constants as AppConstants, AppUtil } from '@/Utils';
 import { APP_BUILD } from '@/Utils/appBuild';
 import { displayMobile, fullNameOf } from '@/Utils/personName';
+import { genderOf } from '@/Utils/gender';
 import { modern } from '@/Theme/modern';
 import {
   markPromosSeen,
@@ -145,7 +146,13 @@ const SettingsScreen = () => {
             .filter(Boolean)
             .join(', ')}
           style={({ pressed }) => [styles.profile, pressed && styles.pressed]}>
-          <ProfileAvatar uri={photo} name={name} size={56} />
+          <ProfileAvatar
+            uri={photo}
+            name={name}
+            size={56}
+            badge={genderOf(userInfo?.gender)?.icon}
+            badgeLabel={genderOf(userInfo?.gender)?.label}
+          />
           <View style={styles.flex}>
             <Text style={styles.name} numberOfLines={1}>
               {name || 'Complete your profile'}
@@ -157,9 +164,7 @@ const SettingsScreen = () => {
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel={
-              profileComplete
-                ? 'Edit your name or photo'
-                : 'Set up your profile'
+              profileComplete ? 'Edit your profile' : 'Set up your profile'
             }
             style={({ pressed }) => [styles.edit, pressed && styles.pressed]}>
             <Text style={styles.editText}>
