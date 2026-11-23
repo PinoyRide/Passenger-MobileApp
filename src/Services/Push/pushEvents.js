@@ -12,7 +12,19 @@ export const PUSH_TYPES = {
   ADVANCE_ACCEPTED: 'advance_accepted',
   // status 4 with cancelled_by='system'
   ADVANCE_EXPIRED: 'advance_expired',
+  // the owner, 2026-11-24: "is our app notifies even when minimized or
+  // closed": a chat message from the rider, and money in or out
+  CHAT_MESSAGE: 'chat_message',
+  WALLET_CREDITED: 'wallet_credited',
+  CASH_OUT_PAID: 'cash_out_paid',
+  CASH_OUT_FAILED: 'cash_out_failed',
 };
+
+const WALLET_TYPES = [
+  PUSH_TYPES.WALLET_CREDITED,
+  PUSH_TYPES.CASH_OUT_PAID,
+  PUSH_TYPES.CASH_OUT_FAILED,
+];
 
 const KNOWN_TYPES = Object.values(PUSH_TYPES);
 
@@ -76,12 +88,19 @@ export function getPushRoute(parsed) {
   if (!parsed?.type) {
     return null;
   }
+  // money in or out: the wallet (no booking)
+  if (WALLET_TYPES.includes(parsed.type)) {
+    return { name: 'WalletScreen', params: {} };
+  }
   const id = parsed.bookingId;
   if (!id) {
     // no booking to open: safe fallback
     return { name: 'HomeScreen', params: {} };
   }
   switch (parsed.type) {
+    case PUSH_TYPES.CHAT_MESSAGE:
+      // the trip's chat (it loads the names itself)
+      return { name: 'ChatScreen', params: { bookingId: id } };
     case PUSH_TYPES.ADVANCE_EXPIRED:
       // Booking Details (cancelled) via History, fetched by id if it isn't on
       // page 1 (US-1.6).

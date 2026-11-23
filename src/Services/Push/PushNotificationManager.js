@@ -10,6 +10,7 @@ import { selectUserInfo } from '@/Redux/Slices/userSlice';
 import { navigationRef } from '@/Utils/NavigationService';
 import LightTheme from '@/Theme/LightTheme';
 import {
+  PUSH_TYPES,
   emitBookingUpdate,
   formatPushBody,
   getPushRoute,
@@ -50,6 +51,18 @@ const topInset = initialWindowMetrics?.insets?.top ?? 0;
 
 const currentRouteName = () =>
   navigationRef.isReady() ? navigationRef.getCurrentRoute()?.name : undefined;
+
+// The trip's chat is on screen for this booking: its messages show there.
+const chatOnScreen = bookingId => {
+  if (!navigationRef.isReady() || bookingId == null) {
+    return false;
+  }
+  const route = navigationRef.getCurrentRoute();
+  return (
+    route?.name === 'ChatScreen' &&
+    String(route?.params?.bookingId) === String(bookingId)
+  );
+};
 
 /**
  * Passenger push notifications (native only; renders nothing on web):
@@ -330,6 +343,13 @@ const PushNotificationManager = () => {
     }
     return onForegroundPush(msg => {
       const parsed = parsePushData(msg?.data);
+      // a message for the chat on screen shows in it: no banner over it
+      if (
+        parsed.type === PUSH_TYPES.CHAT_MESSAGE &&
+        chatOnScreen(parsed.bookingId)
+      ) {
+        return;
+      }
       emitBookingUpdate(parsed);
       const body = formatPushBody(msg?.body, parsed);
       if (!msg?.title && !body) {
