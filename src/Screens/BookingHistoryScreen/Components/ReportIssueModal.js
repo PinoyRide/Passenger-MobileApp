@@ -17,17 +17,23 @@ import {
 import { useTheme } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
-const ReportIssueModal = ({ visible, onClose, onSubmit, loading }) => {
+// `initialMessage`: what the box opens with, for the person to add to (the
+// rating page's "My trip ended 5 km from my drop-off.").
+const ReportIssueModal = ({
+  visible,
+  onClose,
+  onSubmit,
+  loading,
+  initialMessage = '',
+}) => {
   const { colors } = useTheme();
   const styles = getStyles({ colors });
   const [message, setMessage] = useState('');
 
-  // Clear message whenever modal is hidden (after success or close)
+  // Opens with initialMessage; cleared whenever hidden (after success or close)
   useEffect(() => {
-    if (!visible) {
-      setMessage('');
-    }
-  }, [visible]);
+    setMessage(visible ? initialMessage : '');
+  }, [visible, initialMessage]);
 
   const handleSend = () => {
     if (!message.trim()) {

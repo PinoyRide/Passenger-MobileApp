@@ -15,7 +15,11 @@ import { useDispatch } from 'react-redux';
 import Container from '@/Components/Container/Container';
 import ProfileAvatar from '@/Components/ProfileAvatar/ProfileAvatar';
 import { addRatedBookingId, clearBookingState } from '@/Redux/Slices/userSlice';
-import { AlertBox, AppButton, AppTextInput } from '@/Components';
+import AlertBox from '@/Components/AlertBox/AlertBox';
+import AppButton from '@/Components/AppButton/AppButton';
+import AppTextInput from '@/Components/AppTextInput/AppTextInput';
+import ReportIssueModal from '@/Screens/BookingHistoryScreen/Components/ReportIssueModal';
+import useAutoClose from '@/Hooks/useAutoClose';
 import { Constants } from '@/Utils';
 import usePostRequest from '@/Services/Api';
 import {
@@ -25,17 +29,18 @@ import {
 } from '@/Hooks/bookingTransform';
 import { getBookingVehicle } from '@/Hooks/bookingVehicle';
 import { formatPeso } from '@/Utils/formatPeso';
+import {
+  RATING_WORDS,
+  canSubmit,
+  endedAwayNotice,
+  placeName,
+  rideQuestion,
+} from '@/Utils/ratingPage';
 import { modern } from '@/Theme/modern';
 
 const SUPPORT_NUMBER = '09770368299';
 
-// What each number of stars means, said under them.
-const RATING_WORDS = ['', 'Bad', 'Poor', 'Okay', 'Good', 'Great'];
-
-const PAYMENT = {
-  cash: { label: 'Cash', icon: 'cash' },
-  wallet: { label: 'Wallet', icon: 'wallet-outline' },
-};
+const PAYMENT = { cash: 'Cash', wallet: 'Wallet' };
 
 const parseJson = value => {
   if (!value) {
@@ -51,23 +56,10 @@ const parseJson = value => {
   return value;
 };
 
-// A place's first part: "Makati Square".
-const placeName = text =>
-  String(text || '')
-    .split(',')[0]
-    .trim();
-
-// A distance as the apps say it: "450 m", "2.4 km".
-const distanceText = meters =>
-  meters < 1000
-    ? `${Math.round(meters)} m`
-    : `${(meters / 1000).toFixed(1).replace(/\.0$/, '')} km`;
-
-// After a trip: how it went with the rider, in the shared look (the owner,
-// 2026-11-23: "the how was your ride section also lacks styling, align the
-// styling or UI"). The rider, five stars and a word for them, an optional
-// compliment, then the trip: its route, fare and how it was paid, and where it
-// ended when that was away from the drop-off. Submit, or close to skip.
+// After a trip, as the owner's design draws it (2026-11-23, "make this"): the
+// rider, five empty stars, then the trip (route, fare, how it was paid, and a
+// notice with Report when it ended away from the drop-off). Submit rating
+// waits for a star; a compliment can be added once one is chosen. Close skips.
 const RatingScreen = () => {
   const look = modern(useTheme());
   const styles = getStyles(look);
@@ -81,6 +73,9 @@ const RatingScreen = () => {
   const firstName = rider?.ekyc_details?.first_name?.trim() || '';
   const lastName = rider?.ekyc_details?.last_name?.trim() || '';
   const vehicle = getBookingVehicle(booking, rider);
+  const vehicleLine = [vehicle?.label, vehicle?.plateNumber]
+    .filter(Boolean)
+    .join(' · ');
   const payment =
     PAYMENT[
       String(
@@ -88,15 +83,20 @@ const RatingScreen = () => {
       ).toLowerCase()
     ] || PAYMENT.cash;
   const fare = paymentDetails?.total_amount ?? booking.total_amount;
-  const endedAway =
-    booking.ended_away && Number.isFinite(Number(booking.end_distance_m));
+  const bookingId = paymentDetails?.booking_id ?? booking?.id;
+  const notice = endedAwayNotice(booking);
 
-  const [rating, setRating] = useState(5);
+  const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
-  const [alertMessage, setAlertMessage] = useState('');
-  const [showAlert, setShowAlert] = useState(false);
+  const [alert, setAlert] = useState(null);
+  const [showReport, setShowReport] = useState(false);
+  const [reported, setReported] = useState(false);
 
   const rateBooking = usePostRequest();
+  const reportIssue = usePostRequest();
+  const ready = canSubmit(rating, rateBooking.loading);
+
+  useAutoClose(!!alert, () => setAlert(null));
 
   // Remember this trip as rated/skipped, then drop the saved booking. Home
   // keeps the completed booking saved until here so a reload re-prompts.
@@ -118,10 +118,21 @@ const RatingScreen = () => {
   };
 
   const handleSubmit = () => {
+    if (!ready) {
+      return;
+    }
     rateBooking.makePostRequest(Constants.ENDPOINT.RATE_BOOKING, {
-      booking_id: paymentDetails?.booking_id ?? booking?.id,
+      booking_id: bookingId,
       rate: rating,
-      compliment: comment,
+      compliment: comment.trim(),
+    });
+  };
+
+  // The trip's end in booking_issues, where the fare is reviewed
+  const handleReport = message => {
+    reportIssue.makePostRequest(Constants.ENDPOINT.REPORT_AN_ISSUE, {
+      booking_id: bookingId,
+      issue: message,
     });
   };
 
@@ -142,8 +153,7 @@ const RatingScreen = () => {
 
   useEffect(() => {
     if (rateBooking.error) {
-      setAlertMessage(rateBooking.error);
-      setShowAlert(true);
+      setAlert({ title: 'Error', message: rateBooking.error });
       return;
     }
     if (rateBooking.response) {
@@ -152,17 +162,44 @@ const RatingScreen = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rateBooking.response, rateBooking.error]);
 
+  useEffect(() => {
+    if (reportIssue.error) {
+      setShowReport(false);
+      setAlert({ title: 'Error', message: reportIssue.error });
+      return;
+    }
+    if (reportIssue.response) {
+      setShowReport(false);
+      setReported(true);
+      setAlert({
+        title: 'Report sent',
+        message: 'Thank you. We will review the fare for this trip.',
+      });
+    }
+  }, [reportIssue.response, reportIssue.error]);
+
   return (
     <>
-      {alertMessage ? (
+      {alert ? (
         <AlertBox
-          title="Error"
-          message={alertMessage}
-          visible={showAlert}
-          setVisible={setShowAlert}
+          title={alert.title}
+          message={alert.message}
+          visible
+          setVisible={visible => {
+            if (!visible) {
+              setAlert(null);
+            }
+          }}
         />
       ) : null}
-      <Container style={styles.page} background={look.page}>
+      <ReportIssueModal
+        visible={showReport}
+        onClose={() => setShowReport(false)}
+        onSubmit={handleReport}
+        loading={reportIssue.loading}
+        initialMessage={notice?.report}
+      />
+      <Container style={styles.page} background={look.surface}>
         <View style={styles.top}>
           <Pressable
             onPress={goHome}
@@ -189,18 +226,14 @@ const RatingScreen = () => {
             <ProfileAvatar
               uri={getRiderPhoto(rider)}
               name={`${firstName} ${lastName}`.trim() || undefined}
-              size={72}
+              size={76}
             />
             <Text style={styles.title} accessibilityRole="header">
-              {firstName
-                ? `How was your ride with ${firstName}?`
-                : 'How was your ride?'}
+              {rideQuestion(firstName)}
             </Text>
-            {vehicle?.label || vehicle?.plateNumber ? (
+            {vehicleLine ? (
               <Text style={styles.vehicle} numberOfLines={1}>
-                {[vehicle?.label, vehicle?.plateNumber]
-                  .filter(Boolean)
-                  .join(' · ')}
+                {vehicleLine}
               </Text>
             ) : null}
           </View>
@@ -210,30 +243,36 @@ const RatingScreen = () => {
               <Pressable
                 key={star}
                 onPress={() => setRating(star)}
-                hitSlop={4}
+                hitSlop={6}
                 accessibilityRole="button"
                 accessibilityLabel={`${star} ${star === 1 ? 'star' : 'stars'}`}
                 accessibilityState={{ selected: rating === star }}>
                 <Icon
-                  name="star"
-                  size={42}
-                  color={rating >= star ? look.gold : look.tile}
+                  name={rating >= star ? 'star' : 'star-outline'}
+                  size={40}
+                  color={rating >= star ? look.gold : look.faint}
                 />
               </Pressable>
             ))}
           </View>
-          <Text style={styles.ratingWord}>{RATING_WORDS[rating]}</Text>
 
-          <AppTextInput
-            placeholder={
-              rating >= 4
-                ? 'Add a compliment (optional)'
-                : 'What could have been better? (optional)'
-            }
-            value={comment}
-            onChangeText={setComment}
-            inputMode="comment"
-          />
+          {rating > 0 ? (
+            <View style={styles.said}>
+              <Text style={styles.ratingWord}>{RATING_WORDS[rating]}</Text>
+              <AppTextInput
+                placeholder={
+                  rating >= 4
+                    ? 'Add a compliment (optional)'
+                    : 'What could have been better? (optional)'
+                }
+                value={comment}
+                onChangeText={setComment}
+                inputMode="comment"
+              />
+            </View>
+          ) : null}
+
+          <View style={styles.spacer} />
 
           <View style={styles.trip}>
             <View style={styles.routeLine}>
@@ -244,7 +283,7 @@ const RatingScreen = () => {
               <Icon
                 name="arrow-right"
                 size={15}
-                color={look.muted}
+                color={look.faint}
                 style={styles.routeArrow}
               />
               <View style={styles.square} />
@@ -261,35 +300,49 @@ const RatingScreen = () => {
             </View>
             <View style={styles.line}>
               <Text style={styles.lineLabel}>Paid with</Text>
-              <View style={styles.paid}>
-                <Icon name={payment.icon} size={18} color={look.inkSoft} />
-                <Text style={styles.lineValue}>{payment.label}</Text>
-              </View>
+              <Text style={styles.lineValue}>{payment}</Text>
             </View>
-            {endedAway ? (
-              <View style={styles.away}>
+            {notice ? (
+              <View style={styles.notice}>
                 <Icon
-                  name="map-marker-alert-outline"
+                  name="alert-circle-outline"
                   size={18}
-                  color={look.inkSoft}
+                  color={look.red}
+                  style={styles.noticeIcon}
                 />
-                <Text style={styles.awayText}>
-                  {`Your trip ended ${distanceText(
-                    Number(booking.end_distance_m),
-                  )} from your drop-off. Not right? Contact support.`}
-                </Text>
+                <View style={styles.flex}>
+                  <Text style={styles.noticeTitle}>{notice.title}</Text>
+                  <Text style={styles.noticeBody}>{notice.body}</Text>
+                </View>
+                {reported ? (
+                  <Text style={styles.reported}>Sent</Text>
+                ) : (
+                  <Pressable
+                    onPress={() => setShowReport(true)}
+                    hitSlop={10}
+                    style={styles.report}
+                    accessibilityRole="button"
+                    accessibilityLabel="Report where the trip ended">
+                    <Text style={styles.reportText}>Report</Text>
+                  </Pressable>
+                )}
               </View>
             ) : null}
           </View>
+
+          <View style={styles.spacer} />
         </ScrollView>
 
         <View style={styles.footer}>
           <AppButton
-            title="Submit"
+            title="Submit rating"
             onPress={handleSubmit}
-            disabled={rateBooking.loading}
+            disabled={!ready}
             isBold
+            noSpacing
             mode="contained"
+            textColor={ready ? undefined : look.faint}
+            featureStyle={ready ? undefined : styles.submitOff}
           />
           {booking?.id ? (
             <Pressable
@@ -310,9 +363,10 @@ export default RatingScreen;
 
 const getStyles = look =>
   StyleSheet.create({
+    // Container keeps 20 at each side, as the design does
     page: {
       flex: 1,
-      paddingHorizontal: 20,
+      paddingHorizontal: 0,
     },
     flex: {
       flex: 1,
@@ -331,20 +385,23 @@ const getStyles = look =>
       justifyContent: 'center',
     },
     support: {
-      fontFamily: 'Poppins Medium',
-      fontSize: 14,
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 15,
       lineHeight: 20,
       color: look.link,
     },
+    // the rider at the top, the trip low, Submit pinned under: the room
+    // between them shared out (spacer), scrolling only on a short screen
     body: {
-      paddingTop: 8,
-      paddingBottom: 16,
+      flexGrow: 1,
+      paddingTop: 4,
+      paddingBottom: 12,
     },
     rider: {
       alignItems: 'center',
     },
     title: {
-      marginTop: 14,
+      marginTop: 18,
       fontFamily: 'Poppins SemiBold',
       fontSize: 22,
       lineHeight: 28,
@@ -353,35 +410,38 @@ const getStyles = look =>
       textAlign: 'center',
     },
     vehicle: {
-      marginTop: 2,
+      marginTop: 4,
       fontFamily: 'Poppins Regular',
       fontSize: 13,
       lineHeight: 18,
       color: look.muted,
     },
     stars: {
-      marginTop: 22,
+      marginTop: 26,
       flexDirection: 'row',
       justifyContent: 'center',
-      gap: 6,
+      gap: 16,
+    },
+    said: {
+      marginTop: 8,
     },
     ratingWord: {
-      marginTop: 4,
-      marginBottom: 18,
+      marginBottom: 10,
       fontFamily: 'Poppins Medium',
       fontSize: 15,
       lineHeight: 20,
       color: look.inkSoft,
       textAlign: 'center',
     },
+    spacer: {
+      flex: 1,
+      minHeight: 24,
+    },
     trip: {
-      marginTop: 18,
       padding: 16,
-      gap: 10,
+      gap: 12,
       borderRadius: look.radiusCard,
-      backgroundColor: look.card,
-      borderWidth: 1,
-      borderColor: look.hairline,
+      backgroundColor: look.soft,
     },
     routeLine: {
       flexDirection: 'row',
@@ -402,13 +462,13 @@ const getStyles = look =>
     routeName: {
       flexShrink: 1,
       marginLeft: 8,
-      fontFamily: 'Poppins Medium',
-      fontSize: 13,
-      lineHeight: 18,
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 14,
+      lineHeight: 20,
       color: look.ink,
     },
     routeArrow: {
-      marginHorizontal: 8,
+      marginHorizontal: 10,
     },
     hairline: {
       height: 1,
@@ -423,44 +483,76 @@ const getStyles = look =>
       fontFamily: 'Poppins Regular',
       fontSize: 14,
       lineHeight: 20,
-      color: look.muted,
+      color: look.inkSoft,
     },
     fare: {
       fontFamily: 'Poppins SemiBold',
-      fontSize: 18,
-      lineHeight: 24,
-      letterSpacing: -0.3,
+      fontSize: 16,
+      lineHeight: 22,
+      letterSpacing: -0.2,
       color: look.ink,
     },
-    paid: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-    },
     lineValue: {
-      fontFamily: 'Poppins Medium',
+      fontFamily: 'Poppins SemiBold',
       fontSize: 14,
       lineHeight: 20,
       color: look.ink,
     },
-    away: {
+    notice: {
       flexDirection: 'row',
-      gap: 8,
-      paddingTop: 2,
+      alignItems: 'center',
+      gap: 10,
+      marginTop: 2,
+      paddingVertical: 12,
+      paddingHorizontal: 14,
+      borderRadius: look.radiusTile - 2,
+      backgroundColor: look.redSoft,
     },
-    awayText: {
-      flex: 1,
-      fontFamily: 'Poppins Regular',
+    noticeIcon: {
+      alignSelf: 'flex-start',
+      marginTop: 1,
+    },
+    noticeTitle: {
+      fontFamily: 'Poppins SemiBold',
       fontSize: 13,
+      lineHeight: 19,
+      color: look.red,
+    },
+    noticeBody: {
+      marginTop: 2,
+      fontFamily: 'Poppins Regular',
+      fontSize: 12,
       lineHeight: 18,
       color: look.inkSoft,
     },
+    report: {
+      paddingLeft: 4,
+    },
+    reportText: {
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 13,
+      lineHeight: 19,
+      color: look.red,
+    },
+    reported: {
+      paddingLeft: 4,
+      fontFamily: 'Poppins Medium',
+      fontSize: 13,
+      lineHeight: 19,
+      color: look.muted,
+    },
     footer: {
       paddingTop: 8,
-      paddingBottom: 8,
+      paddingBottom: 4,
+    },
+    // the design's quiet button until a star is chosen
+    submitOff: {
+      opacity: 1,
+      backgroundColor: look.tile,
     },
     details: {
       minHeight: 44,
+      marginTop: 4,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -468,6 +560,6 @@ const getStyles = look =>
       fontFamily: 'Poppins Medium',
       fontSize: 14,
       lineHeight: 20,
-      color: look.inkSoft,
+      color: look.muted,
     },
   });
