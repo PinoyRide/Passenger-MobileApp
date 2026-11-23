@@ -37,16 +37,22 @@ test('every place that states the version agrees with package.json', () => {
   );
 });
 
+// The iOS app is made from app.json (npx expo prebuild --platform ios), which
+// writes the version and ios.buildNumber into its Info.plist.
 test('iOS has the same version and the same build number as Android', () => {
-  const pbxproj = read('ios/pinoyride.xcodeproj/project.pbxproj');
-  assert.deepEqual(all(pbxproj, /MARKETING_VERSION = ([^;]+);/g), [
-    version,
-    version,
-  ]);
-  assert.deepEqual(all(pbxproj, /CURRENT_PROJECT_VERSION = ([^;]+);/g), [
+  assert.equal(
+    JSON.parse(read('app.json')).expo.ios.buildNumber,
     String(build),
-    String(build),
-  ]);
+  );
+  const plist = read('ios/PinoyRide/Info.plist');
+  assert.deepEqual(
+    all(plist, /<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)</g),
+    [version],
+  );
+  assert.deepEqual(
+    all(plist, /<key>CFBundleVersion<\/key>\s*<string>([^<]+)</g),
+    [String(build)],
+  );
 });
 
 test('the build number the app shows is the one Android has', () => {

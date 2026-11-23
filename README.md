@@ -16,7 +16,7 @@ npx react-native run-android --variant=release
 
 # ios
 
-npx react-native run-ios --configuration Release
+See IOS below.
 
 # Fix android build for AAPT error
 
@@ -86,14 +86,36 @@ installed again.
   screen where something can be half done goes in its list) and the restart itself in `AppRestart.kt`, which
   stops the app and starts it again from cold. It never reloads in place (`Updates.reloadAsync`):
   `selfUpdate.js` says why. The backend's README ("App updates") describes its side.
-- iOS is not set up for it: `ios/pinoyride/Supporting/Expo.plist` keeps it off.
+- iOS is not set up for it yet: `ios/PinoyRide/Supporting/Expo.plist` keeps it off.
 
 ### APP ICON
 
 Gold, with the riders of the logo in black. The Driver app is the other way round (black, riders in gold), so
 the two are told apart at a glance.
 
-Every icon file (`android/app/src/main/res/mipmap-*`, and the iOS `AppIcon` set) is made from one drawing by
-`PRTC-WBM/design/app-icons/make-icons.js`; nothing in those folders is edited by hand. The 512 px picture for a
+Every icon file (`android/app/src/main/res/mipmap-*`, and `assets/ios-icon-1024.png`, which the iOS project takes
+its icon from) is made by `PRTC-WBM/design/app-icons/new-logo-icons.js`; none of them is edited by hand. The 512 px picture for a
 store listing is written to `PRTC-WBM/design/app-icons/store/`. The icon is part of the native app: changing it
 needs a new version and a new APK.
+
+### IOS
+
+The iOS project (`ios/`) is made by Expo from `app.json` and the plugins it lists, and is not edited by hand:
+the bundle ID (`com.pinoyride.customer`), the version and build number, the permissions and the words the app asks for
+them with, the icon (`assets/ios-icon-1024.png`), the Maps key, the iOS version (15.5, which the face check's
+ML Kit needs) and React Native's legacy architecture, as the Android app has (`ios.newArchEnabled`). To change
+any of it, change `app.json` or a plugin, then make the folder again:
+
+```
+CI=1 npx expo prebuild --platform ios --clean --no-install
+cd ios && pod install
+```
+
+Commit what it leaves in `ios/` (`ios/Pods/` stays out). The plugins in `plugins/` do what Expo's own do not,
+and are the same file in both apps: `withFirebaseConfigure.js` starts Firebase, and
+`withPodsForXcode27.js` makes the libraries build with Xcode 27 (each at least the app's iOS version, and
+fmt as C++17).
+
+Not ready yet: an Apple developer account (signing, TestFlight), Firebase's iOS app for the new bundle ID
+(`GoogleService-Info.plist` still names `xyz.pinoyride.customer`, so push notifications do not reach an iPhone), and
+self-updates. ML Kit has no simulator build for Apple-silicon Macs: try the app on an iPhone.

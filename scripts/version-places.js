@@ -36,10 +36,20 @@ function places(version, code) {
           ),
       optional: true,
     },
+    // app.json is also what the iOS project is made from (npx expo prebuild
+    // --platform ios): its version and ios.buildNumber.
     {
       file: 'app.json',
-      replace: content =>
-        content.replace(/("version"\s*:\s*")[\d.]+(")/, `$1${version}$2`),
+      replace: content => {
+        let out = content.replace(
+          /("version"\s*:\s*")[\d.]+(")/,
+          `$1${version}$2`,
+        );
+        if (setCode) {
+          out = out.replace(/("buildNumber"\s*:\s*")\d+(")/, `$1${code}$2`);
+        }
+        return out;
+      },
     },
     {
       file: 'android/gradle.properties',
@@ -59,16 +69,20 @@ function places(version, code) {
         return out;
       },
     },
-    // iOS keeps the version and the build number once per build configuration.
+    // The iOS app (Expo 54, made by prebuild) states them in its Info.plist,
+    // from app.json; the project file's own numbers are unused placeholders.
     {
-      file: 'ios/pinoyride.xcodeproj/project.pbxproj',
+      file: 'ios/PinoyRide/Info.plist',
       replace: content => {
         let out = content.replace(
-          /(MARKETING_VERSION = )[\d.]+;/g,
-          `$1${version};`,
+          /(<key>CFBundleShortVersionString<\/key>\s*<string>)[\d.]+(<\/string>)/,
+          `$1${version}$2`,
         );
         if (setCode) {
-          out = out.replace(/(CURRENT_PROJECT_VERSION = )\d+;/g, `$1${code};`);
+          out = out.replace(
+            /(<key>CFBundleVersion<\/key>\s*<string>)\d+(<\/string>)/,
+            `$1${code}$2`,
+          );
         }
         return out;
       },

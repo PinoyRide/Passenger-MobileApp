@@ -62,6 +62,9 @@ const SHARED = [
   'src/Services/useUpdateWhenReady.js',
   'src/Utils/__tests__/updateWhenReady.test.mjs',
   'src/Utils/__tests__/sharedUi.test.mjs',
+  // the iOS project's config plugins (npx expo prebuild --platform ios)
+  'plugins/withFirebaseConfigure.js',
+  'plugins/withPodsForXcode27.js',
 ];
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');

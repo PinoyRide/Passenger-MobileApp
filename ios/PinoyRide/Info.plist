@@ -19,7 +19,7 @@
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
-	<string>$(MARKETING_VERSION)</string>
+	<string>2.0.77</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
 	<key>CFBundleURLTypes</key>
@@ -29,8 +29,6 @@
 			<array>
 				<string>pinoyride</string>
 				<string>com.pinoyride.customer</string>
-				<string>com.googleusercontent.apps.795310358519-iquibpbcn5uhrhja0nb8nsdagq38c76l</string>
-				<string>fb3041042182736964</string>
 			</array>
 		</dict>
 		<dict>
@@ -41,15 +39,11 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>FacebookAppID</key>
-	<string>3041042182736964</string>
-	<key>FacebookDisplayName</key>
-	<string>pinoy-ride</string>
+	<string>85</string>
 	<key>GMSApiKey</key>
-	<string>AIzaSyCy-3C367WAU4SJZuLQxXb8z8p4rNI94Qo</string>
-	<key>GMSPlacesApiKey</key>
-	<string>AIzaSyCy-3C367WAU4SJZuLQxXb8z8p4rNI94Qo</string>
+	<string>AIzaSyAlpSoXuJzvo8uR1qbdtbbbk1sx4MHKIQk</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>gcash</string>
@@ -68,22 +62,18 @@
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
-		<true/>
+		<false/>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
 	<key>NSCameraUsageDescription</key>
-	<string>We need access to your camera for eKYC verification and identity confirmation.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Allow $(PRODUCT_NAME) to access your location</string>
-	<key>NSLocationAlwaysUsageDescription</key>
-	<string>Allow $(PRODUCT_NAME) to access your location</string>
+	<string>Pinoy Ride uses the camera to take your profile photo and a photo of your ID.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Allow $(PRODUCT_NAME) to access your location</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>We need access to your photo library to save photos from the app.</string>
+	<string>Pinoy Ride uses your location to set your pick-up point and to show riders near you.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>We need access to your photo library so you can upload profile and verification photos.</string>
+	<string>Pinoy Ride uses your photos when you choose a picture of your ID or send one in a chat.</string>
+	<key>RCTNewArchEnabled</key>
+	<false/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
@@ -101,10 +91,9 @@
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
-	</array>
-	<key>UISupportedInterfaceOrientations~ipad</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UIUserInterfaceStyle</key>
 	<string>Light</string>
