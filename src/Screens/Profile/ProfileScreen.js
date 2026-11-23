@@ -46,17 +46,11 @@ const ProfileScreen = () => {
       .join(' ');
   };
 
-  const formatAddress = address => {
-    if (!address) {
-      return 'N/A';
-    }
-    // Remove leading dash/hyphen if present
-    return address.startsWith('-') ? address.slice(1).trim() : address.trim();
-  };
-
-  // "+63 966 852 7271" (Utils/personName.js, as the Account page shows it)
-  const formatMobile = mobile => displayMobile(mobile) || 'N/A';
-
+  // What the account holds, as the Account page and the edit form read it:
+  // the number it signs in with and the email given at registration or in
+  // Edit (the old TOP PH identity check's email, gender and address never
+  // reach the app, so those rows only ever said N/A; the owner, 2026-11-23:
+  // "check why it is N/A even when we have it").
   const fields = [
     {
       label: 'Name',
@@ -71,40 +65,14 @@ const ProfileScreen = () => {
     },
     {
       label: 'Mobile Number',
-      value: formatMobile(ekyc?.mobile_no || ekyc?.pretty_mobile_no),
+      // "+63 966 852 7271" (Utils/personName.js)
+      value:
+        displayMobile(userInfo?.mobile || ekyc?.mobile_no) || 'Not set yet',
     },
     {
       label: 'Email Address',
-      value: ekyc?.email_address || 'N/A',
+      value: userInfo?.email?.trim() || 'Not added yet',
     },
-    // {
-    //   label: 'Date of Birth',
-    //   value: ekyc?.date_of_birth || 'N/A',
-    // },
-    // {
-    //   label: 'Place of Birth',
-    //   value: ekyc?.place_of_birth || 'N/A',
-    // },
-    // {
-    //   label: 'Nationality',
-    //   value: ekyc?.nationality || 'N/A',
-    // },
-    {
-      label: 'Gender',
-      value: ekyc?.gender ? toTitleCase(ekyc.gender) : 'N/A',
-    },
-    {
-      label: 'Address',
-      value: formatAddress(ekyc?.current_address),
-    },
-    // {
-    //   label: 'Nature of Work',
-    //   value: ekyc?.nature_of_work || 'N/A',
-    // },
-    // {
-    //   label: 'Source of Fund',
-    //   value: ekyc?.source_of_fund || 'N/A',
-    // },
   ];
 
   return (
