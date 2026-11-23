@@ -1203,13 +1203,6 @@ const HomeScreen = () => {
   };
 
   useEffect(() => {
-    // A request starting clears its last error, which re-ran this with the
-    // last answer as if it were new (a cancelled booking came back, a new one
-    // was wiped): wait for this request's own answer (overnight review
-    // 2026-11-23).
-    if (checkActiveBooking.loading) {
-      return;
-    }
     handleRestoredBooking();
   }, [checkActiveBooking.response, checkActiveBooking.error]);
 
@@ -1581,13 +1574,6 @@ const HomeScreen = () => {
   };
 
   useEffect(() => {
-    // A request starting clears its last error, which re-ran this with the
-    // last answer as if it were new (a cancelled booking came back, a new one
-    // was wiped): wait for this request's own answer (overnight review
-    // 2026-11-23).
-    if (createBooking.loading) {
-      return;
-    }
     handleCreateBookingRequest();
   }, [createBooking.response, createBooking.error]);
 
@@ -1763,13 +1749,6 @@ const HomeScreen = () => {
   };
 
   useEffect(() => {
-    // A request starting clears its last error, which re-ran this with the
-    // last answer as if it were new (a cancelled booking came back, a new one
-    // was wiped): wait for this request's own answer (overnight review
-    // 2026-11-23).
-    if (getBookingDetails.loading) {
-      return;
-    }
     handleGetBookingDetails();
   }, [getBookingDetails.response, getBookingDetails.error]);
 
@@ -2032,13 +2011,6 @@ const HomeScreen = () => {
   };
 
   useEffect(() => {
-    // A request starting clears its last error, which re-ran this with the
-    // last answer as if it were new (a cancelled booking came back, a new one
-    // was wiped): wait for this request's own answer (overnight review
-    // 2026-11-23).
-    if (updateBookingStatus.loading) {
-      return;
-    }
     handleUpdateBookingStatus();
   }, [updateBookingStatus.response, updateBookingStatus.error]);
 
