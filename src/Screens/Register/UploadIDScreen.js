@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   ActionSheetIOS,
-  Alert,
   Image,
   Platform,
   ScrollView,
@@ -16,6 +15,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { AlertBox, AppButton } from '@/Components';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { withCameraPermission } from '@/Utils/Permissions';
+import appAlert from '@/Utils/appAlert';
 
 const TOTAL_STEPS = 5;
 const CURRENT_STEP = 2;
@@ -67,7 +67,7 @@ const UploadIDScreen = () => {
       );
     } else {
       // Android — use Alert as action sheet
-      Alert.alert('Upload Photo', 'Choose an option', [
+      appAlert('Upload Photo', 'Choose an option', [
         { text: 'Cancel', style: 'cancel' },
         { text: '📷  Take Photo', onPress: () => openCamera(onPick) },
         { text: '🖼️  Choose from Gallery', onPress: () => openGallery(onPick) },

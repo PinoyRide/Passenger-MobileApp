@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Alert,
   Image,
   Keyboard,
   ScrollView,
@@ -23,6 +22,7 @@ import {
   registrationErrors,
   registrationFields,
 } from '@/Utils/registerForm';
+import appAlert from '@/Utils/appAlert';
 
 // Register: the passenger's details first, the mobile number last, every field
 // required (the owner, 2026-11-22). Everything that could stop the
@@ -76,7 +76,7 @@ const RegisterFormScreen = () => {
     );
 
     if (offline) {
-      Alert.alert(
+      appAlert(
         'No Internet Connection',
         'Registering needs an internet connection. Please reconnect and try again.',
       );

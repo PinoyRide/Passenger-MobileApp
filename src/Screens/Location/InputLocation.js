@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Alert,
   Keyboard,
   KeyboardAvoidingView,
   Pressable,
@@ -40,6 +39,7 @@ import {
   titleOf as recentTitle,
 } from '@/Utils/recentPlaces';
 import { modern } from '@/Theme/modern';
+import appAlert from '@/Utils/appAlert';
 
 // Manila, while neither point is known.
 const DEFAULT_CENTER = { lat: 14.5995, long: 120.9842 };
@@ -452,7 +452,7 @@ const InputLocation = () => {
   };
 
   const handleDeleteSavedPlace = placeId => {
-    Alert.alert(
+    appAlert(
       'Delete Saved Place',
       'Are you sure you want to delete this saved place?',
       [
@@ -466,6 +466,7 @@ const InputLocation = () => {
           onPress: () => dispatch(removeSavedPlace(placeId)),
         },
       ],
+      { icon: 'trash-can-outline' },
     );
   };
 

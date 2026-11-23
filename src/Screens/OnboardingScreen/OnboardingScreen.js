@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Alert,
   AppState,
   Dimensions,
   FlatList,
@@ -23,6 +22,7 @@ import {
   requestLocationPermission,
 } from '@/Utils/Permissions';
 import { openSettings } from 'react-native-permissions';
+import appAlert from '@/Utils/appAlert';
 
 const { width, height } = Dimensions.get('window');
 
@@ -97,7 +97,7 @@ const OnboardingScreen = () => {
     if (result === 'granted') {
       setShowLocationAlert(false);
     } else if (result === 'blocked') {
-      Alert.alert(
+      appAlert(
         'Location Access Blocked',
         'Please enable location access in Settings to use the app.',
         [
@@ -108,6 +108,7 @@ const OnboardingScreen = () => {
           },
           { text: 'Open Settings', onPress: () => openSettings() },
         ],
+        { icon: 'map-marker-off-outline' },
       );
     } else {
       // User denied, keep alert showing

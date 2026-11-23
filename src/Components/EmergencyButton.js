@@ -1,16 +1,11 @@
 import React from 'react';
-import {
-  Alert,
-  Platform,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-} from 'react-native';
+import { Platform, StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { Icon } from 'react-native-paper';
 import {
   EMERGENCY_NUMBER,
   dialEmergency,
 } from '@/Components/EmergencyCall/emergencyCall';
+import appAlert from '@/Utils/appAlert';
 
 export { EMERGENCY_NUMBER };
 
@@ -28,14 +23,19 @@ const EmergencyButton = ({ style }) => {
       }
       return;
     }
-    Alert.alert(CONFIRM_TITLE, CONFIRM_MESSAGE, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: `Call ${EMERGENCY_NUMBER}`,
-        style: 'destructive',
-        onPress: dialEmergency,
-      },
-    ]);
+    appAlert(
+      CONFIRM_TITLE,
+      CONFIRM_MESSAGE,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: `Call ${EMERGENCY_NUMBER}`,
+          style: 'destructive',
+          onPress: dialEmergency,
+        },
+      ],
+      { icon: 'phone' },
+    );
   };
 
   return (

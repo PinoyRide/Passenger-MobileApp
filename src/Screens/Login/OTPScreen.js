@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
   Image,
   Keyboard,
   ScrollView,
@@ -27,6 +26,7 @@ import {
   setSessionToken,
   setUserInfo,
 } from '@/Redux/Slices/userSlice';
+import appAlert from '@/Utils/appAlert';
 
 // The backend's message for an unregistered number ("Customer with this mobile number does not exist").
 const NOT_REGISTERED_ERROR_PATTERN = /does not exist/i;
@@ -80,7 +80,7 @@ const OTPScreen = () => {
   useEffect(() => {
     if (getOtpCode.error) {
       if (NOT_REGISTERED_ERROR_PATTERN.test(getOtpCode.error)) {
-        Alert.alert(
+        appAlert(
           'Account Not Found',
           'No account was found for this mobile number. Please check the number or sign up.',
           [

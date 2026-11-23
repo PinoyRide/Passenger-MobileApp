@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Keyboard,
   ScrollView,
@@ -28,6 +27,7 @@ import {
   clearUserInfo,
   selectUserInfo,
 } from '@/Redux/Slices/userSlice';
+import appAlert from '@/Utils/appAlert';
 
 // Deleting one's own account, as strictly as the Admin Portal deletes one
 // (the owner, 2026-11-22). First what stands in the way (a booking not
@@ -61,7 +61,7 @@ const DeleteAccountScreen = () => {
         {},
       );
       if (error || !response?.data) {
-        Alert.alert('Unable to Continue', error || 'Please try again.');
+        appAlert('Unable to Continue', error || 'Please try again.');
         navigation.goBack();
         return;
       }
@@ -76,7 +76,7 @@ const DeleteAccountScreen = () => {
       { channel: how },
     );
     if (error || !response?.data) {
-      Alert.alert('Code Not Sent', error || 'Please try again.');
+      appAlert('Code Not Sent', error || 'Please try again.');
       return;
     }
     setSentBy(how);
@@ -94,7 +94,7 @@ const DeleteAccountScreen = () => {
       { code: code.trim(), confirm: confirm.trim(), reason: reason.trim() },
     );
     if (error || !response) {
-      Alert.alert('Account Not Deleted', error || 'Please try again.');
+      appAlert('Account Not Deleted', error || 'Please try again.');
       return;
     }
     await deletePushToken();
@@ -104,7 +104,7 @@ const DeleteAccountScreen = () => {
     navigation.dispatch(
       CommonActions.reset({ index: 0, routes: [{ name: 'LandingScreen' }] }),
     );
-    Alert.alert('Account Deleted', 'Your Pinoy Ride account has been deleted.');
+    appAlert('Account Deleted', 'Your Pinoy Ride account has been deleted.');
   };
 
   const sentTo =

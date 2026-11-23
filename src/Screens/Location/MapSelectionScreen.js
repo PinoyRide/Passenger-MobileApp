@@ -1,7 +1,6 @@
 import { AppButton, AppMap } from '@/Components';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
   Dimensions,
   Image,
   ScrollView,
@@ -18,6 +17,7 @@ import { fetchWithTimeout } from '@/Utils/Network';
 import { useLocation } from '@/Hooks/useLocation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { bottomSpace } from '@/Utils/bottomSpace';
+import appAlert from '@/Utils/appAlert';
 
 const MapSelectionScreen = () => {
   // The navigation bar may cover the bottom of the screen: keep the bottom content clear of it
@@ -51,7 +51,7 @@ const MapSelectionScreen = () => {
   // Check permission on mount
   useEffect(() => {
     if (permissionStatus === 'blocked') {
-      Alert.alert(
+      appAlert(
         'Location Access Blocked',
         'Please enable location in Settings to select locations on the map.',
         [
@@ -62,12 +62,14 @@ const MapSelectionScreen = () => {
           },
           { text: 'Open Settings', onPress: () => openSettings() },
         ],
+        { icon: 'map-marker-off-outline' },
       );
     } else if (permissionStatus === 'denied') {
-      Alert.alert(
+      appAlert(
         'Location Required',
         'Location access helps you select locations more easily.',
         [{ text: 'OK' }],
+        { icon: 'map-marker-off-outline' },
       );
     }
   }, [permissionStatus]);

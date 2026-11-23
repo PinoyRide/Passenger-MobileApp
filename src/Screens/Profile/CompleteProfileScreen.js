@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
   Image,
   ScrollView,
   StyleSheet,
@@ -20,6 +19,7 @@ import { toStoredUser } from '@/Utils/customerMapper';
 import { withCameraPermission } from '@/Utils/Permissions';
 import { selectUserInfo, setUserInfo } from '@/Redux/Slices/userSlice';
 import { modern } from '@/Theme/modern';
+import appAlert from '@/Utils/appAlert';
 
 // Name: what a passenger must have before booking (the backend refuses bookings otherwise).
 // Shown right after registering, and it can be skipped for now (the owner, 2026-11-22):
@@ -117,7 +117,7 @@ const CompleteProfileScreen = () => {
       },
     );
     if (error || !response) {
-      Alert.alert('Unable to Save', error || 'Please try again.');
+      appAlert('Unable to Save', error || 'Please try again.');
       return;
     }
 
@@ -136,7 +136,7 @@ const CompleteProfileScreen = () => {
       );
       if (upload.error || !upload.response) {
         dispatch(setUserInfo(toStoredUser(latest)));
-        Alert.alert('Selfie Not Saved', upload.error || 'Please try again.');
+        appAlert('Selfie Not Saved', upload.error || 'Please try again.');
         return;
       }
       latest = upload.response.data;

@@ -50,6 +50,7 @@ import {
 import { Text } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 import { AppTransactionComplete } from '@/Components';
+import AlertHost from '@/Components/AlertBox/AlertHost';
 import { useAppTheme } from '@/Contexts/ThemeContext';
 import { navigationRef } from '@/Utils/NavigationService';
 
@@ -297,6 +298,8 @@ const ApplicationNavigator = () => {
             />
           </Stack.Navigator>
         </NavigationContainer>
+        {/* every Utils/appAlert question, in the look (the owner, 2026-11-23) */}
+        <AlertHost />
       </PaperProvider>
     </SafeAreaProvider>
   );

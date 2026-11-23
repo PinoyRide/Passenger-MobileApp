@@ -1,11 +1,4 @@
-import {
-  Alert,
-  Image,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import React, { useState } from 'react';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme } from 'react-native-paper';
@@ -18,6 +11,7 @@ import { Constants } from '@/Utils';
 import { consentBody, signedInRoutes } from '@/Utils/consent';
 import { toStoredUser } from '@/Utils/customerMapper';
 import { selectUserInfo, setUserInfo } from '@/Redux/Slices/userSlice';
+import appAlert from '@/Utils/appAlert';
 
 const GeneralTermsScreen = () => {
   const { colors } = useTheme();
@@ -53,7 +47,7 @@ const GeneralTermsScreen = () => {
       consent,
     );
     if (error || !response?.data) {
-      Alert.alert('Unable to Continue', error || 'Please try again.');
+      appAlert('Unable to Continue', error || 'Please try again.');
       return;
     }
     const user = toStoredUser(response.data);

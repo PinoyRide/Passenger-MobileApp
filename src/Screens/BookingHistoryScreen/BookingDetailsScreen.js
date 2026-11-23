@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
   FlatList,
   Image,
   Linking,
@@ -36,6 +35,7 @@ import {
   transformBooking,
 } from '@/Hooks/bookingTransform';
 import { cancelPreviewOutcome } from '@/Utils/cancellationDialog';
+import appAlert from '@/Utils/appAlert';
 
 const BookingDetailsScreen = () => {
   const { colors } = useTheme();
@@ -154,7 +154,7 @@ const BookingDetailsScreen = () => {
   const handleCancelAdvance = async () => {
     const online = await checkIsOnline();
     if (!online) {
-      Alert.alert(
+      appAlert(
         'No Internet Connection',
         'Please check your connection and try again.',
       );
@@ -183,7 +183,7 @@ const BookingDetailsScreen = () => {
   const confirmCancelAdvance = async () => {
     const online = await checkIsOnline();
     if (!online) {
-      Alert.alert(
+      appAlert(
         'No Internet Connection',
         'Please check your connection and try again.',
       );

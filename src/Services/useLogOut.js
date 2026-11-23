@@ -1,4 +1,4 @@
-import { Alert, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import { CommonActions, useNavigation } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import useApiRequest from '@/Services/ApiV2';
@@ -13,6 +13,7 @@ import {
   selectBookingStatus,
   selectUserInfo,
 } from '@/Redux/Slices/userSlice';
+import appAlert from '@/Utils/appAlert';
 
 // Logging out, from Settings and from the bottom of the Account page (the
 // owner, 2026-11-22): refused while a booking is under way, asked to confirm,
@@ -28,7 +29,7 @@ const useLogOut = () => {
 
   const logOut = async () => {
     if (!(await checkIsOnline())) {
-      Alert.alert(
+      appAlert(
         'No Internet Connection',
         'Logging out requires an internet connection. Please reconnect and try again.',
       );
@@ -39,7 +40,7 @@ const useLogOut = () => {
       AppConstants.API.CUSTOMER_LOGOUT(userInfo.id),
     );
     if (error || !response || response?.code !== 200) {
-      Alert.alert(
+      appAlert(
         offline ? 'No Internet Connection' : 'Ongoing Booking',
         error || response?.message || 'Failed to log out. Please try again.',
       );
@@ -57,7 +58,7 @@ const useLogOut = () => {
 
   const confirmLogOut = async () => {
     if (activeBooking?.id && [1, 2].includes(Number(bookingStatus))) {
-      Alert.alert(
+      appAlert(
         'Ongoing Booking',
         'You have an ongoing booking. Please complete your current booking first.',
       );
@@ -70,10 +71,15 @@ const useLogOut = () => {
       }
       return;
     }
-    Alert.alert('Log Out', 'Are you sure you want to log out?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Log Out', style: 'destructive', onPress: logOut },
-    ]);
+    appAlert(
+      'Log Out',
+      'Are you sure you want to log out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Log Out', style: 'destructive', onPress: logOut },
+      ],
+      { icon: 'logout' },
+    );
   };
 
   return { confirmLogOut, loggingOut };

@@ -1,7 +1,6 @@
 import { AppButton, AppMap } from '@/Components';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
   Dimensions,
   Image,
   Keyboard,
@@ -24,6 +23,7 @@ import { addSavedPlace, updateSavedPlace } from '@/Redux/Slices/userSlice';
 import { useLocation } from '@/Hooks/useLocation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { bottomSpace } from '@/Utils/bottomSpace';
+import appAlert from '@/Utils/appAlert';
 
 const getIconForType = type => {
   switch (type) {
@@ -108,7 +108,7 @@ const SaveLocationScreen = () => {
   // Check permission on mount
   useEffect(() => {
     if (permissionStatus === 'blocked') {
-      Alert.alert(
+      appAlert(
         'Location Access Blocked',
         'Please enable location in Settings to save locations.',
         [
@@ -119,12 +119,14 @@ const SaveLocationScreen = () => {
           },
           { text: 'Open Settings', onPress: () => openSettings() },
         ],
+        { icon: 'map-marker-off-outline' },
       );
     } else if (permissionStatus === 'denied') {
-      Alert.alert(
+      appAlert(
         'Location Required',
         'Location access helps you save locations more easily.',
         [{ text: 'OK' }],
+        { icon: 'map-marker-off-outline' },
       );
     }
   }, [permissionStatus]);
@@ -156,7 +158,7 @@ const SaveLocationScreen = () => {
   const handleSave = () => {
     // Validate label
     if (!label.trim()) {
-      Alert.alert(
+      appAlert(
         'Label Required',
         'Please enter a label for this location (e.g., Home, Office, Gym).',
         [{ text: 'OK' }],
@@ -166,10 +168,11 @@ const SaveLocationScreen = () => {
 
     // ✅ Validate that user actually selected a location on the map
     if (!selectedLocation || !selectedAddress) {
-      Alert.alert(
+      appAlert(
         'Location Required',
         'Please tap on the map to select a location before saving.',
         [{ text: 'OK' }],
+        { icon: 'map-marker-off-outline' },
       );
       return;
     }
@@ -186,7 +189,7 @@ const SaveLocationScreen = () => {
       );
 
       if (isCoordinates) {
-        Alert.alert(
+        appAlert(
           'Invalid Location',
           'Unable to get address for this location. Please try selecting a different location or check your internet connection.',
           [{ text: 'OK' }],

@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Alert,
   BackHandler,
   DeviceEventEmitter,
   Dimensions,
@@ -139,6 +138,7 @@ import useRiderEtaPoll from '@/Hooks/useRiderEtaPoll';
 import useRiderLocationPoll from '@/Hooks/useRiderLocationPoll';
 import useAdvanceBookingDiscovery from '@/Hooks/useAdvanceBookingDiscovery';
 import useParkedAdvanceBookingPoll from '@/Hooks/useParkedAdvanceBookingPoll';
+import appAlert from '@/Utils/appAlert';
 
 // Matches backend ADVANCE_MAX_OPEN_PER_CUSTOMER.
 const ADVANCE_MAX_OPEN = 3;
@@ -798,19 +798,21 @@ const HomeScreen = () => {
       if (permission === 'granted') {
         startWatching();
       } else if (permission === 'blocked') {
-        Alert.alert(
+        appAlert(
           'Location Access Blocked',
           'Please enable location in Settings to use the app.',
           [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Open Settings', onPress: () => openSettings() },
           ],
+          { icon: 'map-marker-off-outline' },
         );
       } else if (permission === 'denied') {
-        Alert.alert(
+        appAlert(
           'Location Required',
           'This app needs location access to show your position on the map.',
           [{ text: 'OK' }],
+          { icon: 'map-marker-off-outline' },
         );
       }
     });
@@ -1269,7 +1271,7 @@ const HomeScreen = () => {
     const online = await checkIsOnline();
     if (!online) {
       settle();
-      Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
+      appAlert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
       return;
     }
 
@@ -1277,10 +1279,11 @@ const HomeScreen = () => {
 
     if (permission !== 'granted') {
       settle();
-      Alert.alert(
+      appAlert(
         'Location Required',
         'Location access is required to inquire booking.',
         [{ text: 'OK' }],
+        { icon: 'map-marker-off-outline' },
       );
       return;
     }
@@ -1423,7 +1426,7 @@ const HomeScreen = () => {
     if (profileComplete) {
       return true;
     }
-    Alert.alert(
+    appAlert(
       'Complete Your Profile',
       'Add your first name and last name before booking.',
       [
@@ -1466,7 +1469,7 @@ const HomeScreen = () => {
     const online = await checkIsOnline();
     if (!online) {
       bookingInFlightRef.current = false;
-      Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
+      appAlert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
       return;
     }
 
@@ -1474,10 +1477,11 @@ const HomeScreen = () => {
 
     if (permission !== 'granted') {
       bookingInFlightRef.current = false;
-      Alert.alert(
+      appAlert(
         'Location Required',
         'Location access is required to create booking.',
         [{ text: 'OK' }],
+        { icon: 'map-marker-off-outline' },
       );
       return;
     }
@@ -1821,7 +1825,7 @@ const HomeScreen = () => {
     // server — block it offline rather than let it silently no-op.
     const online = await checkIsOnline();
     if (!online) {
-      Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
+      appAlert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
       return;
     }
 
@@ -1859,7 +1863,7 @@ const HomeScreen = () => {
   const requestFullCancel = async (bookingIdOverride, confirm, advance) => {
     const online = await checkIsOnline();
     if (!online) {
-      Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
+      appAlert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
       return;
     }
     const cancelInstant = () =>
@@ -1921,7 +1925,7 @@ const HomeScreen = () => {
   const confirmPenaltyCancel = async bookingIdOverride => {
     const online = await checkIsOnline();
     if (!online) {
-      Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
+      appAlert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
       return;
     }
     setPenaltyLoading(true);
@@ -2031,7 +2035,7 @@ const HomeScreen = () => {
     }
     const online = await checkIsOnline();
     if (!online) {
-      Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
+      appAlert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
       return;
     }
     // Check the open advance booking limit before any location/date steps.
@@ -2590,7 +2594,7 @@ New reference: ${activeBooking.ref_code}`
     }
     const online = await checkIsOnline();
     if (!online) {
-      Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
+      appAlert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
       return;
     }
     setRetryLoading(true);

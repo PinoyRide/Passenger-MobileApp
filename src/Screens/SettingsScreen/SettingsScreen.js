@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Alert,
   BackHandler,
   Pressable,
   ScrollView,
@@ -28,6 +27,7 @@ import {
   selectSeenPromoIds,
   selectUserInfo,
 } from '@/Redux/Slices/userSlice';
+import appAlert from '@/Utils/appAlert';
 
 // The Account page, opened by the profile button on the map, as the owner's
 // design draws it (2026-11-22): who you are, the wallet, the ride pages,
@@ -111,10 +111,7 @@ const SettingsScreen = () => {
 
   // asked for by the owner, 2026-11-22: there is no help page yet
   const helpComingSoon = () =>
-    Alert.alert(
-      'Help & support',
-      'Help and support in the app is coming soon.',
-    );
+    appAlert('Help & support', 'Help and support in the app is coming soon.');
 
   return (
     <Container style={styles.container} background={look.page}>

@@ -1,7 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Linking,
   Pressable,
   ScrollView,
@@ -20,6 +19,7 @@ import { Constants as AppConstants, AppUtil } from '@/Utils';
 import { modern } from '@/Theme/modern';
 import { selectUserInfo } from '@/Redux/Slices/userSlice';
 import TransactionRow, { EmptyTransactions } from './TransactionRow';
+import appAlert from '@/Utils/appAlert';
 
 // The Wallet page, as the owner's design draws it (2026-11-22): the balance
 // and whether the wallet is active, Cash in / Send / Transfer, activating the
@@ -78,14 +78,14 @@ const WalletScreen = () => {
     const url = response?.data?.ekyc_url || response?.data?.zkyc_url;
     if (url) {
       Linking.openURL(url).catch(() =>
-        Alert.alert(
+        appAlert(
           'Activate your wallet',
           'The identity check could not be opened. Please try again.',
         ),
       );
       return;
     }
-    Alert.alert(
+    appAlert(
       'Activate your wallet',
       error ||
         response?.message ||
@@ -107,7 +107,7 @@ const WalletScreen = () => {
       label: 'Send',
       icon: 'arrow-top-right',
       onPress: () =>
-        Alert.alert(
+        appAlert(
           'Send',
           'Sending money from your wallet to someone else is coming soon.',
         ),

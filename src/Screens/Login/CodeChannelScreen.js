@@ -1,6 +1,5 @@
 import React, { useRef, useState } from 'react';
 import {
-  Alert,
   Image,
   ScrollView,
   StyleSheet,
@@ -17,6 +16,7 @@ import { Constants } from '@/Utils';
 import { modern } from '@/Theme/modern';
 import { handedCode } from '@/Utils/handedCode';
 import { SMS } from '@/Utils/codeChannel';
+import appAlert from '@/Utils/appAlert';
 
 // The step after "Get Started" (the owner, 2026-11-22: "the passenger choosing
 // where to send should be the same as the rider"; the same screen in the Rider
@@ -51,7 +51,7 @@ const CodeChannelScreen = () => {
         { mobileNo: mobileNumber, userType: 'customer', channel },
       );
       if (offline) {
-        Alert.alert(
+        appAlert(
           'No Internet Connection',
           'This action needs an internet connection. Please reconnect and try again.',
         );

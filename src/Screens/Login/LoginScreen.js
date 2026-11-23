@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
   Image,
   Keyboard,
   ScrollView,
@@ -18,6 +17,7 @@ import useApiRequest from '@/Services/ApiV2';
 import { Constants } from '@/Utils';
 import { handedCode } from '@/Utils/handedCode';
 import { SMS } from '@/Utils/codeChannel';
+import appAlert from '@/Utils/appAlert';
 
 const OFFLINE_ALERT_TITLE = 'No Internet Connection';
 const OFFLINE_ALERT_MESSAGE =
@@ -85,7 +85,7 @@ const LoginScreen = () => {
       { mobileNo: mobileNumber, userType: 'customer' },
     );
     if (offline) {
-      Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
+      appAlert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
       return;
     }
     if (error || !response) {
@@ -118,7 +118,7 @@ const LoginScreen = () => {
     );
 
     if (offline) {
-      Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
+      appAlert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
       return;
     }
 

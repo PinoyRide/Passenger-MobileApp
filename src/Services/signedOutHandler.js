@@ -2,7 +2,7 @@
 // (see Utils/signedOut.js): what Log Out in Settings does, without asking the
 // server (it has signed the account out already), then the start screen and a
 // message saying why. Imported once, by App.js.
-import { Alert } from 'react-native';
+
 import { CommonActions } from '@react-navigation/native';
 import { store } from '@/Redux/store';
 import {
@@ -13,6 +13,7 @@ import {
 import { navigationRef } from '@/Utils/NavigationService';
 import { deletePushToken } from '@/Services/Push/pushPlatform';
 import { setSignedOutHandler, signedOutNotice } from '@/Utils/signedOut';
+import appAlert from '@/Utils/appAlert';
 
 setSignedOutHandler(async reason => {
   // Nobody is signed in any more: this is the answer to a request that was
@@ -36,5 +37,5 @@ setSignedOutHandler(async reason => {
   }
 
   const { title, message } = signedOutNotice(reason);
-  Alert.alert(title, message);
+  appAlert(title, message);
 });
