@@ -5,6 +5,9 @@ import { DeviceEventEmitter } from 'react-native';
 export const PUSH_TYPES = {
   RIDER_ACCEPTED: 'rider_accepted',
   RIDER_HEADING: 'rider_heading',
+  // the owner, 2026-11-24: "should be notified when rider is 10 minutes
+  // away": once per trip, when the rider comes within 10 minutes
+  RIDER_NEARBY: 'rider_nearby',
   RIDER_ARRIVED: 'rider_arrived',
   TRIP_STARTED: 'trip_started',
   TRIP_COMPLETED: 'trip_completed',
@@ -127,6 +130,7 @@ export function getPushRoute(parsed) {
       };
     case PUSH_TYPES.RIDER_ACCEPTED:
     case PUSH_TYPES.RIDER_HEADING:
+    case PUSH_TYPES.RIDER_NEARBY:
     case PUSH_TYPES.RIDER_ARRIVED:
     case PUSH_TYPES.TRIP_STARTED:
     case PUSH_TYPES.TRIP_COMPLETED:
