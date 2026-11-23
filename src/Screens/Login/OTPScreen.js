@@ -17,7 +17,7 @@ import { toStoredUser } from '@/Utils/customerMapper';
 import { signedInRoutes } from '@/Utils/consent';
 import { Constants } from '@/Utils';
 import { handedCode } from '@/Utils/handedCode';
-import { SMS, sentTo } from '@/Utils/codeChannel';
+import { SMS, codeRefused, sentTo } from '@/Utils/codeChannel';
 import { afterRegistering } from '@/Utils/registerForm';
 import DeviceInfo from 'react-native-device-info';
 import { useDispatch, useSelector } from 'react-redux';
@@ -52,6 +52,7 @@ const OTPScreen = () => {
   const [codeFromBackend, setCodeFromBackend] = useState(
     route.params.handedCode ?? null,
   );
+  const [alertTitle, setAlertTitle] = useState('Error');
   const [alertMessage, setAlertMessage] = useState('');
   const [showAlert, setShowAlert] = useState(false);
 
@@ -93,6 +94,7 @@ const OTPScreen = () => {
         return;
       }
 
+      setAlertTitle('Error');
       setAlertMessage(getOtpCode.error);
       setShowAlert(true);
       return;
@@ -123,11 +125,10 @@ const OTPScreen = () => {
 
   useEffect(() => {
     if (loginUser.error) {
-      setAlertMessage(
-        /invalid otp/i.test(loginUser.error)
-          ? 'Invalid OTP, please try again.'
-          : loginUser.error,
-      );
+      // an expired or used-up code says so, and points at "Request a new OTP"
+      const refused = codeRefused(loginUser.error);
+      setAlertTitle(refused.title);
+      setAlertMessage(refused.message);
       setShowAlert(true);
       return;
     }
@@ -166,6 +167,7 @@ const OTPScreen = () => {
     try {
       await fetchOtp(mobileNumber);
     } catch (error) {
+      setAlertTitle('Error');
       setAlertMessage(error || 'Failed to resend OTP.');
       setShowAlert(true);
     }
@@ -194,7 +196,7 @@ const OTPScreen = () => {
       {/* Alert */}
       {alertMessage ? (
         <AlertBox
-          title="Error"
+          title={alertTitle}
           message={alertMessage}
           visible={showAlert}
           setVisible={setShowAlert}

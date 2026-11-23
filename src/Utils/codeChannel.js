@@ -43,6 +43,38 @@ function sentTo({ channel, emailHint, mobileNumber, handed }) {
   return `A One-Time PIN was sent to ${maskedMobile(mobileNumber)}`;
 }
 
+// What the code screen says when the code typed is refused (QA PR-APP-14: "a
+// clear error message (e.g. "Code has expired")" and the way to a new code).
+// The server's words for a code are "OTP expired", "Invalid OTP" and "Too many
+// wrong codes. Please request a new OTP."; any other refusal (a number signed
+// in elsewhere, a deactivated account) is shown as the server words it.
+const NEW_CODE = 'Tap "Request a new OTP" below to get a new one.';
+function codeRefused(error) {
+  const text = String(error || '');
+  if (/\bOTP expired\b/i.test(text)) {
+    return {
+      title: 'Code has expired',
+      message: `This One-Time PIN is no longer valid. ${NEW_CODE}`,
+    };
+  }
+  if (/too many wrong codes/i.test(text)) {
+    return {
+      title: 'Code no longer valid',
+      message: `Too many wrong codes were entered. ${NEW_CODE}`,
+    };
+  }
+  if (/\binvalid otp\b/i.test(text)) {
+    return {
+      title: 'Wrong code',
+      message: 'That One-Time PIN is not right. Please check it and try again.',
+    };
+  }
+  return {
+    title: 'Error',
+    message: text || 'Something went wrong. Please try again.',
+  };
+}
+
 module.exports = {
   SMS,
   EMAIL,
@@ -50,4 +82,5 @@ module.exports = {
   maskedMobile,
   emailChoice,
   sentTo,
+  codeRefused,
 };
