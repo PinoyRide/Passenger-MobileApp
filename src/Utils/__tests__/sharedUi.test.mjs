@@ -63,6 +63,8 @@ const SHARED = [
   'src/Utils/__tests__/updateWhenReady.test.mjs',
   'src/Utils/__tests__/sharedUi.test.mjs',
   'src/Utils/paymentWait.js',
+  // release builds keep console.log out of the system log
+  'src/Utils/quietLogs.js',
   'src/Utils/__tests__/paymentWait.test.mjs',
   // the payment-done picture (AppTransactionComplete)
   'src/Assets/Common/Success_Image.png',

@@ -1,3 +1,5 @@
+// first: release builds keep personal data out of the system log
+import './src/Utils/quietLogs';
 import { registerRootComponent } from 'expo';
 
 import App from './App';
