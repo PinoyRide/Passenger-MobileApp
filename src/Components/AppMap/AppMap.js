@@ -528,6 +528,9 @@ const AppMap = forwardRef(
     // reroute only when the rider actually leaves the drawn road.
     const isOnline = useNetworkStatus();
     const lastFetchedLegKeyRef = useRef(null);
+    // the leg a Directions request is on its way for: the effect can run
+    // twice before the first answer, and each run was a paid request
+    const inFlightLegKeyRef = useRef(null);
     const currentLegKeyRef = useRef(null);
     const lastRerouteAtRef = useRef(0);
     const retryTimerRef = useRef(null);
@@ -555,7 +558,10 @@ const AppMap = forwardRef(
         }
         return;
       }
-      if (legKey === lastFetchedLegKeyRef.current) {
+      if (
+        legKey === lastFetchedLegKeyRef.current ||
+        legKey === inFlightLegKeyRef.current
+      ) {
         return;
       }
 
@@ -593,6 +599,7 @@ const AppMap = forwardRef(
           return;
         }
 
+        inFlightLegKeyRef.current = legKey;
         try {
           const response = await fetchWithTimeout(
             `https://maps.googleapis.com/maps/api/directions/json?origin=${originLat},${originLong}&destination=${destinationLat},${destinationLong}&mode=driving&key=${Constants.GOOGLE_MAP_API_KEY}`,
@@ -638,6 +645,10 @@ const AppMap = forwardRef(
         } catch (e) {
           lastFetchedLegKeyRef.current = null;
           console.error('Error fetching route:', e);
+        } finally {
+          if (inFlightLegKeyRef.current === legKey) {
+            inFlightLegKeyRef.current = null;
+          }
         }
       };
 
