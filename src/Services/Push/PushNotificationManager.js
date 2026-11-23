@@ -351,6 +351,13 @@ const PushNotificationManager = () => {
         return;
       }
       emitBookingUpdate(parsed);
+      // Home says "No Riders Available" itself: no banner over it
+      if (
+        parsed.type === PUSH_TYPES.NO_RIDER_FOUND &&
+        currentRouteName() === 'HomeScreen'
+      ) {
+        return;
+      }
       const body = formatPushBody(msg?.body, parsed);
       if (!msg?.title && !body) {
         return;

@@ -18,6 +18,10 @@ export const PUSH_TYPES = {
   WALLET_CREDITED: 'wallet_credited',
   CASH_OUT_PAID: 'cash_out_paid',
   CASH_OUT_FAILED: 'cash_out_failed',
+  // a scheduled ride in 1 hour / 5 minutes, and an instant search that
+  // ended with no rider (both open Home on that booking)
+  ADVANCE_REMINDER: 'advance_reminder',
+  NO_RIDER_FOUND: 'no_rider_found',
 };
 
 const WALLET_TYPES = [
