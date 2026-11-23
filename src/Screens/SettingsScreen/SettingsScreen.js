@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   BackHandler,
   Pressable,
@@ -20,7 +19,6 @@ import { MenuGroup, MenuRow } from '@/Components/Menu/Menu';
 import SafetyGuideModal from '@/Components/SafetyGuide/SafetyGuideModal';
 import usePostRequest from '@/Services/Api';
 import useApiRequest from '@/Services/ApiV2';
-import useLogOut from '@/Services/useLogOut';
 import { Constants as AppConstants, AppUtil } from '@/Utils';
 import { APP_BUILD } from '@/Utils/appBuild';
 import { displayMobile, fullNameOf } from '@/Utils/personName';
@@ -33,7 +31,9 @@ import {
 
 // The Account page, opened by the profile button on the map, as the owner's
 // design draws it (2026-11-22): who you are, the wallet, the ride pages,
-// Settings and help, help in an emergency, and Log out (also in Settings).
+// Settings and help, and help in an emergency. Log out is in Settings only
+// (the owner, 2026-11-23: "redundunt logout button, retain the one in
+// settings"), as in the Rider app.
 const SettingsScreen = () => {
   const look = modern(useTheme());
   const styles = getStyles(look);
@@ -41,7 +41,6 @@ const SettingsScreen = () => {
   const dispatch = useDispatch();
   const userInfo = useSelector(selectUserInfo);
   const seenPromoIds = useSelector(selectSeenPromoIds);
-  const { confirmLogOut, loggingOut } = useLogOut();
   const walletRequest = useApiRequest();
   const promoRequest = usePostRequest();
   const [balance, setBalance] = useState(
@@ -227,6 +226,7 @@ const SettingsScreen = () => {
           <MenuRow
             icon="cog-outline"
             title="Settings"
+            note="Dark mode, log out, delete account"
             tone="quiet"
             onPress={() => navigation.navigate('AccountSettingsScreen')}
           />
@@ -249,19 +249,6 @@ const SettingsScreen = () => {
         </MenuGroup>
 
         <View style={styles.spacer} />
-
-        <Pressable
-          onPress={confirmLogOut}
-          disabled={loggingOut}
-          accessibilityRole="button"
-          accessibilityState={{ busy: loggingOut }}
-          style={styles.logOut}>
-          {loggingOut ? (
-            <ActivityIndicator color={look.muted} />
-          ) : (
-            <Text style={styles.logOutText}>Log out</Text>
-          )}
-        </Pressable>
         <Text style={styles.version}>
           PinoyRide {version} · build {APP_BUILD}
         </Text>
@@ -388,18 +375,6 @@ const getStyles = look =>
     section: { marginTop: 24 },
     emergency: { marginTop: 22 },
     spacer: { flex: 1, minHeight: 32 },
-    logOut: {
-      alignSelf: 'center',
-      minHeight: 44,
-      paddingHorizontal: 24,
-      justifyContent: 'center',
-    },
-    logOutText: {
-      fontFamily: 'Poppins Medium',
-      fontSize: 15,
-      lineHeight: 20,
-      color: look.muted,
-    },
     version: {
       marginTop: 18,
       textAlign: 'center',
