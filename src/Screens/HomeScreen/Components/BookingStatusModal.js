@@ -1,4 +1,4 @@
-import { ProfileAvatar } from '@/Components';
+import ProfileAvatar from '@/Components/ProfileAvatar/ProfileAvatar';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Linking,
@@ -77,6 +77,11 @@ const BookingStatusModal = ({
   safetyTip = '',
   onEmergencyPress,
   confirmedBookingView = false,
+  // the "Rider found" banner's right side: "3 min away" (Utils/riderAway.js)
+  awayText = '',
+  // the map's X: only the banner (or the headline) shows, until it is tapped
+  minimized = false,
+  onExpand,
 }) => {
   // The navigation bar may cover the bottom of the screen: keep the bottom content clear of it
   const { bottom: bottomInset } = useSafeAreaInsets();
@@ -287,6 +292,13 @@ const BookingStatusModal = ({
 
   const toggleExpanded = () => setExpanded(prev => !prev);
   const showTripDetails = confirmedBookingView && expanded;
+  // A rider has the booking and has not picked the passenger up: the gold
+  // banner of the owner's design ("8 · Rider found", 2026-11-23) in place of
+  // the headline, with how far the rider is on its right.
+  const found = Number(bookingStatus) === 1;
+  const bannerTitle =
+    found && confirmedBookingView ? 'Your rider is here' : 'Rider found';
+  const bodyShown = !minimized && (!confirmedBookingView || expanded);
 
   let fareCaption = '';
   if (showEstimatedFareLabels) {
@@ -346,15 +358,47 @@ const BookingStatusModal = ({
           <View style={styles.handle} />
         )}
 
-        {headline ? (
-          <Text style={styles.title} maxFontSizeMultiplier={1.3}>
-            {headline}
-          </Text>
-        ) : null}
-        {caption ? <Text style={styles.caption}>{caption}</Text> : null}
+        {found ? (
+          <Pressable
+            onPress={minimized ? onExpand : undefined}
+            disabled={!minimized}
+            accessibilityRole={minimized ? 'button' : 'text'}
+            accessibilityLabel={[bannerTitle, awayText]
+              .filter(Boolean)
+              .join(', ')}
+            accessibilityHint={minimized ? 'Shows the trip details' : undefined}
+            style={styles.banner}>
+            <View style={styles.bannerCheck}>
+              <Icon name="check" size={18} color={look.onGold} />
+            </View>
+            <Text
+              style={styles.bannerTitle}
+              numberOfLines={1}
+              maxFontSizeMultiplier={1.3}>
+              {bannerTitle}
+            </Text>
+            {awayText ? (
+              <Text style={styles.bannerAway} numberOfLines={1}>
+                {awayText}
+              </Text>
+            ) : null}
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={minimized ? onExpand : undefined}
+            disabled={!minimized}
+            accessibilityRole={minimized ? 'button' : 'header'}>
+            {headline ? (
+              <Text style={styles.title} maxFontSizeMultiplier={1.3}>
+                {headline}
+              </Text>
+            ) : null}
+            {caption ? <Text style={styles.caption}>{caption}</Text> : null}
+          </Pressable>
+        )}
 
         {/* Minimized: only the handle and the status line, so the map is clear. */}
-        {(!confirmedBookingView || expanded) && (
+        {bodyShown && (
           <View style={styles.stack}>
             {/* one quiet line of safety, with the emergency call beside it
                 while the map has no Emergency button (it had a blue "Safety
@@ -399,11 +443,15 @@ const BookingStatusModal = ({
                 styles.driverCard,
                 pressed && styles.pressed,
               ]}>
+              {/* the rider's photo, else their initials on blue (the
+                  design): no motorcycle stands in for the person */}
               <ProfileAvatar
-                uri={
-                  getRiderPhoto(riderDetails) ||
-                  riderDetails?.vehicle_details?.[0]?.motorcyle_img
-                }
+                uri={getRiderPhoto(riderDetails)}
+                name={[firstName, ekycDetails?.last_name?.trim()]
+                  .filter(Boolean)
+                  .join(' ')}
+                tint="#3A5AF6"
+                tintInk="#FFFFFF"
                 size={54}
               />
               <View style={styles.flex}>
@@ -423,17 +471,11 @@ const BookingStatusModal = ({
                   </Text>
                 </View>
               ) : null}
-              <Icon
-                name="chevron-right"
-                size={20}
-                color={look.muted}
-                style={styles.chevron}
-              />
             </Pressable>
 
             <TripActions actions={actions} />
 
-            {showTripDetails ? (
+            {found || showTripDetails ? (
               <View style={styles.routeLine}>
                 <View style={styles.dot} />
                 <Text style={styles.routeName} numberOfLines={1}>
@@ -625,9 +667,37 @@ const getStyles = (look, blue) =>
       letterSpacing: 0.4,
       color: look.surface,
     },
-    chevron: {
-      marginLeft: -6,
-      marginRight: -4,
+    banner: {
+      minHeight: 56,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderRadius: look.radiusTile,
+      backgroundColor: look.gold,
+    },
+    bannerCheck: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: look.goldShade,
+    },
+    bannerTitle: {
+      flex: 1,
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 16,
+      lineHeight: 22,
+      letterSpacing: -0.2,
+      color: look.onGold,
+    },
+    bannerAway: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 14,
+      lineHeight: 20,
+      color: look.onGold,
     },
     dot: {
       width: 10,
@@ -641,10 +711,14 @@ const getStyles = (look, blue) =>
       borderRadius: 2,
       backgroundColor: look.ink,
     },
+    // the trip as a soft pill (the design): dot, pick-up, arrow, square, drop-off
     routeLine: {
       flexDirection: 'row',
       alignItems: 'center',
-      minHeight: 32,
+      minHeight: 46,
+      paddingHorizontal: 14,
+      borderRadius: look.radiusTile,
+      backgroundColor: look.soft,
     },
     routeName: {
       flexShrink: 1,

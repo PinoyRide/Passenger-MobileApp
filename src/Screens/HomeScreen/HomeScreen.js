@@ -87,6 +87,7 @@ import useNetworkStatus from '@/Hooks/useNetworkStatus';
 import { checkIsOnline } from '@/Utils/Network';
 import { getBookingVehicle } from '@/Hooks/bookingVehicle';
 import { getRiderEtaText } from '@/Hooks/riderEta';
+import { riderAwayText } from '@/Utils/riderAway';
 import {
   dropoffArrivalText,
   getDropoffEtaText,
@@ -292,6 +293,13 @@ const HomeScreen = () => {
   const [showWaitingBanner, setShowWaitingBanner] = useState(false);
   const [riderArrivedAt, setRiderArrivedAt] = useState(null);
   const [showSafetyGuide, setShowSafetyGuide] = useState(false);
+  // The map's X during a trip (the owner's design "8 · Rider found",
+  // 2026-11-23): the trip sheet shrinks to its banner so the map is clear;
+  // tapping the banner brings it back. A new step of the trip shows it again.
+  const [tripSheetMinimized, setTripSheetMinimized] = useState(false);
+  useEffect(() => {
+    setTripSheetMinimized(false);
+  }, [bookingStatus, activeBooking?.id]);
   const [penaltyPreview, setPenaltyPreview] = useState(null);
   const [cancelPreviewLoading, setCancelPreviewLoading] = useState(false);
   const cancelSubmitGuard = useCancellationSubmitGuard();
@@ -2386,6 +2394,9 @@ const HomeScreen = () => {
     : null;
 
   const statusNum = Number(bookingStatus);
+  // a rider has the booking: coming (1) or on the ride (2)
+  const tripUnderWay =
+    Boolean(activeBooking?.id) && (statusNum === 1 || statusNum === 2);
   const riderArrived =
     statusNum === 1 &&
     (Boolean(riderArrivedAt) || riderEta?.state === 'arrived');
@@ -2698,6 +2709,19 @@ New reference: ${activeBooking.ref_code}`
             style={styles.mapBack}>
             <Icon name="chevron-left" size={28} color={look.ink} />
           </Pressable>
+        ) : tripUnderWay ? (
+          // during the trip (the design): the X on the left, "Follow rider"
+          // on the right (AppMap), no account button
+          tripSheetMinimized ? null : (
+            <Pressable
+              onPress={() => setTripSheetMinimized(true)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Hide the trip details"
+              style={styles.mapBack}>
+              <Icon name="close" size={24} color={look.ink} />
+            </Pressable>
+          )
         ) : (
           <TouchableOpacity
             style={styles.profileButton}
@@ -2833,7 +2857,10 @@ New reference: ${activeBooking.ref_code}`
           </View>
         )}
 
-        {statusNum === 2 && <EmergencyButton style={styles.emergencyButton} />}
+        {/* help in an emergency for the whole trip, under "Follow rider" */}
+        {tripUnderWay ? (
+          <EmergencyButton style={styles.emergencyButton} />
+        ) : null}
         <SafetyGuideModal
           visible={showSafetyGuide}
           onClose={() => setShowSafetyGuide(false)}
@@ -3050,6 +3077,12 @@ New reference: ${activeBooking.ref_code}`
             vehicle={bookingVehicle}
             // under "Jomar is on the way": the arrival time the banner had
             etaText={statusNum === 1 ? bannerText : ''}
+            // the "Rider found" banner's right side: "3 min away"
+            awayText={
+              statusNum === 1 ? riderAwayText(riderEta, riderEtaReceivedAt) : ''
+            }
+            minimized={tripSheetMinimized}
+            onExpand={() => setTripSheetMinimized(false)}
             // the existing cancel, with its free or priced dialog; only while
             // the rider is on the way (the spec: a quiet link, not a button)
             onCancelRide={
@@ -3064,16 +3097,12 @@ New reference: ${activeBooking.ref_code}`
                 : ''
             }
             arrivalText={statusNum === 2 ? dropoffArrivalText(riderEta) : ''}
+            // while the rider comes the sheet is the design's: the plate is
+            // on the driver card, and the map has the Emergency button
             safetyTip={
               statusNum === 2
                 ? 'Hold on, and keep your phone away while riding.'
-                : statusNum === 1
-                ? 'Check the plate number before you get on.'
                 : ''
-            }
-            // the map shows an Emergency button during the trip itself
-            onEmergencyPress={
-              statusNum === 1 ? () => setShowSafetyGuide(true) : undefined
             }
           />
         )}
@@ -3123,10 +3152,11 @@ const getStyles = ({ colors, look }) =>
       width,
       height,
     },
+    // under "Follow rider" (AppMap: top 61, 48 high, right 28)
     emergencyButton: {
       position: 'absolute',
-      top: 70,
-      right: 92,
+      top: 121,
+      right: 28,
       zIndex: 15,
     },
     profileButton: {

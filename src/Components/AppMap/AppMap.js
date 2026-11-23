@@ -30,6 +30,7 @@ import useVehicleTracker from '../../Utils/useVehicleTracker';
 import NavArrow from './NavArrow';
 import MapView, { Circle, Marker, Polyline } from 'react-native-maps';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { modern } from '@/Theme/modern';
 import { SWEEP_MS, boundsAround, ringsAt } from '../../Utils/radarPing';
 import { Constants } from '@/Utils';
 import { fetchWithTimeout } from '@/Utils/Network';
@@ -178,8 +179,14 @@ const AppMap = forwardRef(
     },
     ref,
   ) => {
-    const { colors } = useTheme();
-    const styles = getStyles({ colors });
+    const theme = useTheme();
+    const { colors } = theme;
+    const look = modern(theme);
+    const styles = getStyles({ colors, look });
+    // the rider coming to the pick-up (the owner's design "8 · Rider found",
+    // 2026-11-23): a black motorcycle and a dotted line to the pick-up; during
+    // the trip itself, the heading arrow and the solid line
+    const riderComing = Number(bookingStatus) === 1;
     const mapRef = useRef(null);
     const [mapReady, setMapReady] = useState(false);
     const mapHeightRef = useRef(0); // dp, for the overview framing
@@ -305,14 +312,15 @@ const AppMap = forwardRef(
 
     // The arrow marker is a plain View (no image onLoad): once it is on the
     // map, give it time to paint, then lock it.
+    // The marker changes look once the passenger is picked up: paint again.
     useEffect(() => {
+      setRiderTracksViewChanges(true);
       if (!riderShown) {
-        setRiderTracksViewChanges(true);
         return undefined;
       }
       const t = setTimeout(() => setRiderTracksViewChanges(false), 1000);
       return () => clearTimeout(t);
-    }, [riderShown]);
+    }, [riderShown, riderComing]);
 
     useImperativeHandle(ref, () => ({
       // The locate button: back to where the person is, as the map's own
@@ -882,30 +890,56 @@ const AppMap = forwardRef(
                   : 'On the way to pick you up'
               }
               anchor={{ x: 0.5, y: 0.5 }}
-              flat
-              rotation={tracked.heading}
+              flat={!riderComing}
+              rotation={riderComing ? 0 : tracked.heading}
               tracksViewChanges={riderTracksViewChanges}>
-              <NavArrow />
+              {riderComing ? (
+                <View style={styles.riderComing}>
+                  <Icon name="motorbike" size={20} color="#FFFFFF" />
+                </View>
+              ) : (
+                <NavArrow />
+              )}
             </Marker>
           )}
 
-          {lineCoords.length > 1 && (
-            <Polyline
-              coordinates={lineCoords}
-              strokeColor={colors.primary}
-              strokeWidth={5}
-            />
-          )}
+          {lineCoords.length > 1 &&
+            (riderComing ? (
+              // round caps turn the dashes into dots (react-native-maps)
+              <Polyline
+                coordinates={lineCoords}
+                strokeColor={RIDER_INK}
+                strokeWidth={6}
+                lineCap="round"
+                lineDashPattern={[1, 14]}
+              />
+            ) : (
+              <Polyline
+                coordinates={lineCoords}
+                strokeColor={colors.primary}
+                strokeWidth={5}
+              />
+            ))}
         </MapView>
         {riderShown && (
           <TouchableOpacity
             style={styles.followButton}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel={
+              followDriver ? 'Show the whole trip' : 'Follow rider'
+            }
             onPress={() => {
               lastTouchAtRef.current = 0;
               setFollowChoice(!followDriver);
             }}>
+            <Icon
+              name={followDriver ? 'map-outline' : 'crosshairs-gps'}
+              size={18}
+              color={look.ink}
+            />
             <Text style={styles.followText}>
-              {followDriver ? '🗺️ Overview' : '🧭 Follow driver'}
+              {followDriver ? 'Overview' : 'Follow rider'}
             </Text>
           </TouchableOpacity>
         )}
@@ -916,25 +950,49 @@ const AppMap = forwardRef(
 
 export default AppMap;
 
-const getStyles = ({ colors }) =>
+// The rider's marker and dotted line while they come: black on the map,
+// which stays light in the dark look too
+const RIDER_INK = '#17171C';
+
+const getStyles = ({ colors, look }) =>
   StyleSheet.create({
+    riderComing: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: RIDER_INK,
+      borderWidth: 3,
+      borderColor: '#FFFFFF',
+    },
     container: { flex: 1 },
     pinIcon: {
       width: 40,
       height: 40,
     },
+    // level with the trip's close button on Home (top 61), as the design draws it
     followButton: {
       position: 'absolute',
-      right: 16,
-      top: 120,
-      backgroundColor: colors.background,
-      paddingVertical: 10,
+      right: 28,
+      top: 61,
+      height: 48,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
       paddingHorizontal: 16,
-      borderRadius: 25,
+      borderRadius: 24,
+      backgroundColor: look.surface,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.12,
+      shadowRadius: 10,
       elevation: 6,
     },
     followText: {
-      color: colors.text,
+      fontFamily: 'Poppins SemiBold',
       fontSize: 14,
+      lineHeight: 20,
+      color: look.ink,
     },
   });

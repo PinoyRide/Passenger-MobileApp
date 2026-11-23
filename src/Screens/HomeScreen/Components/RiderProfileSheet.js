@@ -11,7 +11,8 @@ import {
 import { useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { AppButton, ProfileAvatar } from '@/Components';
+import AppButton from '@/Components/AppButton/AppButton';
+import ProfileAvatar from '@/Components/ProfileAvatar/ProfileAvatar';
 import usePostRequest from '@/Services/Api';
 import { Constants } from '@/Utils';
 import { bottomSpace } from '@/Utils/bottomSpace';

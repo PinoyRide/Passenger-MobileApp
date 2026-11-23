@@ -13,15 +13,30 @@ import { initialsOf } from '@/Utils/personName';
 //               on the photo's lower right (the passenger's gender, the
 //               owner, 2026-11-23: "display in profile also having a badge")
 //   badgeLabel  what a screen reader says for it
-const ProfileAvatar = ({ uri, size = 60, style, name, badge, badgeLabel }) => {
+//   tint        the initials' circle instead of gold, with tintInk for the
+//               letters (the rider on the trip sheet: blue, the owner's design
+//               "8 · Rider found", 2026-11-23)
+const ProfileAvatar = ({
+  uri,
+  size = 60,
+  style,
+  name,
+  badge,
+  badgeLabel,
+  tint,
+  tintInk,
+}) => {
   const look = modern(useTheme());
+  const colours = { fill: tint || look.gold, ink: tintInk || look.onGold };
   if (!badge) {
-    return <Face uri={uri} size={size} style={style} name={name} look={look} />;
+    return (
+      <Face uri={uri} size={size} style={style} name={name} colours={colours} />
+    );
   }
   const dot = Math.max(20, Math.round(size * 0.34));
   return (
     <View style={[{ width: size, height: size }, style]}>
-      <Face uri={uri} size={size} name={name} look={look} />
+      <Face uri={uri} size={size} name={name} colours={colours} />
       <View
         style={[
           styles.badge,
@@ -41,7 +56,7 @@ const ProfileAvatar = ({ uri, size = 60, style, name, badge, badgeLabel }) => {
   );
 };
 
-const Face = ({ uri, size, style, name, look }) => {
+const Face = ({ uri, size, style, name, colours }) => {
   const round = { width: size, height: size, borderRadius: size / 2 };
   if (uri) {
     return <Image source={{ uri }} style={[round, style]} />;
@@ -50,12 +65,17 @@ const Face = ({ uri, size, style, name, look }) => {
   if (initials) {
     return (
       <View
-        style={[styles.initials, round, { backgroundColor: look.gold }, style]}
+        style={[
+          styles.initials,
+          round,
+          { backgroundColor: colours.fill },
+          style,
+        ]}
         accessibilityLabel={name}>
         <Text
           style={[
             styles.initialsText,
-            { fontSize: size * 0.32, color: look.onGold },
+            { fontSize: size * 0.32, color: colours.ink },
           ]}
           maxFontSizeMultiplier={1}>
           {initials}
