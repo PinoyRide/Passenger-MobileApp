@@ -4,15 +4,14 @@ import React, { useEffect, useState } from 'react';
 import { ON_PRIMARY_BUTTON_TEXT } from '@/Theme';
 import {
   ActivityIndicator,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import TypingLayer from '@/Components/TypingLayer/TypingLayer';
 import { useTheme } from 'react-native-paper';
 import { modern } from '@/Theme/modern';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -99,16 +98,15 @@ const PromoModal = ({
     }
   }, [visible]);
 
+  // A layer of Home, not a Modal (Components/TypingLayer): the keyboard lifts
+  // the sheet with the promo code in it, and lowering the keyboard does not
+  // close it (the owner, 2026-11-23).
   return (
-    <Modal
+    <TypingLayer
       visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}>
-      <TouchableWithoutFeedback onPress={onClose}>
-        <View style={styles.backdrop} />
-      </TouchableWithoutFeedback>
-
+      onClose={onClose}
+      onBackdrop={onClose}
+      placement="bottom">
       <View
         style={[
           styles.modalContainer,
@@ -237,7 +235,7 @@ const PromoModal = ({
           </TouchableOpacity>
         )}
       </View>
-    </Modal>
+    </TypingLayer>
   );
 };
 
@@ -248,15 +246,7 @@ export default PromoModal;
 const getStyles = ({ colors, dark, look }) => {
   const pick = (light, darkValue) => (dark ? darkValue : light);
   return StyleSheet.create({
-    backdrop: {
-      flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.5)',
-    },
     modalContainer: {
-      position: 'absolute',
-      bottom: 0,
-      left: 0,
-      right: 0,
       backgroundColor: pick('#D9D9D9', look.surface),
       paddingHorizontal: 20,
       paddingTop: 24,
