@@ -247,7 +247,7 @@ const getStyles = ({ colors }) =>
   StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: '#fff',
+      backgroundColor: colors.background,
     },
     header: {
       flexDirection: 'row',
@@ -281,7 +281,7 @@ const getStyles = ({ colors }) =>
     },
     bottomPanel: {
       flex: 4,
-      backgroundColor: '#fff',
+      backgroundColor: colors.background,
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
       shadowColor: '#000',

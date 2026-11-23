@@ -8,7 +8,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Icon } from 'react-native-paper';
+import { Icon, useTheme } from 'react-native-paper';
+import { modern } from '@/Theme/modern';
 import {
   EMERGENCY_NUMBER,
   dialEmergency,
@@ -16,6 +17,8 @@ import {
 
 // Figma: Safety Guide chip opens the emergency call dialog (frame w/ 911 + Call).
 const SafetyGuideModal = ({ visible, onClose }) => {
+  const look = modern(useTheme());
+  const styles = getStyles(look);
   const handleCall = () => {
     dialEmergency();
     onClose();
@@ -52,56 +55,59 @@ const SafetyGuideModal = ({ visible, onClose }) => {
 
 export default SafetyGuideModal;
 
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    width: '100%',
-    maxWidth: 340,
-    gap: 12,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-  },
-  iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FEC107',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  number: {
-    flex: 1,
-    fontFamily: 'Poppins SemiBold',
-    fontSize: 22,
-    color: '#000000',
-    letterSpacing: 0.5,
-  },
-  callButton: {
-    backgroundColor: '#FEC107',
-    borderRadius: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    minWidth: 72,
-    alignItems: 'center',
-  },
-  callButtonText: {
-    fontFamily: 'Poppins SemiBold',
-    fontSize: 15,
-    color: ON_PRIMARY_BUTTON_TEXT,
-  },
-});
+// white with black words in the light look, the dark look's card and words in
+// the dark one (Settings > Dark mode)
+const getStyles = look =>
+  StyleSheet.create({
+    overlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.45)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 24,
+    },
+    card: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: look.card,
+      borderRadius: 12,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      width: '100%',
+      maxWidth: 340,
+      gap: 12,
+      elevation: 8,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.15,
+      shadowRadius: 8,
+    },
+    iconCircle: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: '#FEC107',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    number: {
+      flex: 1,
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 22,
+      color: look.ink,
+      letterSpacing: 0.5,
+    },
+    callButton: {
+      backgroundColor: '#FEC107',
+      borderRadius: 8,
+      paddingHorizontal: 20,
+      paddingVertical: 10,
+      minWidth: 72,
+      alignItems: 'center',
+    },
+    callButtonText: {
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 15,
+      color: ON_PRIMARY_BUTTON_TEXT,
+    },
+  });

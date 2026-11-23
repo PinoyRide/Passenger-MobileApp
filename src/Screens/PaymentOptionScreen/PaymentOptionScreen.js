@@ -113,7 +113,7 @@ const getStyles = ({ colors }) =>
     contents: {
       paddingVertical: 22,
       paddingHorizontal: 30,
-      backgroundColor: colors.onPrimary,
+      backgroundColor: colors.background,
     },
     row: {
       flexDirection: 'row',
@@ -144,14 +144,14 @@ const getStyles = ({ colors }) =>
       fontFamily: 'Poppins Light',
       fontWeight: 500,
       fontSize: 16,
-      color: colors.shadow,
+      color: colors.text,
     },
     title: {
       fontFamily: 'Poppins Medium',
       fontWeight: 500,
       fontSize: 16,
       marginVertical: 15,
-      color: colors.shadow,
+      color: colors.text,
     },
     warning: {
       fontFamily: 'Poppins Regular',

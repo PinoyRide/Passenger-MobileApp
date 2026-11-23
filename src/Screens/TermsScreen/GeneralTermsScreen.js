@@ -160,12 +160,14 @@ const getStyles = ({ colors }) =>
       marginBottom: 50,
     },
     title: {
+      color: colors.text,
       fontFamily: 'Poppins SemiBold',
       fontSize: 25,
       textAlign: 'center',
       letterSpacing: -0.45,
     },
     subtitle: {
+      color: colors.text,
       fontFamily: 'Poppins Regular',
       fontWeight: '400',
       fontSize: 16,

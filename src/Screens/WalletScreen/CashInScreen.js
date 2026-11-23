@@ -385,14 +385,14 @@ const getStyles = ({ colors }) =>
     contents: {
       paddingVertical: 5,
       paddingHorizontal: 30,
-      backgroundColor: colors.onPrimary,
+      backgroundColor: colors.background,
     },
     title: {
       fontFamily: 'Poppins Medium',
       fontWeight: '500',
       fontSize: 16,
       marginVertical: 16,
-      color: colors.shadow,
+      color: colors.text,
     },
     subtitle: {
       fontFamily: 'Poppins Regular',
@@ -436,7 +436,7 @@ const getStyles = ({ colors }) =>
     quickAmountLabel: {
       fontFamily: 'Poppins Medium',
       fontSize: 14,
-      color: colors.shadow,
+      color: colors.text,
       marginBottom: 12,
     },
     quickAmountRow: {
@@ -446,7 +446,7 @@ const getStyles = ({ colors }) =>
     },
     quickAmountButton: {
       width: '23%',
-      backgroundColor: colors.onPrimary,
+      backgroundColor: colors.card,
       paddingVertical: 12,
       borderRadius: 10,
       alignItems: 'center',
@@ -466,7 +466,7 @@ const getStyles = ({ colors }) =>
     buttonContainer: {
       paddingHorizontal: 30,
       paddingBottom: 20,
-      backgroundColor: colors.onPrimary,
+      backgroundColor: colors.background,
     },
     loadingContainer: {
       alignItems: 'center',

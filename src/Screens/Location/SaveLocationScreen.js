@@ -358,7 +358,7 @@ const getStyles = ({ colors }) =>
   StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: '#fff',
+      backgroundColor: colors.background,
     },
     header: {
       flexDirection: 'row',
@@ -419,7 +419,7 @@ const getStyles = ({ colors }) =>
     // at 60% and scrolls, so some map stays.
     bottomPanel: {
       maxHeight: '60%',
-      backgroundColor: '#fff',
+      backgroundColor: colors.background,
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
       shadowColor: '#000',

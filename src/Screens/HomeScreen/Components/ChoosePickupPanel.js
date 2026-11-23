@@ -47,7 +47,7 @@ const getStyles = ({ colors }) =>
       bottom: 0,
       left: 0,
       right: 0,
-      backgroundColor: colors.onPrimary,
+      backgroundColor: colors.card,
       paddingTop: 35,
       paddingBottom: 46.5,
       paddingHorizontal: 30,

@@ -12,6 +12,7 @@ import { useTheme } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import Container from '@/Components/Container/Container';
 import { MenuGroup, MenuRow } from '@/Components/Menu/Menu';
+import ThemeSwitch from '@/Components/ThemeSwitch/ThemeSwitch';
 import useLogOut from '@/Services/useLogOut';
 import { Constants as AppConstants } from '@/Utils';
 import { runningUpdateLabel } from '@/Utils/selfUpdate';
@@ -19,10 +20,10 @@ import { modern } from '@/Theme/modern';
 
 // Settings (the owner, 2026-11-22: "in my profile or profile page put the
 // logout and delete account in settings menu, do this for rider and
-// passenger"). Opened from the Account page, which also has Log out at its
-// bottom (the owner's Account design). The same screen in the Rider app.
-// Deleting the account is as strict as in the Admin Portal:
-// DeleteAccountScreen.
+// passenger"), opened from the Account page: Dark mode, as in the Rider app
+// (the owner, 2026-11-23), and the one Log out ("redundunt logout button,
+// retain the one in settings"). The same screen in the Rider app. Deleting
+// the account is as strict as in the Admin Portal: DeleteAccountScreen.
 const AccountSettingsScreen = () => {
   const look = modern(useTheme());
   const styles = getStyles(look);
@@ -54,6 +55,10 @@ const AccountSettingsScreen = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
         <MenuGroup>
+          <ThemeSwitch />
+        </MenuGroup>
+
+        <MenuGroup style={styles.secondGroup}>
           <MenuRow
             icon="logout"
             title="Log out"

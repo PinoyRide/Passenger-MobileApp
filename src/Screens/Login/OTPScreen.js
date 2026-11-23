@@ -289,7 +289,7 @@ const getStyles = ({ colors }) =>
     headerTitle: {
       fontSize: 16,
       fontFamily: 'Poppins Medium',
-      color: colors.shadow,
+      color: colors.text,
     },
     scrollContent: {
       flexGrow: 1,
@@ -300,6 +300,7 @@ const getStyles = ({ colors }) =>
       paddingVertical: 20,
     },
     title: {
+      color: colors.text,
       fontSize: 20,
       fontWeight: '400',
       marginBottom: 15,
@@ -327,7 +328,7 @@ const getStyles = ({ colors }) =>
     resendLabel: {
       fontFamily: 'Poppins Regular',
       fontSize: 16,
-      color: colors.shadow,
+      color: colors.text,
       marginBottom: 2,
     },
     resendLink: {

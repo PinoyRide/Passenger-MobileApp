@@ -111,7 +111,7 @@ const AppTransactionComplete = () => {
           isBold
           noSpacing
           mode="outlined"
-          featureStyle={{ backgroundColor: colors.onPrimary }}
+          featureStyle={{ backgroundColor: colors.card }}
         />
       </View>
     </Container>
@@ -131,9 +131,12 @@ const getStyles = ({ colors }) =>
       justifyContent: 'center',
       alignItems: 'center',
     },
+    // The picture has a white square behind it: round, it is a white disc
+    // in the dark look instead of a box (the drawing and its tick lie inside).
     image: {
       width: 122,
       height: 122,
+      borderRadius: 61,
       marginBottom: 24,
     },
     amount: {

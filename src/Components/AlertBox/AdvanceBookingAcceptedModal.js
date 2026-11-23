@@ -152,7 +152,7 @@ const getStyles = ({ colors }) =>
     },
     card: {
       width: 321,
-      backgroundColor: '#FFFFFF',
+      backgroundColor: colors.card,
       borderRadius: 20,
       paddingTop: 35,
       paddingBottom: 30,
@@ -161,12 +161,12 @@ const getStyles = ({ colors }) =>
     title: {
       fontSize: 16,
       fontFamily: 'Poppins SemiBold',
-      color: '#000000',
+      color: colors.text,
     },
     subtitle: {
       fontSize: 16,
       fontFamily: 'Poppins Regular',
-      color: '#000000',
+      color: colors.text,
       marginTop: 4,
       marginBottom: 18,
     },
@@ -197,18 +197,18 @@ const getStyles = ({ colors }) =>
     riderName: {
       fontFamily: 'Poppins SemiBold',
       fontSize: 14,
-      color: '#000000',
+      color: colors.text,
     },
     plateNumber: {
       fontFamily: 'Poppins SemiBold',
       fontSize: 14,
-      color: '#000000',
+      color: colors.text,
       marginTop: 4,
     },
     vehicle: {
       fontFamily: 'Poppins Regular',
       fontSize: 12,
-      color: '#000000',
+      color: colors.text,
       marginTop: 4,
     },
     divider: {

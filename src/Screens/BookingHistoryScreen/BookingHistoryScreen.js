@@ -464,7 +464,7 @@ const getStyles = ({ colors }) =>
       marginTop: 12,
       fontFamily: 'Poppins Regular',
       fontSize: 14,
-      color: colors.shadow,
+      color: colors.text,
     },
     emptyContainer: {
       flex: 1,
@@ -475,7 +475,7 @@ const getStyles = ({ colors }) =>
     emptyText: {
       fontFamily: 'Poppins SemiBold',
       fontSize: 18,
-      color: colors.shadow,
+      color: colors.text,
       marginBottom: 8,
     },
     emptySubtext: {

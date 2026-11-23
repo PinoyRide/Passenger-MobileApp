@@ -111,7 +111,7 @@ const getStyles = ({ colors }) =>
     },
     container: {
       width: '100%',
-      backgroundColor: colors.onPrimary,
+      backgroundColor: colors.card,
       borderRadius: 20,
       paddingTop: 16,
       paddingBottom: 30,
@@ -131,7 +131,7 @@ const getStyles = ({ colors }) =>
     title: {
       fontFamily: 'Poppins SemiBold',
       fontSize: 18,
-      color: colors.shadow,
+      color: colors.text,
       marginBottom: 20,
     },
     textInput: {
@@ -142,7 +142,7 @@ const getStyles = ({ colors }) =>
       padding: 14,
       fontFamily: 'Poppins Regular',
       fontSize: 13,
-      color: colors.shadow,
+      color: colors.text,
       marginBottom: 24,
       shadowColor: colors.shadow,
       shadowOpacity: 0.08,

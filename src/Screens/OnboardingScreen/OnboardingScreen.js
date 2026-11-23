@@ -280,7 +280,7 @@ const getStyles = ({ colors }) =>
   StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: colors.onPrimary,
+      backgroundColor: colors.background,
     },
     flatListWrapper: {
       flex: 1,
@@ -306,12 +306,14 @@ const getStyles = ({ colors }) =>
       maxWidth: width * 0.85,
     },
     title: {
+      color: colors.text,
       fontFamily: 'Poppins SemiBold',
       fontSize: isSmallScreen ? 20 : 25,
       textAlign: 'center',
       letterSpacing: -0.45,
     },
     subtitle: {
+      color: colors.text,
       fontFamily: 'Poppins Regular',
       fontSize: isSmallScreen ? 14 : 16,
       textAlign: 'center',

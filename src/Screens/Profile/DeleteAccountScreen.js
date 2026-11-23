@@ -254,14 +254,14 @@ const getStyles = ({ colors }) =>
     headerTitle: {
       fontSize: 16,
       fontFamily: 'Poppins Medium',
-      color: colors.shadow,
+      color: colors.text,
     },
     scrollContent: { flexGrow: 1, paddingHorizontal: 20, paddingBottom: 24 },
     spinner: { marginTop: 48 },
     title: {
       fontSize: 20,
       fontFamily: 'Poppins Medium',
-      color: colors.shadow,
+      color: colors.text,
       marginBottom: 12,
     },
     text: {
@@ -274,14 +274,14 @@ const getStyles = ({ colors }) =>
     blocker: {
       fontSize: 14,
       fontFamily: 'Poppins Regular',
-      color: colors.shadow,
+      color: colors.text,
       lineHeight: 21,
       marginBottom: 12,
     },
     subtitle: {
       fontSize: 13,
       fontFamily: 'Poppins Medium',
-      color: colors.shadow,
+      color: colors.text,
       marginBottom: 4,
     },
     actions: { gap: 4 },

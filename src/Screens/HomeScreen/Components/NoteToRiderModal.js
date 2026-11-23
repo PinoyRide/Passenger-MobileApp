@@ -18,8 +18,9 @@ import { bottomSpace } from '@/Utils/bottomSpace';
 const NoteToRiderModal = ({ visible, onClose, onSave, initialNote = '' }) => {
   // The navigation bar may cover the bottom of the screen: keep the bottom content clear of it
   const { bottom: bottomInset } = useSafeAreaInsets();
-  const { colors } = useTheme();
-  const styles = getStyles({ colors });
+  const theme = useTheme();
+  const { colors } = theme;
+  const styles = getStyles({ colors, dark: theme.dark });
   const [note, setNote] = useState(initialNote);
 
   useEffect(() => {
@@ -83,7 +84,7 @@ const NoteToRiderModal = ({ visible, onClose, onSave, initialNote = '' }) => {
 
 export default NoteToRiderModal;
 
-const getStyles = ({ colors }) =>
+const getStyles = ({ colors, dark }) =>
   StyleSheet.create({
     backdrop: {
       flex: 1,
@@ -95,8 +96,9 @@ const getStyles = ({ colors }) =>
       left: 0,
       right: 0,
     },
+    // the Figma grey sheet; the page colour in the dark look (Settings > Dark mode)
     modalContainer: {
-      backgroundColor: '#D9D9D9',
+      backgroundColor: dark ? colors.background : '#D9D9D9',
       padding: 20,
       paddingBottom: 40,
     },

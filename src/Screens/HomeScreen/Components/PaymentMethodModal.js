@@ -208,7 +208,7 @@ const getStyles = ({ colors }) =>
     option: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: colors.onPrimary,
+      backgroundColor: colors.card,
       padding: 12,
       borderRadius: 5,
       marginBottom: 12,

@@ -1,6 +1,10 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { NavigationContainer } from '@react-navigation/native';
+import {
+  NavigationContainer,
+  DarkTheme as NavigationDarkTheme,
+  DefaultTheme as NavigationDefaultTheme,
+} from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import {
   AccountSettingsScreen,
@@ -45,23 +49,45 @@ import {
 } from '@/Screens';
 import { Text } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
-import LightTheme from '../Theme/LightTheme';
 import { AppTransactionComplete } from '@/Components';
+import { useAppTheme } from '@/Contexts/ThemeContext';
 import { navigationRef } from '@/Utils/NavigationService';
 
 const Stack = createNativeStackNavigator();
 
 const ApplicationNavigator = () => {
+  const { theme, isDark } = useAppTheme();
+  // The screens' own frame: in the light look the navigator's own theme, as it
+  // was before dark mode came; in the dark look its dark theme in our colours.
+  const navigationTheme = useMemo(
+    () =>
+      isDark
+        ? {
+            ...NavigationDarkTheme,
+            colors: {
+              ...NavigationDarkTheme.colors,
+              primary: theme.colors.primary,
+              background: theme.colors.background,
+              card: theme.colors.card,
+              text: theme.colors.text,
+            },
+          }
+        : NavigationDefaultTheme,
+    [isDark, theme],
+  );
+
   return (
     <SafeAreaProvider>
-      <PaperProvider theme={LightTheme}>
-        <NavigationContainer ref={navigationRef}>
+      <PaperProvider theme={theme}>
+        <NavigationContainer theme={navigationTheme} ref={navigationRef}>
           <Stack.Navigator
             initialRouteName="Splash"
             screenOptions={{
               headerShown: true,
               headerTitle: props => (
-                <Text variant="titleLarge">{props.children}</Text>
+                <Text style={{ color: navigationTheme.colors.text }}>
+                  {props.children}
+                </Text>
               ),
 
               headerBackTitleVisible: false,

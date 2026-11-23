@@ -423,9 +423,10 @@ const getStyles = ({ colors }) =>
       textAlign: 'center',
       flex: 1,
     },
+    // the page and its words follow the look (Settings > Dark mode)
     scrollView: {
       flex: 1,
-      backgroundColor: '#fff',
+      backgroundColor: colors.background,
     },
     scrollContent: {
       paddingHorizontal: 20,
@@ -433,6 +434,7 @@ const getStyles = ({ colors }) =>
       paddingBottom: 30,
     },
     documentTitle: {
+      color: colors.text,
       fontFamily: 'Poppins SemiBold',
       fontSize: 14,
       textAlign: 'center',
@@ -443,12 +445,14 @@ const getStyles = ({ colors }) =>
       marginBottom: 20,
     },
     sectionTitle: {
+      color: colors.text,
       fontFamily: 'Poppins SemiBold',
       fontSize: 13,
       marginBottom: 8,
       lineHeight: 18,
     },
     paragraph: {
+      color: colors.text,
       fontFamily: 'Poppins Regular',
       fontSize: 11,
       lineHeight: 16,

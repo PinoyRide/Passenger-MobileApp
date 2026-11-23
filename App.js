@@ -11,6 +11,7 @@ import { PersistGate } from 'redux-persist/integration/react';
 import ApplicationNavigator from '@/Navigators/Application';
 import PushNotificationManager from '@/Services/Push/PushNotificationManager';
 import { persistor, store } from '@/Redux/store';
+import { ThemeProvider, useAppTheme } from '@/Contexts/ThemeContext';
 // Signs the app out when the API says its account was signed out or deleted.
 import '@/Services/signedOutHandler';
 import useUpdateWhenReady from '@/Services/useUpdateWhenReady';
@@ -21,6 +22,27 @@ import { passengerBusy } from '@/Services/updateBusy';
 const UpdateWhenReady = () => {
   useUpdateWhenReady(passengerBusy);
   return null;
+};
+
+// The app in the light or the dark look (Settings > Dark mode).
+const ThemedApp = () => {
+  const { theme, isDark } = useAppTheme();
+
+  return (
+    // nativeID: how the screen shown while the app starts (android LaunchScreen.kt)
+    // learns that the app has drawn its first screen, and leaves.
+    <View
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      nativeID="app-ready">
+      {/* Edge to edge (Android 15+, required at target 36): the status bar is see-through over
+          the app, so its icons take the look's opposite or they disappear (dark on the light look,
+          light on the dark one), whatever the phone's own setting. */}
+      <StatusBar style={isDark ? 'light' : 'dark'} />
+      <ApplicationNavigator />
+      <PushNotificationManager />
+      <UpdateWhenReady />
+    </View>
+  );
 };
 
 const App = () => {
@@ -41,16 +63,9 @@ const App = () => {
   return (
     <Provider store={store}>
       <PersistGate loading={null} persistor={persistor}>
-        {/* nativeID: how the screen shown while the app starts (android LaunchScreen.kt)
-            learns that the app has drawn its first screen, and leaves. */}
-        <View style={styles.container} nativeID="app-ready">
-          {/* Edge to edge (Android 15+, required at target 36): the status bar is transparent over the
-              app's light screens, so its icons must be dark or they disappear on dark-mode phones. */}
-          <StatusBar style="dark" />
-          <ApplicationNavigator />
-          <PushNotificationManager />
-          <UpdateWhenReady />
-        </View>
+        <ThemeProvider>
+          <ThemedApp />
+        </ThemeProvider>
       </PersistGate>
     </Provider>
   );

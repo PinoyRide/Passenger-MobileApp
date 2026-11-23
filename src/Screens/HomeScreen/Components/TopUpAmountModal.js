@@ -204,7 +204,7 @@ const getStyles = ({ colors }) =>
       paddingHorizontal: 20,
     },
     modalContent: {
-      backgroundColor: colors.onPrimary,
+      backgroundColor: colors.card,
       borderRadius: 20,
       padding: 30,
       width: '100%',

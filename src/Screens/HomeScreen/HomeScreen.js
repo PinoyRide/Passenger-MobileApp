@@ -3286,10 +3286,11 @@ const getStyles = ({ colors, look }) =>
       fontSize: 12,
       color: '#FFFFFF',
     },
+    // white on the red banner, in both looks
     offlineBannerText: {
       fontWeight: '600',
       fontSize: 12,
-      color: colors.primaryLight,
+      color: '#FFFFFF',
     },
     loadingContainer: {
       flex: 1,

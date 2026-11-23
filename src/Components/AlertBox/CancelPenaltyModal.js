@@ -7,8 +7,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Icon } from 'react-native-paper';
+import { Icon, useTheme } from 'react-native-paper';
 import { ON_PRIMARY_BUTTON_TEXT } from '@/Theme';
+import { modern } from '@/Theme/modern';
 import { cancelDialogState } from '@/Utils/cancellationDialog';
 
 const formatPeso = amount => {
@@ -34,6 +35,8 @@ const CancelPenaltyModal = ({
   loading = false,
   instant = false,
 }) => {
+  const theme = useTheme();
+  const styles = getStyles(theme.dark, modern(theme));
   const amountText = prettyPenaltyAmount || formatPeso(penaltyAmount);
   const dialog = cancelDialogState({
     checking,
@@ -83,63 +86,66 @@ const CancelPenaltyModal = ({
 
 export default CancelPenaltyModal;
 
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  card: {
-    width: 330,
-    maxWidth: '100%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-  },
-  title: {
-    fontFamily: 'Poppins SemiBold',
-    fontWeight: '600',
-    fontSize: 19,
-    color: '#444444',
-    textAlign: 'center',
-    marginTop: 12,
-  },
-  body: {
-    fontFamily: 'Poppins Regular',
-    fontSize: 14,
-    lineHeight: 21,
-    color: '#7C7C7C',
-    textAlign: 'center',
-    marginTop: 8,
-  },
-  amount: {
-    fontFamily: 'Poppins Medium',
-    fontSize: 15,
-    color: '#444444',
-    marginTop: 10,
-  },
-  row: {
-    flexDirection: 'row',
-    alignSelf: 'stretch',
-    marginTop: 18,
-    gap: 12,
-  },
-  pill: {
-    flex: 1,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  yes: { backgroundColor: '#FFC107' },
-  no: { backgroundColor: '#FFE08A' },
-  yesText: {
-    fontFamily: 'Poppins Medium',
-    fontSize: 15,
-    color: ON_PRIMARY_BUTTON_TEXT,
-  },
-  noText: { fontFamily: 'Poppins Medium', fontSize: 15, color: '#5A4A00' },
-});
+// The Figma colours in the light look; the dark look's card and words in the
+// dark one (Settings > Dark mode).
+const getStyles = (dark, look) =>
+  StyleSheet.create({
+    overlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.45)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 24,
+    },
+    card: {
+      width: 330,
+      maxWidth: '100%',
+      backgroundColor: look.card,
+      borderRadius: 16,
+      padding: 24,
+      alignItems: 'center',
+    },
+    title: {
+      fontFamily: 'Poppins SemiBold',
+      fontWeight: '600',
+      fontSize: 19,
+      color: dark ? look.ink : '#444444',
+      textAlign: 'center',
+      marginTop: 12,
+    },
+    body: {
+      fontFamily: 'Poppins Regular',
+      fontSize: 14,
+      lineHeight: 21,
+      color: dark ? look.muted : '#7C7C7C',
+      textAlign: 'center',
+      marginTop: 8,
+    },
+    amount: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 15,
+      color: dark ? look.ink : '#444444',
+      marginTop: 10,
+    },
+    row: {
+      flexDirection: 'row',
+      alignSelf: 'stretch',
+      marginTop: 18,
+      gap: 12,
+    },
+    pill: {
+      flex: 1,
+      height: 44,
+      borderRadius: 22,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    yes: { backgroundColor: '#FFC107' },
+    no: { backgroundColor: '#FFE08A' },
+    yesText: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 15,
+      color: ON_PRIMARY_BUTTON_TEXT,
+    },
+    noText: { fontFamily: 'Poppins Medium', fontSize: 15, color: '#5A4A00' },
+  });

@@ -48,6 +48,10 @@ const LightTheme = {
     onErrorContainer: 'rgb(65, 0, 2)',
     background: '#FFFFFF',
     onBackground: '#323232',
+    // a card on the page (modern.js `card`); DarkTheme.js darkens it
+    card: '#FFFFFF',
+    // words on the page; DarkTheme.js lightens them
+    text: 'rgb(28, 28, 30)',
 
     surface: 'rgb(255, 251, 255)',
     onSurface: 'rgb(28, 27, 30)',

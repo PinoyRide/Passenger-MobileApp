@@ -173,7 +173,7 @@ const QRPHScreen = () => {
   if (!paymentUrl) {
     return (
       <View style={styles.container}>
-        <Text>No payment URL provided</Text>
+        <Text style={{ color: colors.text }}>No payment URL provided</Text>
       </View>
     );
   }
