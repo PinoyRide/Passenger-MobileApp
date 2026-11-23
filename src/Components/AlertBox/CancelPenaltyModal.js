@@ -32,6 +32,7 @@ const CancelPenaltyModal = ({
   onYes,
   onNo,
   loading = false,
+  instant = false,
 }) => {
   const amountText = prettyPenaltyAmount || formatPeso(penaltyAmount);
   const dialog = cancelDialogState({
@@ -39,6 +40,7 @@ const CancelPenaltyModal = ({
     failed,
     penaltyApplies,
     penaltyPercent,
+    instant,
   });
   const busy = loading || dialog.buttonsDisabled;
   return (

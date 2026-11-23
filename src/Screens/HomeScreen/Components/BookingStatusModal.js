@@ -120,11 +120,16 @@ const BookingStatusModal = ({
     Boolean(bookingDetails?.is_advance) &&
     (allPaymentDetails?.fare_is_estimate === true ||
       bookingDetails?.status === 5);
-  const headerFareDisplay =
-    allPaymentDetails?.pretty_total_amount ||
-    formatPeso(
-      paymentDetails?.total_amount ?? bookingDetails?.total_amount ?? 0,
-    );
+  // The server's pretty amount ("1,087.60") has no peso sign: the sheet read
+  // "87.60" (seen 2026-11-23)
+  const prettyFare = allPaymentDetails?.pretty_total_amount;
+  const headerFareDisplay = prettyFare
+    ? String(prettyFare).startsWith('₱')
+      ? String(prettyFare)
+      : `₱${prettyFare}`
+    : formatPeso(
+        paymentDetails?.total_amount ?? bookingDetails?.total_amount ?? 0,
+      );
 
   // ── Unread message badge ────────────────────────────────────────────
   const getUnreadCount = usePostRequest();

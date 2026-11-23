@@ -129,10 +129,12 @@ import {
   serviceById,
 } from './Components/ServiceList';
 import useNoRidersTimer from '@/Hooks/useNoRidersTimer';
+import useAutoClose from '@/Hooks/useAutoClose';
 import useSearchReach from '@/Hooks/useSearchReach';
 import useNearbyRiders from '@/Hooks/useNearbyRiders';
 import { ridersNearbyText } from '@/Utils/ridersNearbyText';
 import { FARE_DEBOUNCE_MS, fareKey, shouldPrice } from '@/Utils/fareInquiry';
+import { startSequentialPoll } from '@/Utils/sequentialPoll';
 import useRiderEtaPoll from '@/Hooks/useRiderEtaPoll';
 import useRiderLocationPoll from '@/Hooks/useRiderLocationPoll';
 import useAdvanceBookingDiscovery from '@/Hooks/useAdvanceBookingDiscovery';
@@ -259,6 +261,11 @@ const HomeScreen = () => {
   // even when the date is already set (date-first order).
   const [pickupConfirmPending, setPickupConfirmPending] = useState(false);
   const [showAdvanceAccepted, setShowAdvanceAccepted] = useState(false);
+  // Boxes nobody answers close after 3 minutes (Hooks/useAutoClose).
+  useAutoClose(showAlert, () => setShowAlert(false));
+  useAutoClose(showPushNotice, () => setShowPushNotice(false));
+  useAutoClose(showRiderFound, () => setShowRiderFound(false));
+  useAutoClose(showAdvanceAccepted, () => setShowAdvanceAccepted(false));
   const paymentBeforeScheduleRef = useRef(null);
 
   // 🔍 Diagnostic: confirms whether riderLocation state is actually updating.
@@ -622,6 +629,9 @@ const HomeScreen = () => {
     setRiderLocation(null);
     setBookingVehicle(null);
     setShowAdvanceAccepted(false);
+    // "We found you a Rider!" was about the rider who let it go (the owner,
+    // 2026-11-23: it stayed under the "Booking update")
+    setShowRiderFound(false);
     riderAlertShownRef.current = false;
     if (pushTargetRef.current?.id === String(oldBooking.id)) {
       pushTargetRef.current = { ...pushTargetRef.current, id: String(newId) };
@@ -1568,7 +1578,7 @@ const HomeScreen = () => {
       // stop asking for ETA once the rider has arrived at pickup
       include_rider_eta: riderArrived ? '0' : '1',
     };
-    getBookingDetails.makePostRequest(
+    return getBookingDetails.makePostRequest(
       Constants.ENDPOINT.GET_BOOKING_DETAILS,
       postdata,
     );
@@ -1725,24 +1735,28 @@ const HomeScreen = () => {
     handleGetBookingDetails();
   }, [getBookingDetails.response, getBookingDetails.error]);
 
-  // Poll booking details when confirmed
+  // Poll booking details while a booking is on, one request at a time
+  // (sequentialPoll.js says why).
+  const pollBookingDetailsRef = useRef(null);
+  pollBookingDetailsRef.current = triggerGetBookingDetails;
   useEffect(() => {
     if (!activeBooking?.id) {
-      return;
+      return undefined;
     }
-
-    let intervalId;
-    const intervalTime = bookingStatus === 0 ? 1000 : 2000;
-
-    intervalId = setInterval(() => {
-      triggerGetBookingDetails();
-      setEtaStaleTick(t => t + 1);
-    }, intervalTime);
-
-    return () => {
-      clearInterval(intervalId);
-    };
+    return startSequentialPoll(
+      () => pollBookingDetailsRef.current?.(),
+      bookingStatus === 0 ? 1000 : 2000,
+    );
   }, [bookingStatus, activeBooking?.id, isOnline]);
+
+  // The ETA line ages between answers: a clock tick, no request.
+  useEffect(() => {
+    if (!activeBooking?.id) {
+      return undefined;
+    }
+    const id = setInterval(() => setEtaStaleTick(t => t + 1), 2000);
+    return () => clearInterval(id);
+  }, [activeBooking?.id]);
 
   // push notification received (foreground) or tapped: fetch the latest
   // status now instead of waiting for the next poll tick.
@@ -2381,11 +2395,12 @@ const HomeScreen = () => {
     !scheduledAt &&
     !activeBooking?.is_advance;
   // The banner over the map steps aside when the sheet says the same: the
-  // rider's arrival time under "Jomar is on the way", or "Finding your rider"
-  // (a re-pooled booking's new reference still shows in the banner).
+  // rider's arrival time under "Jomar is on the way", or "Finding your rider".
+  // A booking rebooked for another rider too: the "Booking update" box gave
+  // its new reference, and the banner lay half under "Riders nearby" (seen
+  // on the emulator, 2026-11-23).
   const sheetSaysIt =
-    (statusNum === 1 && Boolean(riderDetails)) ||
-    (searchingSheet && !activeBooking?.replaces);
+    (statusNum === 1 && Boolean(riderDetails)) || searchingSheet;
   const showMapBanner =
     showWaitingBanner && !confirmedBookingView && !sheetSaysIt;
   // While the rider is on the way, the ETA banner (51) can float over the map
@@ -2844,6 +2859,7 @@ New reference: ${activeBooking.ref_code}`
           penaltyAmount={penaltyPreview?.penalty_amount}
           prettyPenaltyAmount={penaltyPreview?.pretty_penalty_amount}
           penaltyApplies={Boolean(penaltyPreview?.penalty_applies)}
+          instant={Boolean(penaltyPreview?.instant)}
           penaltyPercent={
             penaltyPreview?.cancellation_policy
               ?.passenger_cancel_penalty_percent

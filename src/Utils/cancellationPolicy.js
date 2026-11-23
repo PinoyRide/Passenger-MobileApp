@@ -35,3 +35,7 @@ export const cancelWithPenaltyBody = pct => {
 
 export const CANCEL_FREE_BODY =
   'Are you sure you want to cancel this advance booking? No cancellation penalty applies.';
+
+// An instant booking is never charged for cancelling: no "advance" in it.
+export const CANCEL_FREE_INSTANT_BODY =
+  'Are you sure you want to cancel this booking? No cancellation penalty applies.';

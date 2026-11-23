@@ -128,3 +128,11 @@ test('update_status 409 use_cancel_advance switches to preview, never success', 
   const ok = { response: { code: 200, data: {} } };
   assert.equal(updateStatusCancelOutcome(ok), 'cancelled');
 });
+
+test('an instant booking is asked about plainly: no "advance booking" in it', () => {
+  const d = cancelDialogState({ penaltyApplies: false, instant: true });
+  assert.equal(d.mode, 'free');
+  assert.equal(d.body, 'Are you sure you want to cancel this booking? No cancellation penalty applies.');
+  assert.doesNotMatch(d.body, /advance/i);
+  assert.equal(instantCancelPreview(50).instant, true);
+});

@@ -24,6 +24,7 @@ const SHARED = [
   'src/Components/ProfileAvatar/ProfileAvatar.js',
   'src/Components/ChatThread/ChatThread.js',
   'src/Components/TripActions/TripActions.js',
+  'src/Hooks/useAutoClose.js',
   'src/Utils/arrivalText.js',
   'src/Utils/__tests__/arrivalText.test.mjs',
   'src/Utils/personName.js',
@@ -53,11 +54,16 @@ const other = join(
     ? 'Passenger-MobileApp'
     : 'Rider-MobileApp',
 );
-const skip = existsSync(other) ? false : 'the other app is not next to this one';
+const skip = existsSync(other)
+  ? false
+  : 'the other app is not next to this one';
 
 for (const file of SHARED) {
   test(`${file} is the same in both apps`, { skip }, () => {
-    assert.ok(existsSync(join(other, file)), `${file} is missing in ${basename(other)}`);
+    assert.ok(
+      existsSync(join(other, file)),
+      `${file} is missing in ${basename(other)}`,
+    );
     assert.equal(
       readFileSync(join(root, file), 'utf8'),
       readFileSync(join(other, file), 'utf8'),
