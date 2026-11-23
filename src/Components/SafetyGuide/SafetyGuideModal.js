@@ -1,5 +1,4 @@
 import React from 'react';
-import { ON_PRIMARY_BUTTON_TEXT } from '@/Theme';
 import {
   Modal,
   Pressable,
@@ -16,6 +15,8 @@ import {
 } from '@/Components/EmergencyCall/emergencyCall';
 
 // Figma: Safety Guide chip opens the emergency call dialog (frame w/ 911 + Call).
+// The same file in both apps (sharedUi.test.mjs): Emergency assistance on the
+// Account page, and the rider's and the passenger's way to 911 during a trip.
 const SafetyGuideModal = ({ visible, onClose }) => {
   const look = modern(useTheme());
   const styles = getStyles(look);
@@ -86,7 +87,7 @@ const getStyles = look =>
       width: 40,
       height: 40,
       borderRadius: 20,
-      backgroundColor: '#FEC107',
+      backgroundColor: look.accent,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -98,7 +99,7 @@ const getStyles = look =>
       letterSpacing: 0.5,
     },
     callButton: {
-      backgroundColor: '#FEC107',
+      backgroundColor: look.accent,
       borderRadius: 8,
       paddingHorizontal: 20,
       paddingVertical: 10,
@@ -108,6 +109,6 @@ const getStyles = look =>
     callButtonText: {
       fontFamily: 'Poppins SemiBold',
       fontSize: 15,
-      color: ON_PRIMARY_BUTTON_TEXT,
+      color: look.onAccent,
     },
   });

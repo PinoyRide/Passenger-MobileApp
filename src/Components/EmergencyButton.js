@@ -17,7 +17,9 @@ export { EMERGENCY_NUMBER };
 const CONFIRM_TITLE = 'Call Emergency?';
 const CONFIRM_MESSAGE = `This will call ${EMERGENCY_NUMBER} (Philippine emergency hotline).`;
 
-// Figma frame 51: red pill, top-right over the map, while in transit.
+// Figma frame 51: red pill, top-right over the map, while in transit. The same
+// file in both apps (sharedUi.test.mjs): the rider has it over the map for the
+// whole trip.
 const EmergencyButton = ({ style }) => {
   const onPress = () => {
     if (Platform.OS === 'web') {
