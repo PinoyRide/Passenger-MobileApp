@@ -76,6 +76,9 @@ import {
 import { recentPlacesFrom, withBooking } from '@/Utils/recentPlaces';
 import { AppUtil, Constants } from '@/Utils';
 import usePostRequest from '@/Services/Api';
+import useApiRequest from '@/Services/ApiV2';
+import { toLegacyCustomer } from '@/Utils/customerMapper';
+import { startingPayment } from '@/Utils/startingPayment';
 import PaymentMethodModal from './Components/PaymentMethodModal';
 import BookingStatusModal from './Components/BookingStatusModal';
 import NoteToRiderModal from './Components/NoteToRiderModal';
@@ -2233,6 +2236,63 @@ const HomeScreen = () => {
     fareHeld || pricedKeyRef.current === fareKeyNow
       ? inquireBookingResponse
       : null;
+
+  // Each trip starts on the PinoyRide Wallet when its balance covers the fare,
+  // on cash otherwise (the owner, 2026-11-23: "starting on pinoy ride wallet if
+  // there is enough balance"). A method the passenger picks on the sheet stands
+  // for that trip; advance bookings stay cash. The server checks the balance
+  // again when the ride is booked.
+  const getWalletBalance = useApiRequest();
+  const paymentChosenForRef = useRef(null); // the trip the passenger picked for
+  const paymentStartedForRef = useRef(null); // the trip and fare it was set for
+  const startingFare = sheetFare?.total_amount;
+  useEffect(() => {
+    if (
+      startingFare === null ||
+      startingFare === undefined ||
+      isBooked ||
+      isConfirmed ||
+      advanceBookingFlow ||
+      scheduledAt ||
+      !userInfo?.id
+    ) {
+      return undefined;
+    }
+    const trip = fareKeyNow;
+    const started = `${trip}|${startingFare}`;
+    if (
+      paymentChosenForRef.current === trip ||
+      paymentStartedForRef.current === started
+    ) {
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      const { response } = await getWalletBalance.request(
+        'GET',
+        Constants.API.CUSTOMER(userInfo.id),
+      );
+      if (cancelled || paymentChosenForRef.current === trip) {
+        return;
+      }
+      const balance = toLegacyCustomer(response?.data)?.wallet_details
+        ?.avail_balance;
+      paymentStartedForRef.current = started;
+      setSelectedPayment(startingPayment({ balance, fare: startingFare }));
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    startingFare,
+    fareKeyNow,
+    isBooked,
+    isConfirmed,
+    advanceBookingFlow,
+    scheduledAt,
+    userInfo?.id,
+  ]);
   const tripChip =
     sheetFare && !isConfirmed
       ? tripChipText({
@@ -3076,6 +3136,7 @@ New reference: ${activeBooking.ref_code}`
           selectedPayment={selectedPayment}
           cashOnly={advanceBookingFlow || Boolean(scheduledAt)}
           onSelect={method => {
+            paymentChosenForRef.current = fareKeyNow;
             setSelectedPayment(method);
           }}
         />

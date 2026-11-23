@@ -3,6 +3,23 @@ import React from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
 
+// How a ride is paid (the owner, 2026-11-23: "starting on pinoy ride wallet if
+// there is enough balance"): the booking sheet starts on the wallet when its
+// balance covers the fare (src/Utils/startingPayment.js), on cash otherwise.
+// This page says so; the choice itself is made on the booking sheet.
+const METHODS = [
+  {
+    label: 'PinoyRide Wallet',
+    note: 'Used first when your balance covers the fare',
+    icon: require('@/Assets/Common/HomeScreen/PaymentMethodModal/Wallet.png'),
+  },
+  {
+    label: 'Cash',
+    note: 'When it does not, and for advance bookings',
+    icon: require('@/Assets/Common/HomeScreen/PaymentMethodModal/Cash.png'),
+  },
+];
+
 const PaymentOptionScreen = () => {
   const { colors } = useTheme();
   const styles = getStyles({ colors });
@@ -11,13 +28,6 @@ const PaymentOptionScreen = () => {
   const handleBack = () => {
     navigation.replace('SettingsScreen');
   };
-
-  const addMethods = [
-    {
-      label: 'Pinoy Ride Wallet',
-      icon: require('@/Assets/Common/HomeScreen/BottomModal/Ellipse_9.png'),
-    },
-  ];
 
   return (
     <View style={styles.container}>
@@ -35,22 +45,8 @@ const PaymentOptionScreen = () => {
         </View>
       </View>
       <View style={styles.contents}>
-        <View style={styles.row}>
-          <Image
-            source={require('@/Assets/Common/HomeScreen/BottomModal/Ellipse_9.png')}
-            style={styles.icon}
-            resizeMode="contain"
-          />
-          <View style={styles.textContainer}>
-            <Text style={styles.label}>Cash</Text>
-          </View>
-          <Text style={styles.status}>Default</Text>
-        </View>
-        {/*
-        <Text style={styles.title}>Add Methods</Text>
-
-        {addMethods.map((method, index) => (
-          <View key={`other-${index}`} style={styles.row}>
+        {METHODS.map(method => (
+          <View key={method.label} style={styles.row}>
             <Image
               source={method.icon}
               style={styles.icon}
@@ -58,15 +54,16 @@ const PaymentOptionScreen = () => {
             />
             <View style={styles.textContainer}>
               <Text style={styles.label}>{method.label}</Text>
+              <Text style={styles.warning}>{method.note}</Text>
             </View>
           </View>
-        ))} */}
+        ))}
 
         <View style={styles.divider} />
 
         <Text style={styles.warning}>
-          Choose your preferred payment method for a faster, hassle-free ride
-          experience.
+          Each ride starts on your PinoyRide Wallet when it has enough for the
+          fare. You can switch to cash for any ride on the booking sheet.
         </Text>
       </View>
     </View>
@@ -125,16 +122,6 @@ const getStyles = ({ colors }) =>
       flex: 1,
       marginLeft: 10,
     },
-    status: {
-      backgroundColor: colors.error,
-      color: colors.onPrimary,
-      fontSize: 10,
-      fontFamily: 'Poppins Regular',
-      paddingVertical: 2,
-      paddingHorizontal: 18,
-      borderRadius: 5,
-      marginBottom: 10,
-    },
     icon: {
       width: 27,
       height: 27,
@@ -144,13 +131,6 @@ const getStyles = ({ colors }) =>
       fontFamily: 'Poppins Light',
       fontWeight: 500,
       fontSize: 16,
-      color: colors.text,
-    },
-    title: {
-      fontFamily: 'Poppins Medium',
-      fontWeight: 500,
-      fontSize: 16,
-      marginVertical: 15,
       color: colors.text,
     },
     warning: {

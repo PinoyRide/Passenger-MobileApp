@@ -219,7 +219,7 @@ const SettingsScreen = () => {
           <MenuRow
             icon="credit-card-outline"
             title="Payment options"
-            value="Cash"
+            value="Wallet first"
             onPress={() => navigation.navigate('PaymentOptionScreen')}
           />
         </MenuGroup>
