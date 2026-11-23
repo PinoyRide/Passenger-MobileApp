@@ -57,12 +57,9 @@ export const isOngoingOnLiveTripMap = booking => {
   return !booking?.is_advance && status === 0;
 };
 
-// Advance bookings already show the accepted-rider modal at status 5; skip "We found you a Rider!" at status 1.
-export const shouldShowRiderFoundAlert = booking => !booking?.is_advance;
-
 // The rider has set off for the pickup ("Go to Pick Up Location", or an advance
-// booking's start), arrived, or the trip has moved on: "We found you a Rider!"
-// and the advance "Congratulations" close by themselves (the owner, 2026-11-22).
+// booking's start), arrived, or the trip has moved on: the advance
+// "Congratulations" closes by itself (the owner, 2026-11-22).
 export const riderHasSetOff = booking => {
   const status = getRawStatus(booking);
   return (

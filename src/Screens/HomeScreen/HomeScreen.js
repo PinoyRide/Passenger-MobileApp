@@ -26,7 +26,6 @@ import {
   AlertBox,
   AppMap,
   ProfileAvatar,
-  RiderFoundAlertBox,
   SuccessAlertBox,
 } from '@/Components';
 import { fullNameOf } from '@/Utils/personName';
@@ -121,7 +120,6 @@ import {
   isAdvanceAcceptedAcknowledged,
   isReturnedToPool,
   riderHasSetOff,
-  shouldShowRiderFoundAlert,
   transformBooking,
 } from '@/Hooks/bookingTransform';
 import {
@@ -229,8 +227,8 @@ const HomeScreen = () => {
   const locationReady = permissionStatus === 'granted';
 
   const [showSuccess, setShowSuccess] = useState(false);
-  const [showRiderFound, setShowRiderFound] = useState(false);
-  const riderAlertShownRef = useRef(false);
+  // No "We found you a Rider!" box: the trip sheet's "Rider found" banner and
+  // rider card say it (the owner, 2026-11-23: "i think it will be redundunt").
 
   // Modal states (not persisted)
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -264,10 +262,9 @@ const HomeScreen = () => {
   const [showAdvanceAccepted, setShowAdvanceAccepted] = useState(false);
   // Boxes nobody answers close by themselves (Hooks/useAutoClose): a notice
   // once read (an AlertBox notice does it itself), the others after 3
-  // minutes. "We found you a Rider!" and "Congratulations" only close.
+  // minutes. "Congratulations" only closes.
   useAutoClose(showAlert, () => setShowAlert(false));
   useAutoClose(showPushNotice, () => setShowPushNotice(false));
-  useAutoClose(showRiderFound, () => setShowRiderFound(false), NOTICE_READ_MS);
   useAutoClose(
     showAdvanceAccepted,
     () => setShowAdvanceAccepted(false),
@@ -609,7 +606,6 @@ const HomeScreen = () => {
     }
     setShowWaitingBanner(false);
     setShowAdvanceAccepted(false);
-    riderAlertShownRef.current = false;
     dispatch(clearBookingState());
     clearTransientBookingUi();
     setSelectedPromo(null);
@@ -643,10 +639,6 @@ const HomeScreen = () => {
     setRiderLocation(null);
     setBookingVehicle(null);
     setShowAdvanceAccepted(false);
-    // "We found you a Rider!" was about the rider who let it go (the owner,
-    // 2026-11-23: it stayed under the "Booking update")
-    setShowRiderFound(false);
-    riderAlertShownRef.current = false;
     if (pushTargetRef.current?.id === String(oldBooking.id)) {
       pushTargetRef.current = { ...pushTargetRef.current, id: String(newId) };
     }
@@ -1033,7 +1025,6 @@ const HomeScreen = () => {
         if (activeBooking?.id && !isSaved && restoredNum !== 3) {
           dispatch(clearBookingState());
           clearTransientBookingUi();
-          riderAlertShownRef.current = false;
         }
         if (!isSaved && restoredNum !== 3) {
           dispatch(
@@ -1177,14 +1168,6 @@ const HomeScreen = () => {
             lat: booking.rider_details.current_lat,
             long: booking.rider_details.current_long,
           });
-        }
-
-        if (booking.status === 1 && !riderAlertShownRef.current) {
-          AppUtil.debugDeep(riderDetails);
-          if (shouldShowRiderFoundAlert(booking) && !riderHasSetOff(booking)) {
-            setShowRiderFound(true);
-          }
-          riderAlertShownRef.current = true;
         }
       }
 
@@ -1653,11 +1636,10 @@ const HomeScreen = () => {
           : null,
       );
 
-      // "We found you a Rider!" (an advance booking's "Congratulations") goes
-      // by itself once the rider sets off for the pickup: the passenger watches
-      // the rider come on the map instead.
+      // An advance booking's "Congratulations" goes by itself once the rider
+      // sets off for the pickup: the passenger watches the rider come on the
+      // map instead.
       if (riderHasSetOff(data)) {
-        setShowRiderFound(false);
         setShowAdvanceAccepted(false);
       }
 
@@ -1681,12 +1663,6 @@ const HomeScreen = () => {
         if (data.rider_eta) {
           setRiderEta(data.rider_eta);
           setRiderEtaReceivedAt(Date.now());
-        }
-        if (!riderAlertShownRef.current) {
-          if (shouldShowRiderFoundAlert(data) && !riderHasSetOff(data)) {
-            setShowRiderFound(true);
-          }
-          riderAlertShownRef.current = true;
         }
       } else if (statusNum === 2) {
         // Keep last good drop-off ETA across booking-details polls; get_eta owns updates.
@@ -1860,7 +1836,6 @@ const HomeScreen = () => {
     setPenaltyPreview(null);
     setCancelPreviewLoading(false);
     dispatch(clearBookingState());
-    riderAlertShownRef.current = false;
     setShowWaitingBanner(false);
     // Reset selections
     setSelectedPromo(null);
@@ -2487,7 +2462,6 @@ New reference: ${activeBooking.ref_code}`
         );
         dispatch(clearBookingState());
         clearTransientBookingUi();
-        riderAlertShownRef.current = false;
       }
       dispatch(
         setPickupLocation({
@@ -2807,23 +2781,6 @@ New reference: ${activeBooking.ref_code}`
             </Text>
           </Pressable>
         ) : null}
-
-        <RiderFoundAlertBox
-          visible={showRiderFound}
-          onClose={() => setShowRiderFound(false)}
-          riderName={
-            riderDetails
-              ? `${riderDetails.ekyc_details?.first_name} ${riderDetails.ekyc_details?.last_name}`
-              : ''
-          }
-          plateNumber={bookingVehicle?.plateNumber || ''}
-          vehicle={bookingVehicle?.label || ''}
-          imageSource={
-            riderDetails?.ekyc_details?.selfie
-              ? { uri: riderDetails.ekyc_details.selfie }
-              : require('@/Assets/Common/Default_Profile.png')
-          }
-        />
 
         {showSuccess && (
           <SuccessAlertBox
