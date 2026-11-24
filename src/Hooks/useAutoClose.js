@@ -1,4 +1,6 @@
 import { useEffect, useRef } from 'react';
+import { AppState } from 'react-native';
+import { startOnScreenTimer } from '@/Utils/onScreenTimer';
 
 // A box nobody answers closes by itself: after `ms` on screen `close` runs.
 // It closes the box the way its own button would, without starting what the
@@ -13,6 +15,8 @@ import { useEffect, useRef } from 'react';
 //                         this always stays in my screen"). Utils/alertShape.js
 //                         (isNotice) tells the two apart; AlertBox and
 //                         AlertHost apply it.
+// Only time on screen counts (Utils/onScreenTimer.js): a box raised while the
+// app is minimized waits for the person to come back (QA NTF-10).
 export const NOTICE_AUTO_CLOSE_MS = 3 * 60 * 1000;
 export const NOTICE_READ_MS = 10 * 1000;
 
@@ -23,8 +27,7 @@ const useAutoClose = (visible, close, ms = NOTICE_AUTO_CLOSE_MS) => {
     if (!visible) {
       return undefined;
     }
-    const timer = setTimeout(() => closeRef.current?.(), ms);
-    return () => clearTimeout(timer);
+    return startOnScreenTimer(() => closeRef.current?.(), ms, AppState);
   }, [visible, ms]);
 };
 

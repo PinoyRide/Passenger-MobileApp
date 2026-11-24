@@ -41,6 +41,9 @@ const SHARED = [
   'src/Components/ChatThread/ChatThread.js',
   'src/Components/TripActions/TripActions.js',
   'src/Hooks/useAutoClose.js',
+  // a box closes by itself only after time on screen (QA NTF-10)
+  'src/Utils/onScreenTimer.js',
+  'src/Utils/__tests__/onScreenTimer.test.mjs',
   'src/Utils/arrivalText.js',
   'src/Utils/closedRoad.js',
   'src/Utils/__tests__/closedRoad.test.mjs',
