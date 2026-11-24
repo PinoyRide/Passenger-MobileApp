@@ -2489,6 +2489,11 @@ const HomeScreen = () => {
     showMapBanner
       ? 15 + 59
       : 0;
+  // While "Riders nearby" is on the map (`sheetShown`: a booked ride waiting
+  // for its rider, or a scheduled one accepted), the banner sits above it:
+  // both stood on the sheet's top edge, and the button hid the banner's first
+  // words (QA LAT-06/08/19, 2026-11-25). The button: 16 off the sheet, 48 high.
+  const mapBannerBottom = modalHeight + (sheetShown ? 16 + 48 + 10 : 15);
 
   const etaBannerText = riderArrived
     ? 'Your Rider has arrived'
@@ -2895,7 +2900,7 @@ New reference: ${activeBooking.ref_code}`
         )}
 
         {showMapBanner && (
-          <View style={[styles.banner, { bottom: modalHeight + 15 }]}>
+          <View style={[styles.banner, { bottom: mapBannerBottom }]}>
             <Text style={styles.bannerText}>{bannerText}</Text>
           </View>
         )}
