@@ -14,7 +14,7 @@ import { useTheme } from 'react-native-paper';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { selectUserInfo } from '@/Redux/Slices/userSlice';
 import { useSelector } from 'react-redux';
-import { displayMobile, fullNameOf } from '@/Utils/personName';
+import { displayMobile, fullNameOf, titleCase } from '@/Utils/personName';
 import { genderOf } from '@/Utils/gender';
 
 const ProfileScreen = () => {
@@ -43,17 +43,6 @@ const ProfileScreen = () => {
     }, [navigation]),
   );
 
-  const toTitleCase = str => {
-    if (!str) {
-      return '';
-    }
-    return str
-      .toLowerCase()
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  };
-
   // What the account holds, as the Account page and the edit form read it:
   // the number it signs in with and the email given at registration or in
   // Edit (the old TOP PH identity check's email, gender and address never
@@ -64,9 +53,9 @@ const ProfileScreen = () => {
       label: 'Name',
       value:
         [
-          toTitleCase(ekyc?.first_name || userInfo?.fname),
-          toTitleCase(ekyc?.middle_name || userInfo?.mname),
-          toTitleCase(ekyc?.last_name || userInfo?.lname),
+          titleCase(ekyc?.first_name || userInfo?.fname),
+          titleCase(ekyc?.middle_name || userInfo?.mname),
+          titleCase(ekyc?.last_name || userInfo?.lname),
         ]
           .filter(Boolean)
           .join(' ') || 'Not set yet',

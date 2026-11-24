@@ -1,9 +1,26 @@
 // A person's name and number as the account pages show them.
 
-const capitalise = word =>
-  word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+const upFirst = part => part.charAt(0).toUpperCase() + part.slice(1);
 
-// "JOHN roe" -> "John Roe"
+// One part of a word (between hyphens): capitals the person typed inside it
+// stay (DeGuzman, McArthur); a part with no small letter at all (DELA, JOHN)
+// is shouted, so it becomes Dela, John. A one-letter start before an
+// apostrophe takes a capital after it too (O'Neil, D'Souza), nothing else
+// does (Mary's).
+const capitalisePart = part => {
+  const shouted =
+    part === part.toUpperCase() && part !== part.toLowerCase();
+  const text = shouted ? part.toLowerCase() : part;
+  const m = /^(\p{L})(['\u2019])(\p{L}.*)$/u.exec(text);
+  return m ? `${upFirst(m[1])}${m[2]}${upFirst(m[3])}` : upFirst(text);
+};
+
+// A word with a capital after every hyphen: "cruz-villanueva" ->
+// "Cruz-Villanueva".
+const capitalise = word => word.split('-').map(capitalisePart).join('-');
+
+// "JOHN roe" -> "John Roe"; "Dela Cruz-villanueva" -> "Dela Cruz-Villanueva";
+// "DeGuzman" and "McArthur" stay as typed.
 export const titleCase = text =>
   String(text || '')
     .trim()
