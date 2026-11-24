@@ -16,6 +16,10 @@ const {
   maskedAccount,
   afterCashOut,
   CASH_OUT_TIMEOUT_MS,
+  nextResultCheck,
+  cashOutOutcome,
+  cashOutResultText,
+  resultOnScreen,
 } = mod;
 
 const answered = data => ({
@@ -164,4 +168,63 @@ test('a cash-out never sent (no connection) says so, not "may have gone through"
   );
   assert.equal(next.refusal, 'No internet connection.');
   assert.doesNotMatch(next.refusal, /may have gone through/);
+});
+
+// The result page, 2026-11-24: it stayed on "processing" after the cash-out
+// was paid out or had come back. Now it follows the cash-out by itself.
+test('the result page asks every 5 s for 3 minutes, then every 30 s, and stops after 15 minutes', () => {
+  assert.equal(nextResultCheck(0), 5000);
+  assert.equal(nextResultCheck(179999), 5000);
+  assert.equal(nextResultCheck(180000), 30000);
+  assert.equal(nextResultCheck(14 * 60 * 1000), 30000);
+  assert.equal(nextResultCheck(15 * 60 * 1000), null);
+  // a clock that went backwards, or no time yet: ask soon
+  assert.equal(nextResultCheck(-50), 5000);
+  assert.equal(nextResultCheck(undefined), 5000);
+});
+
+test('only "completed" and "failed" end the wait; anything else is still processing', () => {
+  assert.equal(cashOutOutcome({ status: 'completed' }), 'completed');
+  assert.equal(cashOutOutcome({ status: 'FAILED' }), 'failed');
+  assert.equal(cashOutOutcome({ status: 'processing' }), 'processing');
+  assert.equal(cashOutOutcome({ status: 'pending' }), 'processing');
+  assert.equal(cashOutOutcome({}), 'processing');
+  assert.equal(cashOutOutcome(null), 'processing');
+});
+
+test('the result page says sent, did not go through (with the amount back), or processing', () => {
+  assert.deepEqual(cashOutResultText('completed', '₱15.00'), {
+    title: 'Cash out sent',
+    note: 'It was paid out to your account.',
+  });
+  assert.deepEqual(cashOutResultText('failed', '₱15.00'), {
+    title: 'Cash out did not go through',
+    note: '₱15.00 is back in your wallet.',
+  });
+  assert.equal(cashOutResultText('processing', '₱15.00').title, 'Cash out is processing');
+  assert.match(cashOutResultText('processing', '₱15.00').note, /back in your wallet if the transfer fails/);
+});
+
+test("a cash-out's notification gets no box while that cash-out's result page is on screen", () => {
+  const page = {
+    name: 'AppTransactionComplete',
+    params: {
+      referenceData: { transactionType: 'CASHOUT', amount: 15, transactionId: 'PRCO1' },
+    },
+  };
+  // the notification's data values are text (FCM)
+  assert.equal(resultOnScreen(page, { type: 'cash_out_paid', amount: '15.00' }), true);
+  assert.equal(resultOnScreen(page, { type: 'cash_out_failed', amount: '15' }), true);
+  // another amount: another cash-out, so its box still shows
+  assert.equal(resultOnScreen(page, { type: 'cash_out_paid', amount: '700.00' }), false);
+  // not a cash-out's notification, or not a cash-out's page
+  assert.equal(resultOnScreen(page, { type: 'wallet_credited', amount: '15.00' }), false);
+  assert.equal(resultOnScreen({ name: 'WalletScreen' }, { type: 'cash_out_paid', amount: '15.00' }), false);
+  const topUp = {
+    name: 'AppTransactionComplete',
+    params: { referenceData: { transactionType: 'TOPUP', amount: 15 } },
+  };
+  assert.equal(resultOnScreen(topUp, { type: 'cash_out_paid', amount: '15.00' }), false);
+  assert.equal(resultOnScreen(null, { type: 'cash_out_paid', amount: '15.00' }), false);
+  assert.equal(resultOnScreen(page, null), false);
 });

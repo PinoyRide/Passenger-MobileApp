@@ -4,9 +4,15 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import React, { useEffect } from 'react';
 import { BackHandler, Image, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import useCashOutResult from '@/Hooks/useCashOutResult';
+import { cashOutResultText } from '@/Utils/cashOut';
+import { modern } from '@/Theme/modern';
 
 const AppTransactionComplete = () => {
-  const { colors } = useTheme();
+  const theme = useTheme();
+  const { colors } = theme;
+  const look = modern(theme);
   const styles = getStyles({ colors });
   const navigation = useNavigation();
   const route = useRoute();
@@ -19,6 +25,18 @@ const AppTransactionComplete = () => {
   const formattedAmount = route?.params?.referenceData?.amount
     ? `₱${parseFloat(route?.params?.referenceData.amount).toFixed(2)}`
     : '₱0.00';
+
+  // A cash-out's page follows it until it is paid out or has failed and come
+  // back, the same as the Rider's (useCashOutResult, shared)
+  const referenceData = route?.params?.referenceData;
+  const isCashOut = referenceData?.transactionType === 'CASHOUT';
+  const cashOut = useCashOutResult(
+    referenceData?.transactionId,
+    referenceData?.status,
+    isCashOut,
+  );
+  const cashOutText = cashOutResultText(cashOut, formattedAmount);
+  const cashOutFailed = isCashOut && cashOut === 'failed';
 
   useEffect(() => {
     AppUtil.debugDeep(route?.params);
@@ -62,30 +80,32 @@ const AppTransactionComplete = () => {
   return (
     <Container style={styles.container}>
       <View style={styles.contents}>
-        <Image
-          source={require('@/Assets/Common/Success_Image.png')}
-          style={styles.image}
-          resizeMode="contain"
-        />
+        {cashOutFailed ? (
+          <View style={[styles.image, styles.mark, { backgroundColor: look.tile }]}>
+            <Icon name="cash-refund" size={56} color={look.inkSoft} />
+          </View>
+        ) : (
+          <Image
+            source={require('@/Assets/Common/Success_Image.png')}
+            style={styles.image}
+            resizeMode="contain"
+          />
+        )}
         {/* Display dynamic amount */}
         <Text style={styles.amount}>{formattedAmount}</Text>
 
         {/* Dynamic title based on payment method */}
-        <Text style={styles.title}>
-          {route?.params?.referenceData?.paymentMethod === 'QRPH'
+        <Text style={styles.title} accessibilityLiveRegion="polite">
+          {referenceData?.paymentMethod === 'QRPH'
             ? 'QRPH Payment Successful!'
-            : route?.params?.referenceData?.transactionType === 'CASHOUT'
-            ? route?.params?.referenceData?.status === 'completed'
-              ? 'Cash out completed'
-              : 'Cash out is processing'
+            : isCashOut
+            ? cashOutText.title
             : 'Cash-out request sent!'}
         </Text>
 
         <Text style={styles.subtitle}>
-          {route?.params?.referenceData?.transactionType === 'CASHOUT'
-            ? route?.params?.referenceData?.status === 'completed'
-              ? 'The amount has been sent to your account.'
-              : 'The amount is on its way. It is back in your wallet if the transfer fails.'
+          {isCashOut
+            ? cashOutText.note
             : 'Your transaction has been completed successfully.'}
         </Text>
 
@@ -138,6 +158,11 @@ const getStyles = ({ colors }) =>
       height: 122,
       borderRadius: 61,
       marginBottom: 24,
+    },
+    // a cash-out that came back: money returning, in place of the picture
+    mark: {
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     amount: {
       fontFamily: 'Poppins Bold',

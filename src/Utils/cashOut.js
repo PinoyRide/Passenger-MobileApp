@@ -197,8 +197,91 @@ function afterCashOut(answer, amount) {
   };
 }
 
+// After a cash-out is taken, its result page (AppTransactionComplete, CASHOUT)
+// asks cash_out/check_status/ until it is paid out or has failed and come
+// back. Until 2026-11-24 it stayed on "processing" after both (a UAT test that
+// day; the owner then asked for it to switch by itself). Every 5 s for the
+// first 3 minutes, then every 30 s, and not after 15 minutes (the notification
+// and the wallet still tell); PayCools answered within a minute in UAT. Each
+// check reads Pinoy Ride's own records: nothing paid is called.
+const RESULT_CHECK_FAST_MS = 5000;
+const RESULT_CHECK_SLOW_MS = 30000;
+const RESULT_FAST_FOR_MS = 3 * 60 * 1000;
+const RESULT_STOP_AFTER_MS = 15 * 60 * 1000;
+
+// How long to wait before the next check, `elapsed` ms after the page opened;
+// null: stop asking.
+function nextResultCheck(elapsed) {
+  const since = Math.max(0, Number(elapsed) || 0);
+  if (since >= RESULT_STOP_AFTER_MS) {
+    return null;
+  }
+  return since < RESULT_FAST_FOR_MS ? RESULT_CHECK_FAST_MS : RESULT_CHECK_SLOW_MS;
+}
+
+// Where the cash-out stands, from check_status's answer (or the first answer):
+// 'completed' (paid out), 'failed' (the amount is back in the wallet) or
+// 'processing' (still with PayCools, or no answer).
+function cashOutOutcome(data) {
+  const status = String(data?.status || '').toLowerCase();
+  return status === 'completed' || status === 'failed' ? status : 'processing';
+}
+
+// The result page's words for each outcome, in the notification's own words.
+function cashOutResultText(outcome, amountText) {
+  if (outcome === 'completed') {
+    return {
+      title: 'Cash out sent',
+      note: 'It was paid out to your account.',
+    };
+  }
+  if (outcome === 'failed') {
+    return {
+      title: 'Cash out did not go through',
+      note: `${amountText} is back in your wallet.`,
+    };
+  }
+  return {
+    title: 'Cash out is processing',
+    note: 'The amount is on its way. It is back in your wallet if the transfer fails.',
+  };
+}
+
+const CASH_OUT_PUSHES = ['cash_out_paid', 'cash_out_failed'];
+
+// A cash-out's notification (data: type, amount) while that cash-out's result
+// page is on screen (`route`, the current navigation route): the page says
+// the result itself, so no box goes over it.
+function resultOnScreen(route, data) {
+  if (!CASH_OUT_PUSHES.includes(data?.type)) {
+    return false;
+  }
+  const shown =
+    route?.name === 'AppTransactionComplete'
+      ? route?.params?.referenceData
+      : null;
+  if (!shown || shown.transactionType !== 'CASHOUT') {
+    return false;
+  }
+  const onPage = Number(shown.amount);
+  const told = Number(data?.amount);
+  return (
+    Number.isFinite(onPage) &&
+    Number.isFinite(told) &&
+    Math.abs(onPage - told) < 0.005
+  );
+}
+
 module.exports = {
   CASH_OUT_TIMEOUT_MS,
+  RESULT_CHECK_FAST_MS,
+  RESULT_CHECK_SLOW_MS,
+  RESULT_FAST_FOR_MS,
+  RESULT_STOP_AFTER_MS,
+  nextResultCheck,
+  cashOutOutcome,
+  cashOutResultText,
+  resultOnScreen,
   GCASH,
   MAX_NAME,
   MINIMUM_CASH_OUT,

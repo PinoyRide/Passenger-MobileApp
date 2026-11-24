@@ -8,6 +8,8 @@ import useApiRequest from '@/Services/ApiV2';
 import { Constants } from '@/Utils';
 import { selectUserInfo } from '@/Redux/Slices/userSlice';
 import { navigationRef } from '@/Utils/NavigationService';
+import appAlert from '@/Utils/appAlert';
+import { resultOnScreen } from '@/Utils/cashOut';
 import LightTheme from '@/Theme/LightTheme';
 import {
   PUSH_TYPES,
@@ -34,6 +36,12 @@ const PROMPT_SHOWN_KEY = 'push_permission_prompt_shown_v1';
 const HANDLED_IDS_KEY = 'push_handled_message_ids_v1';
 const HANDLED_IDS_MAX = 30;
 const BANNER_MS = 5000;
+// Shown in the box both apps use for money, not the banner (foreground)
+const MONEY_PUSHES = [
+  PUSH_TYPES.WALLET_CREDITED,
+  PUSH_TYPES.CASH_OUT_PAID,
+  PUSH_TYPES.CASH_OUT_FAILED,
+];
 // Routes where a logged-in user may be sent from a notification tap.
 // A push tapped on these waits: the person is not in the app yet. The Terms
 // screen (asked to accept before going on) and Update Required were skipped
@@ -362,11 +370,28 @@ const PushNotificationManager = () => {
       if (!msg?.title && !body) {
         return;
       }
+      // Money in or out (a top-up credited, a cash-out paid or returned): the
+      // Rider's box, which stays until it is answered, rather than a banner
+      // gone in 5 s (the owner, 2026-11-24: both apps show it the same way).
+      // A cash-out's result page on screen says it itself: no box over it.
+      if (MONEY_PUSHES.includes(parsed.type)) {
+        const current = navigationRef.isReady()
+          ? navigationRef.getCurrentRoute()
+          : null;
+        if (resultOnScreen(current, msg?.data)) {
+          return;
+        }
+        appAlert(msg?.title || 'Pinoy Ride', body, [
+          { text: 'Dismiss', style: 'cancel' },
+          { text: 'View', onPress: () => handleTap(msg) },
+        ]);
+        return;
+      }
       setBanner({ ...msg, body });
       clearTimeout(bannerTimer.current);
       bannerTimer.current = setTimeout(() => setBanner(null), BANNER_MS);
     });
-  }, [customerId]);
+  }, [customerId, handleTap]);
 
   useEffect(() => () => clearTimeout(bannerTimer.current), []);
 

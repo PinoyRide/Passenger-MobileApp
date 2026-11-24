@@ -49,6 +49,8 @@ const SHARED = [
   'src/Utils/cashOut.js',
   'src/Screens/WalletScreen/CashOutScreen.js',
   'src/Utils/__tests__/cashOut.test.mjs',
+  // the cash-out result page follows the cash-out (2026-11-24)
+  'src/Hooks/useCashOutResult.js',
   'src/Utils/__tests__/sameVersion.test.mjs',
   'src/Utils/serverDown.js',
   'src/Utils/__tests__/serverDown.test.mjs',
