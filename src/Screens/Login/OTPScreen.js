@@ -130,6 +130,10 @@ const OTPScreen = () => {
     if (loginUser.error) {
       // an expired or used-up code says so, and points at "Request a new OTP"
       const refused = codeRefused(loginUser.error);
+      if (refused.newCodeNeeded) {
+        // the keyboard covered the link, and taps on it typed the dead code in again
+        Keyboard.dismiss();
+      }
       setAlertTitle(refused.title);
       setAlertMessage(refused.message);
       setShowAlert(true);

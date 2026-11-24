@@ -50,6 +50,20 @@ test('a refused code says why, and how to get a new one', () => {
   assert.equal(codeRefused('Invalid OTP').title, 'Wrong code');
 });
 
+// QA, Passenger 2.0.95: after "Code has expired" the keyboard stayed up over
+// "Request a new OTP"; taps meant for it typed into the boxes and sent the
+// dead code again. Only a new code helps, so the screen puts the keyboard away.
+test('a code only a new code can replace asks for the keyboard to go', () => {
+  assert.equal(codeRefused('OTP expired').newCodeNeeded, true);
+  assert.equal(
+    codeRefused('Too many wrong codes. Please request a new OTP.').newCodeNeeded,
+    true,
+  );
+  // a mistyped code is corrected in the boxes: the keyboard stays
+  assert.ok(!codeRefused('Invalid OTP').newCodeNeeded);
+  assert.ok(!codeRefused('This number is signed in on another phone.').newCodeNeeded);
+});
+
 test('any other refusal is shown as the server words it', () => {
   assert.deepEqual(codeRefused('This number is signed in on another phone.'), {
     title: 'Error',

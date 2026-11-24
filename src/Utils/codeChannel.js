@@ -48,6 +48,10 @@ function sentTo({ channel, emailHint, mobileNumber, handed }) {
 // The server's words for a code are "OTP expired", "Invalid OTP" and "Too many
 // wrong codes. Please request a new OTP."; any other refusal (a number signed
 // in elsewhere, a deactivated account) is shown as the server words it.
+// `newCodeNeeded`: only a new code helps, so the screen puts the keyboard away
+// and "Request a new OTP" is in view. With the keyboard up after six digits it
+// covered the link, and a tap meant for it typed a digit instead, which sent
+// the dead code again (QA, Passenger 2.0.95: "OTP expired" at every tap).
 const NEW_CODE = 'Tap "Request a new OTP" below to get a new one.';
 function codeRefused(error) {
   const text = String(error || '');
@@ -55,12 +59,14 @@ function codeRefused(error) {
     return {
       title: 'Code has expired',
       message: `This One-Time PIN is no longer valid. ${NEW_CODE}`,
+      newCodeNeeded: true,
     };
   }
   if (/too many wrong codes/i.test(text)) {
     return {
       title: 'Code no longer valid',
       message: `Too many wrong codes were entered. ${NEW_CODE}`,
+      newCodeNeeded: true,
     };
   }
   if (/\binvalid otp\b/i.test(text)) {
