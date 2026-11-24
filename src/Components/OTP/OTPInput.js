@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { modern } from '@/Theme/modern';
+import { activeBox, boxesOf, typedCode } from '@/Utils/codeBoxes';
 
 /**
  * OTPInput component
@@ -12,6 +13,11 @@ import { modern } from '@/Theme/modern';
  * - `autoFillCode`: a code the screen already has (a test environment that
  *   hands the code to the app instead of texting it). It is shown in the
  *   boxes and submitted like a typed one, once per code.
+ *
+ * The code is typed into ONE hidden text field and the boxes only show it
+ * (Utils/codeBoxes.js says why): every Backspace, from the on-screen keyboard
+ * or a hardware one, removes the last digit. A tap on the boxes opens the
+ * keyboard; the box the next digit goes into has the gold edge.
  *
  * NOTE: Sizing is now based on the ACTUAL measured width of the row
  * (via onLayout) instead of Dimensions.get('window').width combined with
@@ -24,8 +30,9 @@ import { modern } from '@/Theme/modern';
  */
 const OTPInput = ({ length = 6, onOTPChange, onOTPComplete, autoFillCode }) => {
   const look = modern(useTheme());
-  const inputs = useRef([]);
-  const [digits, setDigits] = useState(Array.from({ length }, () => ''));
+  const input = useRef(null);
+  const [code, setCode] = useState('');
+  const [focused, setFocused] = useState(false);
 
   // Width of the row, filled in once the container actually renders.
   const [containerWidth, setContainerWidth] = useState(null);
@@ -37,15 +44,14 @@ const OTPInput = ({ length = 6, onOTPChange, onOTPComplete, autoFillCode }) => {
 
   const styles = getStyles({ look, length, containerWidth });
 
-  const update = nextDigits => {
-    setDigits(nextDigits);
-    const code = nextDigits.join('');
-    onOTPChange?.(code);
+  const update = nextCode => {
+    setCode(nextCode);
+    onOTPChange?.(nextCode);
 
-    // If all inputs are filled, call onOTPComplete
-    if (code.length === length && !nextDigits.includes('')) {
+    // If all boxes are filled, call onOTPComplete
+    if (nextCode.length === length) {
       try {
-        onOTPComplete?.(code);
+        onOTPComplete?.(nextCode);
       } catch (err) {
         console.error('Error in onOTPComplete:', err);
       }
@@ -54,76 +60,61 @@ const OTPInput = ({ length = 6, onOTPChange, onOTPComplete, autoFillCode }) => {
 
   const filledIn = useRef(null);
   useEffect(() => {
-    const code = `${autoFillCode ?? ''}`;
-    if (!new RegExp(`^\\d{${length}}$`).test(code)) {
+    const handed = `${autoFillCode ?? ''}`;
+    if (!new RegExp(`^\\d{${length}}$`).test(handed)) {
       return;
     }
-    if (filledIn.current === code) {
+    if (filledIn.current === handed) {
       return;
     }
-    filledIn.current = code;
-    update(code.split(''));
+    filledIn.current = handed;
+    update(handed);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoFillCode]);
 
-  const handleChange = (text, index) => {
-    const clean = text.replace(/\D/g, '');
-
-    // Handle paste of multiple digits
-    if (clean.length > 1) {
-      const next = [...digits];
-      for (let i = 0; i < clean.length && index + i < length; i++) {
-        next[index + i] = clean[i];
-      }
+  const handleChange = text => {
+    const next = typedCode(text, length);
+    if (next !== code) {
       update(next);
-
-      // Focus next valid input safely
-      const nextIndex = Math.min(index + clean.length, length - 1);
-      if (inputs.current[nextIndex]) {
-        setTimeout(() => inputs.current[nextIndex].focus(), 50);
-      }
-      return;
-    }
-
-    // Single char or empty
-    const next = [...digits];
-    next[index] = clean ? clean[0] : '';
-    update(next);
-
-    if (clean && index < length - 1 && inputs.current[index + 1]) {
-      setTimeout(() => inputs.current[index + 1].focus(), 50);
     }
   };
 
-  const handleKeyPress = (e, index) => {
-    if (e.nativeEvent.key === 'Backspace') {
-      if (digits[index] === '' && index > 0 && inputs.current[index - 1]) {
-        setTimeout(() => inputs.current[index - 1].focus(), 50);
-        const next = [...digits];
-        next[index - 1] = '';
-        update(next);
-      }
-    }
-  };
+  const active = activeBox(code, length);
 
   return (
     <View style={styles.wrapper}>
-      <View style={styles.container} onLayout={onContainerLayout}>
-        {digits.map((value, i) => (
-          <TextInput
+      <Pressable
+        style={styles.container}
+        onLayout={onContainerLayout}
+        onPress={() => input.current?.focus()}
+        accessible={false}>
+        {boxesOf(code, length).map((value, i) => (
+          <View
             key={i}
-            ref={ref => (inputs.current[i] = ref)}
-            style={[styles.input, value ? styles.inputFilled : null]}
-            keyboardType="number-pad"
-            value={value}
-            onChangeText={t => handleChange(t, i)}
-            onKeyPress={e => handleKeyPress(e, i)}
-            returnKeyType="next"
-            textContentType="oneTimeCode"
-            autoComplete="one-time-code"
-          />
+            style={[
+              styles.input,
+              value ? styles.inputFilled : null,
+              focused && i === active ? styles.inputActive : null,
+            ]}>
+            <Text style={styles.digit}>{value}</Text>
+          </View>
         ))}
-      </View>
+        <TextInput
+          ref={input}
+          style={styles.field}
+          keyboardType="number-pad"
+          value={code}
+          onChangeText={handleChange}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          caretHidden
+          contextMenuHidden
+          returnKeyType="done"
+          textContentType="oneTimeCode"
+          autoComplete="one-time-code"
+          accessibilityLabel="One-time PIN"
+        />
+      </Pressable>
     </View>
   );
 };
@@ -181,15 +172,30 @@ const getStyles = ({ look, length, containerWidth }) => {
       borderRadius: 14,
       borderColor: look.hairline,
       backgroundColor: look.soft,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    digit: {
       color: look.text,
       textAlign: 'center',
-      padding: 0,
       fontSize: Math.min(inputWidth * 0.5, 22),
       fontFamily: 'Poppins SemiBold',
     },
     inputFilled: {
       borderColor: look.accent,
       backgroundColor: look.surface,
+    },
+    // where the next digit goes, while the keyboard is up
+    inputActive: {
+      borderColor: look.accent,
+      borderWidth: 2,
+    },
+    // the one field the code is typed into: there, out of sight
+    field: {
+      position: 'absolute',
+      width: 1,
+      height: 1,
+      opacity: 0,
     },
   });
 };

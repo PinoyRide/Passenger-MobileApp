@@ -17,6 +17,9 @@ const SHARED = [
   'src/Components/AlertBox/AlertBox.js',
   'src/Components/AppTextInput/AppTextInput.js',
   'src/Components/OTP/OTPInput.js',
+  // the code boxes are one field (QA SIN-08, 2026-11-25)
+  'src/Utils/codeBoxes.js',
+  'src/Utils/__tests__/codeBoxes.test.mjs',
   'src/Components/Container/Container.js',
   'src/Components/ConsentCheck/ConsentCheck.js',
   'src/Components/CodeChannelPicker/CodeChannelPicker.js',
