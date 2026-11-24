@@ -1,4 +1,4 @@
-// QA update test 1: comment only, no change in behaviour.
+// QA update test 2: comment only, no change in behaviour.
 import { createNavigationContainerRef } from '@react-navigation/native';
 
 export const navigationRef = createNavigationContainerRef();
