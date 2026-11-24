@@ -19,7 +19,7 @@ const answered = new WeakSet();
 // onDismiss, as the platform's dialog does; a button runs its own answer
 // instead.
 const close = box => {
-  closeAlert();
+  closeAlert(box.id);
   setTimeout(() => {
     if (!answered.has(box) && box.onDismiss) {
       box.onDismiss();

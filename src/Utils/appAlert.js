@@ -25,10 +25,34 @@ export const subscribeAlerts = host => {
   };
 };
 
-// AlertHost, when a box is answered or closed: the next one, if any
-export const closeAlert = () => {
+// AlertHost, when the box it shows (`id`) is answered or closed: the next
+// one, if any. Nothing when that box is no longer the one shown
+// (dismissAlert took it back meanwhile): closing it again must not close the
+// next one.
+export const closeAlert = id => {
+  if (id !== undefined && shown?.id !== id) {
+    return;
+  }
   shown = waiting.shift() || null;
   publish();
+};
+
+// Takes back the boxes asked with this options.key, shown or waiting, when
+// what they say is no longer so (a booking offered to the rider that has gone
+// to another); the next waiting box, if any, is shown.
+export const dismissAlert = key => {
+  if (!key) {
+    return;
+  }
+  for (let i = waiting.length - 1; i >= 0; i -= 1) {
+    if (waiting[i].key === key) {
+      waiting.splice(i, 1);
+    }
+  }
+  if (shown && shown.key === key) {
+    shown = waiting.shift() || null;
+    publish();
+  }
 };
 
 const appAlert = (title, message, buttons, options) => {
@@ -39,6 +63,8 @@ const appAlert = (title, message, buttons, options) => {
   }
   lastId += 1;
   box.id = lastId;
+  // options.key: what dismissAlert takes it back by
+  box.key = options?.key;
   if (shown) {
     waiting.push(box);
     return;
