@@ -73,6 +73,9 @@ const SHARED = [
   // release builds keep console.log out of the system log
   'src/Utils/quietLogs.js',
   'src/Utils/__tests__/paymentWait.test.mjs',
+  // the other party's number on Booking Details (KI-63, 2026-11-25)
+  'src/Utils/bookingContact.js',
+  'src/Utils/__tests__/bookingContact.test.mjs',
   // the payment-done picture (AppTransactionComplete)
   'src/Assets/Common/Success_Image.png',
   // the iOS project's config plugins (npx expo prebuild --platform ios)
