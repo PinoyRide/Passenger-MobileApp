@@ -21,6 +21,7 @@ import { getBookingVehicle } from '@/Hooks/bookingVehicle';
 import { getRiderPhoto } from '@/Hooks/bookingTransform';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { bottomSpace } from '@/Utils/bottomSpace';
+import { dialUri } from '@/Utils/dialUri';
 import { formatPeso } from '@/Utils/formatPeso';
 import { modern } from '@/Theme/modern';
 import TripActions from '@/Components/TripActions/TripActions';
@@ -199,7 +200,7 @@ const BookingStatusModal = ({
     if (!phoneNumber) {
       return;
     }
-    Linking.openURL(`tel:${phoneNumber}`);
+    Linking.openURL(dialUri(phoneNumber));
   };
 
   const handleMessage = () => {
