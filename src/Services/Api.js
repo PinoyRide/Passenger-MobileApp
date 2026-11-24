@@ -219,8 +219,11 @@ const usePostRequest = () => {
     const online = await checkIsOnline();
     if (!online) {
       if (isLatest()) {
-        setError(OFFLINE_MESSAGE);
+        // isOffline before error: without batching each one renders on its
+        // own, and a caller reacting to `error` must already see it offline
+        // (Home's booking poll showed the weak-connection box: QA CHT-09)
         setIsOffline(true);
+        setError(OFFLINE_MESSAGE);
         setLoading(false);
       }
       // notSent: nothing left the phone (a cash-out can say so plainly)
@@ -370,8 +373,9 @@ const usePostRequest = () => {
         message = err.message || 'An unknown error occurred';
       }
 
-      setError(message);
+      // isOffline first, as above
       setIsOffline(offline);
+      setError(message);
       return { response: null, error: message, offline };
     } finally {
       if (isLatest()) {
