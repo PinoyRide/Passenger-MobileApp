@@ -31,6 +31,8 @@ const SHARED = [
   'src/Utils/__tests__/emergencyHelp.test.mjs',
   'src/Utils/alertShape.js',
   'src/Utils/appAlert.js',
+  'src/Utils/alertQueue.js',
+  'src/Utils/__tests__/alertQueue.test.mjs',
   'src/Components/AlertBox/AlertHost.js',
   'src/Utils/__tests__/alertShape.test.mjs',
   'src/Utils/__tests__/alertsInOneLook.test.mjs',
