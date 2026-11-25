@@ -1,1 +1,8 @@
-<resources/>
+<resources>
+  <!-- The screen shown while the app starts (LaunchScreen.kt), in the app's dark look, when the phone is in its
+       dark theme (src/Theme/DarkTheme.js: background rgb(28, 27, 30), brand yellow #FFCD05), as the Rider app. -->
+  <color name="launch_background">#1C1B1E</color>
+  <color name="launch_text">#B9B3A8</color>
+  <color name="launch_track">#34312C</color>
+  <color name="launch_gold">#FFCD05</color>
+</resources>

@@ -4,10 +4,14 @@
     <item name="android:editTextStyle">@style/ResetEditText</item>
     <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
     <item name="colorPrimary">@color/colorPrimary</item>
-    <item name="android:statusBarColor">#ffffff</item>
+    <!-- The window behind everything, and the system bars until the app sets them (App.js): in the colours of
+         the launch screen, which follow the phone's dark theme (values-night). A light window here flashed white
+         before the dark loading screen when the phone is dark (QA UPD-14, 2026-11-25). -->
+    <item name="android:windowBackground">@color/launch_background</item>
+    <item name="android:statusBarColor">@color/launch_background</item>
     <!-- Dark status/navigation bar icons: the app is light-themed and draws edge to edge -->
-    <item name="android:windowLightStatusBar">true</item>
-    <item name="android:windowLightNavigationBar">true</item>
+    <item name="android:windowLightStatusBar">@bool/launch_light_bars</item>
+    <item name="android:windowLightNavigationBar">@bool/launch_light_bars</item>
   </style>
   <style name="ResetEditText" parent="@android:style/Widget.EditText">
     <item name="android:padding">0dp</item>

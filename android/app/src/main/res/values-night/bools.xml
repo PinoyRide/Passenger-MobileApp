@@ -1,0 +1,4 @@
+<resources>
+  <!-- The phone is in its dark theme: light icons on the dark system bars until the app sets them (App.js) -->
+  <bool name="launch_light_bars">false</bool>
+</resources>
