@@ -88,6 +88,31 @@ installed again.
   `selfUpdate.js` says why. The backend's README ("App updates") describes its side.
 - iOS is not set up for it yet: `ios/PinoyRide/Supporting/Expo.plist` keeps it off.
 
+### VERSION SHOWN TO PEOPLE
+
+People see the version counted as the owner counts it (2026-11-25): 2.0.99, then 2.1.01, 2.1.02 … 2.1.99, then
+2.2.01, a patch of two digits from 01 to 99. "2.1.01" is not a valid version number, so the real version keeps
+counting as before (2.0.100, 2.0.101, …) in `package.json`, `app.json`, Android's versionName, the
+self-updates, everything sent to the API and the bump scripts, and only what a screen shows is mapped, by
+`src/Utils/displayVersion.js` (the same file in both apps):
+
+| Real    | Shown  |
+| ------- | ------ |
+| 2.0.5   | 2.0.05 |
+| 2.0.99  | 2.0.99 |
+| 2.0.100 | 2.1.01 |
+| 2.0.103 | 2.1.04 |
+| 2.0.198 | 2.1.99 |
+| 2.0.199 | 2.2.01 |
+
+It is used on the first screen (`v2.1.04 · Develop · 3fa9c1e`), the Account page (`PinoyRide 2.1.04 · build
+111`), Settings (`Pinoy Ride v2.1.04 · Develop · …`) and for the minimum on "Update Required", which the API
+sends as the real version. A new place that shows the version goes through it too;
+`src/Utils/__tests__/displayVersion.test.mjs` fails on a screen that shows the raw one. Android's own "App
+info", the APK file names, the commits and `api/app-updates/<app>` keep the real version. A `minor` bump would
+make the real version 2.1.0, which is shown as 2.1.00 and comes before the 2.1.xx already shown for 2.0.100 on:
+leave the middle number to the display.
+
 ### APP ICON
 
 Gold, with the riders of the logo in black. The Driver app is the other way round (black, riders in gold), so

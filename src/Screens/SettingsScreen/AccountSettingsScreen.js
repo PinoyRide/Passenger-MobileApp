@@ -16,6 +16,7 @@ import ThemeSwitch from '@/Components/ThemeSwitch/ThemeSwitch';
 import useLogOut from '@/Services/useLogOut';
 import { Constants as AppConstants } from '@/Utils';
 import { runningUpdateLabel } from '@/Utils/selfUpdate';
+import { displayVersion } from '@/Utils/displayVersion';
 import { modern } from '@/Theme/modern';
 
 // Settings (the owner, 2026-11-22: "in my profile or profile page put the
@@ -30,7 +31,8 @@ const AccountSettingsScreen = () => {
   const navigation = useNavigation();
   const { confirmLogOut, loggingOut } = useLogOut();
 
-  const appVersion = Constants.expoConfig?.version ?? '';
+  // shown as people count it (2.0.103 → 2.1.04): Utils/displayVersion.js
+  const appVersion = displayVersion(Constants.expoConfig?.version ?? '');
   const environment = AppConstants.IS_DEV ? ' · Develop' : '';
   const update = runningUpdateLabel();
 

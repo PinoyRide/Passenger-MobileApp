@@ -63,6 +63,9 @@ const SHARED = [
   'src/Utils/serverDown.js',
   'src/Utils/__tests__/serverDown.test.mjs',
   'src/Screens/Login/UpdateRequiredScreen.js',
+  // the version as people see it, 2.0.103 as 2.1.04 (the owner, 2026-11-25)
+  'src/Utils/displayVersion.js',
+  'src/Utils/__tests__/displayVersion.test.mjs',
   'src/Utils/codeChannel.js',
   'src/Utils/accountDeletion.js',
   'src/Utils/bottomSpace.js',

@@ -10,10 +10,13 @@ import {
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
+import { displayVersion } from '@/Utils/displayVersion';
 
 const UpdateRequiredScreen = ({ route }) => {
   // The backend also names a "current version". It is not shown: the person
-  // is told they are on an older version, not which number.
+  // is told they are on an older version, not which number. The minimum
+  // comes from the API as the real version (2.0.103) and is shown as people
+  // count it (2.1.04), as on every other screen: Utils/displayVersion.js.
   const { updateLink, minimumVersion } = route.params || {};
   const { colors } = useTheme();
   const styles = getStyles({ colors });
@@ -55,7 +58,8 @@ const UpdateRequiredScreen = ({ route }) => {
       <Text style={styles.title}>Update Required</Text>
       <Text style={styles.message}>
         You're using an older version, but the minimum supported version is now{' '}
-        {minimumVersion || '—'}. Please update the app to continue.
+        {displayVersion(minimumVersion) || '—'}. Please update the app to
+        continue.
       </Text>
       <TouchableOpacity
         style={[styles.button, isProcessing && styles.buttonDisabled]}

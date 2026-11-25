@@ -20,6 +20,7 @@ import usePostRequest from '@/Services/Api';
 import useApiRequest from '@/Services/ApiV2';
 import { Constants as AppConstants, AppUtil } from '@/Utils';
 import { APP_BUILD } from '@/Utils/appBuild';
+import { displayVersion } from '@/Utils/displayVersion';
 import { displayMobile, fullNameOf } from '@/Utils/personName';
 import { genderOf } from '@/Utils/gender';
 import { modern } from '@/Theme/modern';
@@ -109,7 +110,8 @@ const SettingsScreen = () => {
   );
   const balanceText = `₱${AppUtil.fn(balance ?? 0)}`;
   const newPromos = promoIds.filter(id => !seenPromoIds.includes(id)).length;
-  const version = Constants.expoConfig?.version ?? '';
+  // shown as people count it (2.0.103 → 2.1.04): Utils/displayVersion.js
+  const version = displayVersion(Constants.expoConfig?.version ?? '');
 
   const openPromos = () => {
     dispatch(markPromosSeen(promoIds));

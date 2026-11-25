@@ -7,13 +7,15 @@ import { useNavigation } from '@react-navigation/native';
 import Constants from 'expo-constants';
 import { Constants as AppConstants } from '@/Utils';
 import { runningUpdateLabel } from '@/Utils/selfUpdate';
+import { displayVersion } from '@/Utils/displayVersion';
 
 const LandingScreen = () => {
   const { colors } = useTheme();
   const styles = getStyles({ colors });
   const navigation = useNavigation();
 
-  const appVersion = Constants.expoConfig?.version ?? '1.0.0';
+  // shown as people count it (2.0.103 → 2.1.04): Utils/displayVersion.js
+  const appVersion = displayVersion(Constants.expoConfig?.version ?? '1.0.0');
   // A build that talks to the Develop backend says so, to tell it apart
   // from the store app.
   const environment = AppConstants.IS_DEV ? ' · Develop' : '';
