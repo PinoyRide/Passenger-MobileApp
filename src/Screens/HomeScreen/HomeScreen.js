@@ -9,6 +9,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  unstable_batchedUpdates,
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { openSettings } from 'react-native-permissions';
@@ -136,6 +137,7 @@ import useNearbyRiders from '@/Hooks/useNearbyRiders';
 import { ridersNearbyText } from '@/Utils/ridersNearbyText';
 import { FARE_DEBOUNCE_MS, fareKey, shouldPrice } from '@/Utils/fareInquiry';
 import { startSequentialPoll } from '@/Utils/sequentialPoll';
+import { parkedGoesLive } from '@/Utils/parkedGoesLive';
 import useRiderEtaPoll from '@/Hooks/useRiderEtaPoll';
 import useRiderLocationPoll from '@/Hooks/useRiderLocationPoll';
 import useAdvanceBookingDiscovery from '@/Hooks/useAdvanceBookingDiscovery';
@@ -419,6 +421,35 @@ const HomeScreen = () => {
       if (isReturnedToPool(data)) {
         dispatch(clearAcknowledgedScheduledForBooking(data.id));
       }
+      // The rider set off for (or started) a minimized advance booking: show
+      // the trip now, not after a restart (QA LAT-13; parkedGoesLive.js).
+      const goLive = parkedGoesLive(data, { activeBooking, bookingStatus });
+      if (!goLive) {
+        return;
+      }
+      // after an await on the old architecture: one render, not one per
+      // dispatch (prtc-legacy-arch-no-batching)
+      unstable_batchedUpdates(() => {
+        if (goLive === 'same') {
+          dispatch(removeMinimizedAdvanceBookingId(data.id));
+          dispatch(removeParkedAdvanceBooking(data.id));
+          return;
+        }
+        if (goLive === 'replace') {
+          dispatch(clearBookingState());
+          clearTransientBookingUi();
+        }
+        const parked = parkedAdvanceBookings.find(
+          p => String(p.booking?.id) === String(data.id),
+        );
+        restoreParkedAdvanceSnapshot({
+          ...parked,
+          booking: data,
+          riderDetails: hasRider(null, data.rider_details)
+            ? data.rider_details
+            : parked?.riderDetails,
+        });
+      });
     },
   });
 
@@ -2527,14 +2558,16 @@ New reference: ${activeBooking.ref_code}`
     enabled: bookLater.enabled && !checkActiveBooking.loading,
     isOnline,
     onFound: booking => {
+      const underWay = [1, 2].includes(Number(booking.status));
       if (
-        minimizedAdvanceBookingIds.includes(String(booking.id)) ||
+        // a minimized booking stays tucked away until its rider sets off
+        (minimizedAdvanceBookingIds.includes(String(booking.id)) &&
+          !underWay) ||
         String(booking.id) === String(activeBooking?.id) ||
         staleBookingIdsRef.current.has(bookingKey(booking))
       ) {
         return;
       }
-      const underWay = [1, 2].includes(Number(booking.status));
       if (activeBooking?.id || isBooked) {
         if (!underWay) {
           return;
