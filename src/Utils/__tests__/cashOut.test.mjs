@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { existsSync, readFileSync } from 'node:fs';
 import mod from '../cashOut.js';
 const {
   GCASH,
@@ -20,6 +21,9 @@ const {
   cashOutOutcome,
   cashOutResultText,
   resultOnScreen,
+  watchResultPushes,
+  resultPageSaysIt,
+  cashOutPushOnPage,
 } = mod;
 
 const answered = data => ({
@@ -227,4 +231,111 @@ test("a cash-out's notification gets no box while that cash-out's result page is
   assert.equal(resultOnScreen(topUp, { type: 'cash_out_paid', amount: '15.00' }), false);
   assert.equal(resultOnScreen(null, { type: 'cash_out_paid', amount: '15.00' }), false);
   assert.equal(resultOnScreen(page, null), false);
+});
+
+// CSO-19 (2026-11-25): a ₱20 cash-out's page, open more than 15 minutes, had
+// stopped checking; its notification was swallowed all the same and the page
+// kept "processing" until the app went to the background and back.
+const MINUTE = 60 * 1000;
+const resultPage = {
+  name: 'AppTransactionComplete',
+  params: {
+    referenceData: { transactionType: 'CASHOUT', amount: 20, transactionId: 'PRCO19' },
+  },
+};
+const paid = { type: 'cash_out_paid', amount: '20.00' };
+
+// a result page as useCashOutResult registers it, opened `openFor` ms ago
+function openPage(openFor, outcome = 'processing', reference = 'PRCO19') {
+  const page = {
+    reference,
+    checks: 0,
+    checkNow: () => {
+      page.checks += 1;
+    },
+    saysIt: () => resultPageSaysIt(outcome, openFor),
+  };
+  page.close = watchResultPushes(page);
+  return page;
+}
+
+test('a result page says its outcome while it checks, and once it has one; not after it stopped checking', () => {
+  assert.equal(resultPageSaysIt('processing', 0), true);
+  assert.equal(resultPageSaysIt('processing', 14 * MINUTE), true);
+  assert.equal(resultPageSaysIt('processing', 15 * MINUTE), false);
+  assert.equal(resultPageSaysIt('processing', 16 * MINUTE), false);
+  assert.equal(resultPageSaysIt('completed', 16 * MINUTE), true);
+  assert.equal(resultPageSaysIt('failed', 16 * MINUTE), true);
+});
+
+test("a cash-out's notification after its page stopped checking (16 min) shows its box, and the page checks at once", () => {
+  const page = openPage(16 * MINUTE);
+  try {
+    assert.equal(cashOutPushOnPage(resultPage, paid), false);
+    assert.equal(cashOutPushOnPage(resultPage, { type: 'cash_out_failed', amount: '20' }), false);
+    assert.equal(page.checks, 2);
+  } finally {
+    page.close();
+  }
+});
+
+test("a cash-out's notification while its page is still checking: no box, the page checks at once", () => {
+  const page = openPage(2 * MINUTE);
+  try {
+    assert.equal(cashOutPushOnPage(resultPage, paid), true);
+    assert.equal(page.checks, 1);
+  } finally {
+    page.close();
+  }
+});
+
+test('a page that already says sent or failed takes the notification, however long it was open', () => {
+  const page = openPage(40 * MINUTE, 'completed');
+  try {
+    assert.equal(cashOutPushOnPage(resultPage, paid), true);
+  } finally {
+    page.close();
+  }
+});
+
+test("another page's notification, or none registered, keeps its box", () => {
+  // the route matches but no page follows this cash-out (never registered,
+  // or it closed): nothing on screen says it
+  assert.equal(cashOutPushOnPage(resultPage, paid), false);
+  const other = openPage(2 * MINUTE, 'processing', 'PRCO-OTHER');
+  try {
+    assert.equal(cashOutPushOnPage(resultPage, paid), false);
+    assert.equal(other.checks, 0);
+    // not that cash-out's amount, or not a cash-out notification
+    const page = openPage(2 * MINUTE);
+    try {
+      assert.equal(cashOutPushOnPage(resultPage, { type: 'cash_out_paid', amount: '700' }), false);
+      assert.equal(cashOutPushOnPage(resultPage, { type: 'wallet_credited', amount: '20' }), false);
+      assert.equal(cashOutPushOnPage({ name: 'WalletScreen' }, paid), false);
+      assert.equal(page.checks, 0);
+    } finally {
+      page.close();
+    }
+  } finally {
+    other.close();
+  }
+});
+
+test('the result page registers for the notification, and the push handler asks it rather than the route alone', () => {
+  const app = new URL('../../../', import.meta.url);
+  const hook = readFileSync(new URL('src/Hooks/useCashOutResult.js', app), 'utf8');
+  assert.match(hook, /watchResultPushes\(/);
+  assert.match(hook, /resultPageSaysIt\(/);
+  // Passenger: PushNotificationManager.js; Rider: PushNotifications.native.js
+  const handlers = [
+    'src/Services/Push/PushNotificationManager.js',
+    'src/Utils/PushNotifications.native.js',
+  ]
+    .map(path => new URL(path, app))
+    .filter(existsSync)
+    .map(url => readFileSync(url, 'utf8'))
+    .filter(text => text.includes("from '@/Utils/cashOut'"));
+  assert.equal(handlers.length, 1);
+  assert.match(handlers[0], /cashOutPushOnPage\(/);
+  assert.doesNotMatch(handlers[0], /resultOnScreen\(/);
 });

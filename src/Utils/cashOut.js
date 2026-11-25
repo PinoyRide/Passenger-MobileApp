@@ -272,6 +272,50 @@ function resultOnScreen(route, data) {
   );
 }
 
+// The cash-out result pages open now (useCashOutResult registers each one):
+// { reference, checkNow(), saysIt() }.
+const resultPages = new Set();
+
+function watchResultPushes(page) {
+  resultPages.add(page);
+  return () => {
+    resultPages.delete(page);
+  };
+}
+
+// Whether a result page still tells its outcome by itself: it has one
+// already, or it is still checking (`elapsed` ms after it opened; it stops
+// after 15 minutes, nextResultCheck).
+function resultPageSaysIt(outcome, elapsed) {
+  return (
+    cashOutOutcome({ status: outcome }) !== 'processing' ||
+    nextResultCheck(elapsed) !== null
+  );
+}
+
+// A cash-out's notification arriving in the open app (CSO-19, 2026-11-25).
+// When that cash-out's result page is on screen, the page checks at once;
+// true (no box) only while the page still says the result itself. A page
+// that had stopped checking (15 minutes) kept "processing" and the
+// notification was swallowed: now the box shows as well.
+function cashOutPushOnPage(route, data) {
+  if (!resultOnScreen(route, data)) {
+    return false;
+  }
+  const reference = route.params.referenceData.transactionId;
+  let saysIt = false;
+  resultPages.forEach(page => {
+    if (page.reference !== reference) {
+      return;
+    }
+    page.checkNow();
+    if (page.saysIt()) {
+      saysIt = true;
+    }
+  });
+  return saysIt;
+}
+
 module.exports = {
   CASH_OUT_TIMEOUT_MS,
   RESULT_CHECK_FAST_MS,
@@ -282,6 +326,9 @@ module.exports = {
   cashOutOutcome,
   cashOutResultText,
   resultOnScreen,
+  watchResultPushes,
+  resultPageSaysIt,
+  cashOutPushOnPage,
   GCASH,
   MAX_NAME,
   MINIMUM_CASH_OUT,

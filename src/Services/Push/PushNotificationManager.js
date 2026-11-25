@@ -9,7 +9,7 @@ import { Constants } from '@/Utils';
 import { selectUserInfo } from '@/Redux/Slices/userSlice';
 import { navigationRef } from '@/Utils/NavigationService';
 import appAlert from '@/Utils/appAlert';
-import { resultOnScreen } from '@/Utils/cashOut';
+import { cashOutPushOnPage } from '@/Utils/cashOut';
 import LightTheme from '@/Theme/LightTheme';
 import {
   PUSH_TYPES,
@@ -382,12 +382,14 @@ const PushNotificationManager = () => {
       // Money in or out (a top-up credited, a cash-out paid or returned): the
       // Rider's box, which stays until it is answered, rather than a banner
       // gone in 5 s (the owner, 2026-11-24: both apps show it the same way).
-      // A cash-out's result page on screen says it itself: no box over it.
+      // A cash-out's result page on screen checks at once and, while it is
+      // still checking, says it itself: no box over it (after it stopped,
+      // 15 minutes on, the box shows: CSO-19).
       if (MONEY_PUSHES.includes(parsed.type)) {
         const current = navigationRef.isReady()
           ? navigationRef.getCurrentRoute()
           : null;
-        if (resultOnScreen(current, msg?.data)) {
+        if (cashOutPushOnPage(current, msg?.data)) {
           return;
         }
         appAlert(msg?.title || 'Pinoy Ride', body, [
