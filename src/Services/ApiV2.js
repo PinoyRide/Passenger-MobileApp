@@ -13,6 +13,7 @@ import { getCurrentRouteName, navigate } from '@/Utils/NavigationService';
 import { checkIsOnline } from '@/Utils/Network';
 import { signalSignedOut, signedOutReason } from '@/Utils/signedOut';
 import { UPDATING_MESSAGE, isServerDown } from '@/Utils/serverDown';
+import { sessionHeader } from '@/Utils/sessionHeader';
 
 const REQUEST_TIMEOUT_MS = 15000;
 const OFFLINE_MESSAGE =
@@ -99,6 +100,9 @@ const useApiRequest = () => {
           'X-API-KEY': Constants.API_KEY,
           'X-App-Version': DeviceInfo.getVersion(),
           'X-User-Type': 'customer',
+          // the passenger's sign-in token: customers/{id}/... answers only
+          // with it (Utils/sessionHeader.js)
+          ...sessionHeader(),
         },
       });
 

@@ -3,11 +3,12 @@ import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { AppUtil, Constants } from '@/Utils';
 import { useSelector } from 'react-redux';
-import { selectSessionToken, selectUserInfo } from '@/Redux/Slices/userSlice';
+import { selectUserInfo } from '@/Redux/Slices/userSlice';
 import { getCurrentRouteName, navigate } from '@/Utils/NavigationService';
 import { checkIsOnline } from '@/Utils/Network';
 import { signalSignedOut, signedOutReason } from '@/Utils/signedOut';
 import { UPDATING_MESSAGE, isServerDown, readable } from '@/Utils/serverDown';
+import { sessionHeader } from '@/Utils/sessionHeader';
 
 const REQUEST_TIMEOUT_MS = 15000;
 const OFFLINE_MESSAGE =
@@ -57,7 +58,6 @@ const usePostRequest = () => {
   const requestIdRef = useRef(0);
 
   const userInfo = useSelector(selectUserInfo);
-  const sessionToken = useSelector(selectSessionToken);
 
   function isOK(res) {
     return res?.data?.status === Constants.API_OK;
@@ -248,11 +248,9 @@ const usePostRequest = () => {
       const headers = {
         'x-api-key': Constants.API_KEY,
       };
-      // the passenger's sign-in token: the backend takes a cash-out only with
-      // it (the owner, 2026-11-23: passengers cash out too)
-      if (sessionToken) {
-        headers['X-Customer-Session'] = sessionToken;
-      }
+      // the passenger's sign-in token: the API answers a request naming a
+      // passenger only with it (Utils/sessionHeader.js)
+      Object.assign(headers, sessionHeader());
 
       if (contentType === 'multipart') {
         const { fields, files } = splitFilesFromFields(params);
