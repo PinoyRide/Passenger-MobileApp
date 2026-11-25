@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, useColorScheme } from 'react-native';
 import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
 import { en, registerTranslation } from 'react-native-paper-dates';
@@ -46,6 +46,7 @@ const ThemedApp = () => {
 };
 
 const App = () => {
+  const phone = useColorScheme();
   const [fontsLoaded] = useFonts({
     'AvenirLTStd-Roman': require('./src/Assets/Fonts/AvenirLTStd-Roman.ttf'),
     'AvenirLTStd-Medium': require('./src/Assets/Fonts/AvenirLTStd-Medium.ttf'),
@@ -57,7 +58,16 @@ const App = () => {
   });
 
   if (!fontsLoaded) {
-    return <View style={{ flex: 1, backgroundColor: 'white' }} />;
+    // in the phone's look: the theme is not there yet (QA UPD-14: no white
+    // screen on a dark phone); the colours of LightTheme/DarkTheme.js
+    return (
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: phone === 'dark' ? 'rgb(28, 27, 30)' : '#FFFFFF',
+        }}
+      />
+    );
   }
 
   return (

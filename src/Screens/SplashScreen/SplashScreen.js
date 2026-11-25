@@ -5,6 +5,7 @@ import { useSelector } from 'react-redux';
 import { selectActiveBooking, selectUserInfo } from '@/Redux/Slices/userSlice';
 import { askBuildCheck } from '@/Utils/askBuildCheck';
 import { needsConsent } from '@/Utils/consent';
+import { useTheme } from 'react-native-paper';
 
 // A new APK keeps the sign-in (the owner, 2026-11-23: reduce cost; every new
 // sign-in is a paid code text): Android keeps the app's data on an update,
@@ -12,6 +13,10 @@ import { needsConsent } from '@/Utils/consent';
 // (LoginSession), so nothing is cleared here.
 
 const SplashScreen = () => {
+  // the first screen of every start, in the app's look: dark on a dark phone
+  // (QA UPD-14: it was a fixed white, after the dark native loading screen)
+  const { colors } = useTheme();
+  const styles = getStyles({ colors });
   const navigation = useNavigation();
   const userInfo = useSelector(selectUserInfo); // persisted value from redux-persist
   const activeBooking = useSelector(selectActiveBooking);
@@ -63,20 +68,21 @@ const SplashScreen = () => {
 
 export default SplashScreen;
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-  },
-  logoContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  logo: {
-    width: 243,
-    height: 175,
-  },
-});
+const getStyles = ({ colors }) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: colors.background,
+    },
+    logoContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    logo: {
+      width: 243,
+      height: 175,
+    },
+  });
