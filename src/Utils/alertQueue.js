@@ -29,6 +29,11 @@ const createAlertQueue = onChange => {
     current: () => shown,
     waiting: () => waiting.slice(),
 
+    // whether a box asked with this key is shown or waiting
+    has: key =>
+      Boolean(key) &&
+      (shown?.key === key || waiting.some(box => box.key === key)),
+
     add(box) {
       if (!shown) {
         show(box);

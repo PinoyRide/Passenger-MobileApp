@@ -37,6 +37,10 @@ export const closeAlert = id => queue.close(id);
 // to another); the next waiting box, if any, is shown.
 export const dismissAlert = key => queue.dismiss(key);
 
+// Whether a box asked with this options.key is shown or waiting (not yet
+// answered, closed or taken back).
+export const isAlertAsked = key => queue.has(key);
+
 const appAlert = (title, message, buttons, options) => {
   const box = alertShape(title, message, buttons, options);
   if (!box || hosts.size === 0) {
