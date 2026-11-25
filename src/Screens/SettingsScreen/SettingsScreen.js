@@ -231,7 +231,7 @@ const SettingsScreen = () => {
           />
           <MenuRow
             icon="tag-outline"
-            title="Promo & referrals"
+            title="Promos"
             badge={newPromos > 0 ? `${newPromos} NEW` : undefined}
             onPress={openPromos}
           />

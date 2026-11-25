@@ -15,6 +15,14 @@ import usePostRequest from '@/Services/Api';
 import { Constants } from '@/Utils';
 import { markPromosSeen } from '@/Redux/Slices/userSlice';
 
+// Referrals are hidden until a real programme exists (the owner, A-188,
+// 2026-11-26: "no referral programme planned yet"). The part below showed the
+// same made-up code to everyone, and nothing paid the promised credits. It is
+// kept, switched off, for when the programme is built. The promos stay: they
+// are real (the list, the "NEW" badge on the Account page).
+// noReferralEntry.test.mjs fails if this is turned back on.
+const SHOW_REFERRALS = false;
+
 const PromoReferralsScreen = () => {
   const { colors } = useTheme();
   const styles = getStyles({ colors });
@@ -81,7 +89,7 @@ const PromoReferralsScreen = () => {
               resizeMode="contain"
             />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Promo & Referrals</Text>
+          <Text style={styles.headerTitle}>Promos</Text>
           <View style={styles.spacing} />
         </View>
       </View>
@@ -102,21 +110,25 @@ const PromoReferralsScreen = () => {
           showsVerticalScrollIndicator={false}
         />
 
-        <View style={styles.divider} />
+        {SHOW_REFERRALS && (
+          <>
+            <View style={styles.divider} />
 
-        <Text style={styles.title}>Referrals</Text>
-        <Text style={styles.subtitle}>
-          Invite your friends and earn ride credits! They will get discounts too
-          when they sign up using your code.
-        </Text>
+            <Text style={styles.title}>Referrals</Text>
+            <Text style={styles.subtitle}>
+              Invite your friends and earn ride credits! They will get discounts
+              too when they sign up using your code.
+            </Text>
 
-        <TouchableOpacity style={styles.referralCard} onPress={handleCopy}>
-          <View style={styles.row}>
-            <Text style={styles.label}>Referral Code:</Text>
-            <Text style={styles.code}>{referralCode}</Text>
-            <Text style={styles.copy}>Copy</Text>
-          </View>
-        </TouchableOpacity>
+            <TouchableOpacity style={styles.referralCard} onPress={handleCopy}>
+              <View style={styles.row}>
+                <Text style={styles.label}>Referral Code:</Text>
+                <Text style={styles.code}>{referralCode}</Text>
+                <Text style={styles.copy}>Copy</Text>
+              </View>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     </View>
   );
