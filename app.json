@@ -73,7 +73,7 @@
       "icon": "./assets/ios-icon-1024.png",
       "googleServicesFile": "./GoogleService-Info.plist",
       "config": {
-        "googleMapsApiKey": "AIzaSyAlpSoXuJzvo8uR1qbdtbbbk1sx4MHKIQk"
+        "googleMapsApiKey": "AIzaSyBd5JfsRML-qbsRufc3ElgWI4QY3FKqJuM"
       },
       "splash": {
         "image": "./src/Assets/Common/Pinoy_Ride.png",

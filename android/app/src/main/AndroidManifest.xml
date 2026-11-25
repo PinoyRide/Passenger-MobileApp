@@ -113,7 +113,7 @@
       android:value="@integer/google_play_services_version" />
     <meta-data
      android:name="com.google.android.geo.API_KEY"
-     android:value="AIzaSyAlpSoXuJzvo8uR1qbdtbbbk1sx4MHKIQk"/>
+     android:value="AIzaSyBd5JfsRML-qbsRufc3ElgWI4QY3FKqJuM"/>
       <!-- The app's own restart into a downloaded update (AppRestart.kt): a screen that is never seen, in a process of
          its own, that ends the app's process and opens the app again. -->
     <activity

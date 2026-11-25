@@ -667,7 +667,7 @@ const AppMap = forwardRef(
         inFlightLegKeyRef.current = legKey;
         try {
           const response = await fetchWithTimeout(
-            `https://maps.googleapis.com/maps/api/directions/json?origin=${originLat},${originLong}&destination=${destinationLat},${destinationLong}&mode=driving${extra}&key=${Constants.GOOGLE_MAP_API_KEY}`,
+            `https://maps.googleapis.com/maps/api/directions/json?origin=${originLat},${originLong}&destination=${destinationLat},${destinationLong}&mode=driving${extra}&key=${Constants.GOOGLE_ROUTES_API_KEY}`,
           );
           const data = await response.json();
           const choices = ((data && data.routes) || []).map(route =>

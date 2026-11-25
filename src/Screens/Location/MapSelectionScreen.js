@@ -87,7 +87,7 @@ const MapSelectionScreen = () => {
   const reverseGeocode = async (latitude, longitude, setAddress) => {
     try {
       const response = await fetchWithTimeout(
-        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${Constants.GOOGLE_MAP_API_KEY}`,
+        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${Constants.GOOGLE_ROUTES_API_KEY}`,
       );
       const data = await response.json();
 

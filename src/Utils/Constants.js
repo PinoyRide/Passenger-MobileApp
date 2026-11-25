@@ -14,7 +14,12 @@ const BASE_DEV = {
   WU_TIME_OUT_ERROR: -9,
 
   API_KEY: 'e6b9d7987f6d0633c31556a428a6197ef11f3b5be8ed8b3bc8a16c92e560e775',
-  GOOGLE_MAP_API_KEY: 'AIzaSyAlpSoXuJzvo8uR1qbdtbbbk1sx4MHKIQk',
+  // Google's Directions and Geocoding, asked by the phone itself (fetch):
+  // the apps' "Routes" key, allowed those two APIs only. The map itself
+  // uses the apps' Map key, which lives where the Maps SDK reads it
+  // (AndroidManifest.xml, app.json, ios Info.plist / AppDelegate).
+  // Place search goes through our API (places/*), never from the phone.
+  GOOGLE_ROUTES_API_KEY: 'AIzaSyCxUZeQ0319rUysToW_tsyWk-5SYvPEAVE',
   BASE_URI: IS_DEV ? DEV_URL : PROD_URL,
 
   // Endpoints served by the .NET backend (Services/ApiV2.js). BASE_URI points at the .NET API,
