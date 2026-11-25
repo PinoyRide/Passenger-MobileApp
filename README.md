@@ -92,9 +92,10 @@ installed again.
 
 People see the version counted as the owner counts it (2026-11-25): 2.0.99, then 2.1.01, 2.1.02 … 2.1.99, then
 2.2.01, a patch of two digits from 01 to 99. "2.1.01" is not a valid version number, so the real version keeps
-counting as before (2.0.100, 2.0.101, …) in `package.json`, `app.json`, Android's versionName, the
-self-updates, everything sent to the API and the bump scripts, and only what a screen shows is mapped, by
-`src/Utils/displayVersion.js` (the same file in both apps):
+counting as before (2.0.100, 2.0.101, …) in `package.json`, `app.json`, iOS, the self-updates (runtime
+version), everything sent to the API and the bump scripts, and only what people see is mapped, by
+`src/Utils/displayVersion.js` (the same file in both apps): the screens, and Android's versionName, which Google
+Play and App info show (the owner, 2026-11-25: it must be the version the app shows):
 
 | Real    | Shown  |
 | ------- | ------ |
@@ -108,10 +109,19 @@ self-updates, everything sent to the API and the bump scripts, and only what a s
 It is used on the first screen (`v2.1.04 · Develop · 3fa9c1e`), the Account page (`PinoyRide 2.1.04 · build
 111`), Settings (`Pinoy Ride v2.1.04 · Develop · …`) and for the minimum on "Update Required", which the API
 sends as the real version. A new place that shows the version goes through it too;
-`src/Utils/__tests__/displayVersion.test.mjs` fails on a screen that shows the raw one. Android's own "App
-info", the APK file names, the commits and `api/app-updates/<app>` keep the real version. A `minor` bump would
-make the real version 2.1.0, which is shown as 2.1.00 and comes before the 2.1.xx already shown for 2.0.100 on:
-leave the middle number to the display.
+`src/Utils/__tests__/displayVersion.test.mjs` fails on a screen that shows the raw one.
+
+Android's versionName is written shown (2.0.111 as `versionName "2.1.12"`, by `bump-version.js` through
+`scripts/version-places.js`); the versionCode is the build number, +1 every release. An APK shows its own
+versionName in App info, so after a self-update the app can show a newer version than App info until the next
+APK. The app reads the versionName only through `src/Utils/installedVersion.js`, which turns it back into the
+real version (`realVersion`, 2.1.12 → 2.0.111) for the build check, `X-App-Version` and the login: the API, its
+"Update Required" minimum and the download folder compare real versions, and an APK built before 2026-11-25
+(versionName 2.0.106) is sent as it is. The APK file names, the commits and `api/app-updates/<app>` keep the
+real version. The way back is exact only for real versions major.0.N, so `bump-version.js` refuses any other: a
+`minor` bump (2.1.0, shown 2.1.00) is not possible; leave the middle number to the display.
+`bump-version.js --new-apk` (`bump-both.sh --new-apk`) makes a version a new APK although nothing native
+changed, such as the first APK whose versionName is the shown version.
 
 ### APP ICON
 
