@@ -170,9 +170,9 @@ const OnboardingScreen = () => {
           visible={showLocationAlert}
           setVisible={setShowLocationAlert}
           confirmText="Enable Location"
-          cancelText="Later"
+          secondaryText="Later"
           onConfirm={handleRetryLocationPermission}
-          onCancel={() => setShowLocationAlert(false)}
+          onSecondary={() => setShowLocationAlert(false)}
           dismissable={true}
         />
       )}

@@ -54,3 +54,79 @@ test('the host that draws them is mounted once, inside the theme', () => {
     .join('\n');
   assert.equal((roots.match(/<AlertHost \/>/g) || []).length, 1);
 });
+
+// Every <AlertBox> is given only the props AlertBox takes. React drops a
+// prop it does not know without a word: the Rider's camera and location
+// boxes and the Passenger's location box were given cancelText / onCancel
+// (Alert.alert's word is a 'cancel' button; AlertBox's is secondaryText /
+// onSecondary), so "Later" never showed and Back was the only way out (UX
+// review A-184, 2026-11-26).
+const ALERT_BOX = 'src/Components/AlertBox/AlertBox.js';
+
+const alertBoxProps = () => {
+  const source = readFileSync(join(app, ALERT_BOX), 'utf8');
+  const params = source.match(/const AlertBox = \(\{([^}]*)\}\)/);
+  assert.ok(params, `${ALERT_BOX}: const AlertBox = ({ ...props }) not found`);
+  return new Set(
+    params[1]
+      .split(',')
+      .map(part => part.split('=')[0].trim())
+      .filter(Boolean),
+  );
+};
+
+// the props written on each <AlertBox ...> tag: what stands at the tag's own
+// level once every {...} value and "..." string is blanked out
+const tagsIn = source => {
+  const tags = [];
+  const start = /<AlertBox\b/g;
+  let found;
+  while ((found = start.exec(source))) {
+    let depth = 0;
+    let quote = null;
+    let own = '';
+    for (let i = found.index + found[0].length; i < source.length; i += 1) {
+      const ch = source[i];
+      if (quote) {
+        if (ch === quote) quote = null;
+        own += ' ';
+        continue;
+      }
+      if (depth === 0 && (ch === '"' || ch === "'")) {
+        quote = ch;
+        own += ' ';
+        continue;
+      }
+      if (ch === '{') depth += 1;
+      else if (ch === '}') depth -= 1;
+      else if (depth === 0 && ch === '>') break;
+      own += depth === 0 && ch !== '}' ? ch : ' ';
+    }
+    tags.push({
+      line: source.slice(0, found.index).split('\n').length,
+      props: own.match(/[A-Za-z_$][\w$]*/g) || [],
+    });
+  }
+  return tags;
+};
+
+test('every <AlertBox> is given only the props AlertBox takes', () => {
+  const known = alertBoxProps();
+  // the button names are in it (secondaryText, not cancelText)
+  assert.ok(known.has('secondaryText') && known.has('onSecondary'));
+  const wrong = sources().flatMap(file => {
+    const rel = relative(app, file);
+    return tagsIn(readFileSync(file, 'utf8')).flatMap(({ line, props }) =>
+      props
+        .filter(prop => !known.has(prop) && prop !== 'key')
+        .map(prop => `${rel}:${line} ${prop}`),
+    );
+  });
+  assert.deepEqual(
+    wrong,
+    [],
+    `AlertBox takes ${[...known].join(
+      ', ',
+    )}: a second button is secondaryText / onSecondary`,
+  );
+});
