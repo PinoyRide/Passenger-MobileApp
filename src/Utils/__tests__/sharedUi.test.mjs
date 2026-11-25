@@ -69,6 +69,8 @@ const SHARED = [
   // the silent sign-in token swap (security finding F-2 part 2, 2026-11-25)
   'src/Utils/sessionSwap.js',
   'src/Utils/__tests__/sessionSwap.test.mjs',
+  // Android's versionName is the shown version: it is sent back as the real one (2026-11-25)
+  'src/Utils/installedVersion.js',
   'src/Utils/codeChannel.js',
   'src/Utils/accountDeletion.js',
   'src/Utils/bottomSpace.js',

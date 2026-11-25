@@ -19,7 +19,7 @@ import { Constants } from '@/Utils';
 import { handedCode } from '@/Utils/handedCode';
 import { SMS, codeRefused, sentTo } from '@/Utils/codeChannel';
 import { afterRegistering } from '@/Utils/registerForm';
-import DeviceInfo from 'react-native-device-info';
+import { installedVersion } from '@/Utils/installedVersion';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   selectUserInfo,
@@ -119,7 +119,7 @@ const OTPScreen = () => {
       {
         mobileNo: mobileNumber,
         otpCode: code,
-        appVersion: DeviceInfo.getVersion(),
+        appVersion: installedVersion(),
         // registering: the Terms and Privacy Policy acceptance is recorded with the account,
         // with the form's names and email; the passenger then logs in (signIn: false)
         ...(isRegister ? { ...consent, ...registration, signIn: false } : {}),

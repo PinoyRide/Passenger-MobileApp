@@ -7,13 +7,13 @@
 // with code 200 for any 2xx.
 import { useRef, useState } from 'react';
 import axios from 'axios';
-import DeviceInfo from 'react-native-device-info';
 import { AppUtil, Constants } from '@/Utils';
 import { getCurrentRouteName, navigate } from '@/Utils/NavigationService';
 import { checkIsOnline } from '@/Utils/Network';
 import { signalSignedOut, signedOutReason } from '@/Utils/signedOut';
 import { UPDATING_MESSAGE, isServerDown } from '@/Utils/serverDown';
 import { sessionHeader, takeNewToken } from '@/Utils/sessionHeader';
+import { installedVersion } from '@/Utils/installedVersion';
 
 const REQUEST_TIMEOUT_MS = 15000;
 const OFFLINE_MESSAGE =
@@ -98,7 +98,7 @@ const useApiRequest = () => {
               ? 'multipart/form-data'
               : 'application/json',
           'X-API-KEY': Constants.API_KEY,
-          'X-App-Version': DeviceInfo.getVersion(),
+          'X-App-Version': installedVersion(),
           'X-User-Type': 'customer',
           // the passenger's sign-in token: customers/{id}/... answers only
           // with it (Utils/sessionHeader.js)

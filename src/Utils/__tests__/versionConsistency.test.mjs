@@ -4,6 +4,7 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import native from '../../../scripts/native-signature.js';
 import places from '../../../scripts/version-places.js';
+import shownVersion from '../displayVersion.js';
 
 // The version is written in several places (bump-version.js sets them all).
 // package.json is the reference: every other place has to say the same.
@@ -26,15 +27,23 @@ test('every place that states the version agrees with package.json', () => {
   const lock = JSON.parse(read('package-lock.json'));
   assert.equal(lock.version, version);
   assert.equal(lock.packages[''].version, version);
-  assert.deepEqual(all(gradle, /versionName\s+"([^"]+)"/g), [version]);
-  assert.deepEqual(
-    all(read('android/gradle.properties'), /^MYAPP_VERSION_NAME=(.+)$/gm),
-    [version],
-  );
   assert.deepEqual(
     all(read('src/Services/Api.js'), /app_version:\s*'([^']+)'/g),
     [version],
   );
+});
+
+// Android's versionName is the version people see (the owner, 2026-11-25:
+// what Google Play and App info show is what the app shows), 2.0.111 as
+// 2.1.12; the app sends it back as the real version (installedVersion.js).
+test("Android's versionName is the version the app shows, and turns back into the real one", () => {
+  const shown = shownVersion.displayVersion(version);
+  assert.deepEqual(all(gradle, /versionName\s+"([^"]+)"/g), [shown]);
+  assert.deepEqual(
+    all(read('android/gradle.properties'), /^MYAPP_VERSION_NAME=(.+)$/gm),
+    [shown],
+  );
+  assert.equal(shownVersion.realVersion(shown), version);
 });
 
 // The iOS app is made from app.json (npx expo prebuild --platform ios), which

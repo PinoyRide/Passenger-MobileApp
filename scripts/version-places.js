@@ -4,7 +4,11 @@
 // new version number alone does not count as a change to the native part of the app.
 //
 // Two numbers are kept apart:
-// - The version and build number (places): they go up with every change to the app.
+// - The version and build number (places): they go up with every change to the app. The version is
+//   written as it is (2.0.111) everywhere but Android's versionName (and MYAPP_VERSION_NAME beside it),
+//   which is the version people see, 2.1.12 (src/Utils/displayVersion.js): what Google Play and Android's
+//   App info show has to be what the app shows (the owner, 2026-11-25). The app sends it back as the real
+//   version (src/Utils/installedVersion.js).
 // - The APK version (runtimeVersionPlace): the version at which the native part of the app last changed,
 //   which is the oldest APK that can run this code. The update library calls it the runtime version. An
 //   installed app takes any self-update made for its APK version, so this number only moves when a change
@@ -12,7 +16,11 @@
 //
 // Edit this list if a path does not match the project layout.
 
-function places(version, code) {
+const { displayVersion } = require('../src/Utils/displayVersion');
+
+// `shown` is what Android's versionName says: the shown version, unless given (native-signature.js looks
+// past it with 0.0.0, as before 2026-11-25, so that the recorded signatures still hold).
+function places(version, code, shown = displayVersion(version)) {
   const setCode = code !== null && code !== undefined;
   return [
     {
@@ -54,15 +62,12 @@ function places(version, code) {
     {
       file: 'android/gradle.properties',
       replace: content =>
-        content.replace(/(MYAPP_VERSION_NAME=)[\d.]+/, `$1${version}`),
+        content.replace(/(MYAPP_VERSION_NAME=)[\d.]+/, `$1${shown}`),
     },
     {
       file: 'android/app/build.gradle',
       replace: content => {
-        let out = content.replace(
-          /(versionName\s+")[\d.]+(")/,
-          `$1${version}$2`,
-        );
+        let out = content.replace(/(versionName\s+")[\d.]+(")/, `$1${shown}$2`);
         if (setCode) {
           out = out.replace(/(versionCode\s+)\d+/, `$1${code}`);
         }

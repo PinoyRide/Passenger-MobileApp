@@ -5,7 +5,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import mod from '../displayVersion.js';
 
-const { displayVersion } = mod;
+const { displayVersion, realVersion } = mod;
 
 // The owner, 2026-11-25 (option B): people see 2.0.99 → 2.1.01 → 2.1.02, a
 // patch of two digits; the real version stays valid semver (2.0.100, …).
@@ -91,6 +91,75 @@ test('anything that is not three whole numbers comes back as it was given', () =
   );
 });
 
+// ---- the way back: Android's versionName → the real version -----------------
+
+// Since 2026-11-25 Android's versionName is the shown version (the owner: what
+// Google Play shows is what the app shows); the app sends it back as the real
+// one, which the API and the download folder count.
+test('a versionName of the shown kind turns back into the real version', () => {
+  const table = {
+    '2.1.11': '2.0.110',
+    '2.1.12': '2.0.111',
+    '2.1.01': '2.0.100',
+    '2.1.99': '2.0.198',
+    '2.2.01': '2.0.199',
+    '2.3.01': '2.0.298',
+    '2.0.99': '2.0.99',
+    '2.0.05': '2.0.5',
+    '2.0.00': '2.0.0',
+  };
+  for (const [shown, real] of Object.entries(table)) {
+    assert.equal(realVersion(shown), real, shown);
+  }
+});
+
+test('every real version 2.0.N survives the trip to the versionName and back', () => {
+  for (let p = 0; p <= 20000; p += 1) {
+    assert.equal(realVersion(displayVersion(`2.0.${p}`)), `2.0.${p}`);
+  }
+});
+
+test('the versionName of an APK built before (a real version) comes back as it is', () => {
+  for (const old of [
+    '2.0.106',
+    '2.0.102',
+    '2.0.87',
+    '2.0.5',
+    '2.0.10',
+    '1.0.23',
+  ]) {
+    assert.equal(realVersion(old), old);
+  }
+});
+
+test('the way back keeps the order the API compares in', () => {
+  const parts = v => v.split('.').map(Number);
+  const lower = (a, b) => {
+    const [x, y] = [parts(a), parts(b)];
+    return (x[0] - y[0] || x[1] - y[1] || x[2] - y[2]) < 0;
+  };
+  // an old APK (real versionName) against a new one (shown versionName)
+  assert.ok(lower(realVersion('2.0.106'), realVersion('2.1.12')));
+  // far on, where comparing the shown version with a real minimum would go wrong
+  assert.ok(lower(realVersion('2.1.50'), '2.0.200'));
+  assert.ok(!lower(realVersion('2.2.02'), '2.0.200'));
+});
+
+test('what is not a shown version comes back as it was given', () => {
+  for (const odd of [
+    '2.1.00', // no real version shows as .00 past 2.0.0
+    '2.1.5', // the shown patch has two digits
+    '2.1.100',
+    '',
+    'garbage',
+    '2.1.12-beta',
+  ]) {
+    assert.equal(realVersion(odd), odd, JSON.stringify(odd));
+  }
+  assert.equal(realVersion(undefined), undefined);
+  assert.equal(realVersion(null), null);
+});
+
 // ---- where it is used ------------------------------------------------------
 
 const app = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -160,17 +229,37 @@ test('what is sent to the API keeps the real version', () => {
     ),
   ];
   for (const file of technical) {
-    assert.doesNotMatch(read(file), /displayVersion/, file);
+    assert.doesNotMatch(read(file), /\bdisplayVersion\s*\(/, file);
   }
-  // the build check asks with the installed version, and every signed request
-  // carries the real one (2.0.103, never 2.1.04)
+  // the build check asks with the installed version, turned back into the
+  // real one, and every signed request carries the real one (2.0.103, never
+  // 2.1.04)
   assert.match(
     read('src/Utils/askBuildCheck.js'),
-    /DeviceInfo\.getVersion\(\)/,
+    /buildCheckAddress\([^)]*installedVersion\(\)\)/,
+  );
+  assert.match(
+    read('src/Utils/installedVersion.js'),
+    /realVersion\(DeviceInfo\.getVersion\(\)\)/,
   );
   const { version } = JSON.parse(read('package.json'));
   assert.ok(
     read('src/Services/Api.js').includes(`app_version: '${version}'`),
     'src/Services/Api.js sends the real version',
   );
+});
+
+// Android's versionName is the shown version since 2026-11-25: whatever reads
+// it to send it reads it through installedVersion(), which turns it back.
+test('nothing reads the APK version but installedVersion.js', () => {
+  const raw = /\bgetVersion\s*\(|getReadableVersion|nativeApplicationVersion/;
+  for (const file of [
+    ...filesUnder('src').filter(
+      file =>
+        !file.includes('__tests__') && !file.endsWith('installedVersion.js'),
+    ),
+    'App.js',
+  ]) {
+    assert.doesNotMatch(read(file), raw, file);
+  }
 });

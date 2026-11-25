@@ -1,6 +1,7 @@
 /* eslint-disable no-console */
 import { NetworkInfo } from 'react-native-network-info';
 import DeviceInfo from 'react-native-device-info';
+import { installedVersion } from '@/Utils/installedVersion';
 import uuid from 'react-native-uuid';
 import * as Location from 'expo-location';
 import * as Crypto from 'expo-crypto';
@@ -100,7 +101,7 @@ const AppUtil = {
   },
 
   getAppVersionNo: function () {
-    return DeviceInfo.getVersion();
+    return installedVersion();
   },
 
   getUUID: function () {

@@ -102,9 +102,11 @@ function builtWith(root) {
 }
 
 function nativeSignature(root) {
-  // Where a version or build number is written, read the file as if it said 0.0.0 and build 0.
+  // Where a version or build number is written, read the file as if it said 0.0.0 and build 0 (the
+  // versionName too, which is the shown version since 2026-11-25: not 0.0.00, or every signature recorded
+  // before would stop matching and the next bump would ask for a new APK that nothing native needs).
   const lookPast = new Map(
-    places('0.0.0', 0).map(({ file, replace }) => [file, replace]),
+    places('0.0.0', 0, '0.0.0').map(({ file, replace }) => [file, replace]),
   );
   lookPast.set(runtimeVersionPlace.file, content =>
     runtimeVersionPlace.replace(content, '0.0.0'),

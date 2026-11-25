@@ -1,4 +1,4 @@
-import DeviceInfo from 'react-native-device-info';
+import { installedVersion } from '@/Utils/installedVersion';
 import { Constants } from '@/Utils';
 import {
   TIMEOUT_MS,
@@ -14,7 +14,7 @@ export const askBuildCheck = async (app, { tripUnderWay = false } = {}) => {
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
     const answer = await fetch(
-      buildCheckAddress(Constants.BASE_URI, app, DeviceInfo.getVersion()),
+      buildCheckAddress(Constants.BASE_URI, app, installedVersion()),
       { signal: controller.signal, headers: { Accept: 'application/json' } },
     );
     if (!answer.ok) {
