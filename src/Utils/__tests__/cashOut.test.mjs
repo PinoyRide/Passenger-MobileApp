@@ -24,6 +24,10 @@ const {
   watchResultPushes,
   resultPageSaysIt,
   cashOutPushOnPage,
+  WALLET_PUSHES,
+  walletRoute,
+  walletRefreshOnScreen,
+  walletStampIsNew,
 } = mod;
 
 const answered = data => ({
@@ -338,4 +342,76 @@ test('the result page registers for the notification, and the push handler asks 
   assert.equal(handlers.length, 1);
   assert.match(handlers[0], /cashOutPushOnPage\(/);
   assert.doesNotMatch(handlers[0], /resultOnScreen\(/);
+});
+
+// WAL-11 (2026-11-26): after "Cash out of P15.00 did not go through", View
+// left an open Wallet on the old balance. navigate() to the screen already on
+// top only changes its params (React Navigation 7 StackRouter: same route,
+// still focused), so the read on focus never ran; a pull did nothing either
+// (no RefreshControl).
+test('a money notification sends the Wallet a fresh stamp, every time', () => {
+  assert.deepEqual(WALLET_PUSHES, ['wallet_credited', 'cash_out_paid', 'cash_out_failed']);
+  const first = walletRoute(1000);
+  const again = walletRoute(2000);
+  assert.equal(first.name, 'WalletScreen');
+  assert.equal(first.params.walletRefreshAt, 1000);
+  // the same push tapped twice still changes the open Wallet's params
+  assert.notDeepEqual(first.params, again.params);
+  assert.equal(typeof walletRoute().params.walletRefreshAt, 'number');
+});
+
+test('a money notification with the Wallet on screen reads it again at once', () => {
+  const wallet = { name: 'WalletScreen', params: {} };
+  for (const type of WALLET_PUSHES) {
+    assert.deepEqual(walletRefreshOnScreen(wallet, { type, amount: '15.00' }, 5), {
+      walletRefreshAt: 5,
+    });
+  }
+  // another screen, or not about money: nothing set
+  assert.equal(walletRefreshOnScreen({ name: 'HomeScreen' }, { type: 'cash_out_failed' }), null);
+  assert.equal(walletRefreshOnScreen(wallet, { type: 'chat_message' }), null);
+  assert.equal(walletRefreshOnScreen(null, { type: 'cash_out_failed' }), null);
+  assert.equal(walletRefreshOnScreen(wallet, undefined), null);
+});
+
+test('the Wallet reads again only for a stamp it has not read for', () => {
+  // opened with a stamp: the focus read covers it
+  assert.equal(walletStampIsNew(1000, 1000), false);
+  assert.equal(walletStampIsNew(undefined, undefined), false);
+  assert.equal(walletStampIsNew(1000, undefined), false);
+  assert.equal(walletStampIsNew(1000, null), false);
+  // stamped while open (View, or the push itself)
+  assert.equal(walletStampIsNew(undefined, 2000), true);
+  assert.equal(walletStampIsNew(1000, 2000), true);
+});
+
+test('both apps wire it: the tap route, the push on the open Wallet, the Wallet itself', () => {
+  const app = new URL('../../../', import.meta.url);
+  const text = path => readFileSync(new URL(path, app), 'utf8');
+  const some = paths =>
+    paths
+      .map(path => new URL(path, app))
+      .filter(existsSync)
+      .map(url => readFileSync(url, 'utf8'));
+  // Passenger: pushEvents.js routes and PushNotificationManager.js shows the
+  // box; Rider: PushNotifications.native.js does both
+  const routes = some([
+    'src/Services/Push/pushEvents.js',
+    'src/Utils/PushNotifications.native.js',
+  ]);
+  assert.equal(routes.length, 1);
+  assert.match(routes[0], /walletRoute\(/);
+  assert.doesNotMatch(routes[0], /name: 'WalletScreen', params: \{\}/);
+  const handlers = some([
+    'src/Services/Push/PushNotificationManager.js',
+    'src/Utils/PushNotifications.native.js',
+  ]);
+  assert.equal(handlers.length, 1);
+  assert.match(handlers[0], /walletRefreshOnScreen\(current, /);
+  assert.match(handlers[0], /CommonActions\.setParams\(walletRefresh\)/);
+  const wallet = text('src/Screens/WalletScreen/WalletScreen.js');
+  assert.match(wallet, /useRoute\(\)/);
+  assert.match(wallet, /route\.params\?\.walletRefreshAt/);
+  assert.match(wallet, /walletStampIsNew\(seenStamp\.current, stamp\)/);
+  assert.match(wallet, /refreshControl=\{\s*<RefreshControl[\s\S]*?onRefresh=\{pull\}/);
 });

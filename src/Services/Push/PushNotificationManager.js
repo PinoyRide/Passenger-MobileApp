@@ -9,7 +9,8 @@ import { Constants } from '@/Utils';
 import { selectUserInfo } from '@/Redux/Slices/userSlice';
 import { navigationRef } from '@/Utils/NavigationService';
 import appAlert from '@/Utils/appAlert';
-import { cashOutPushOnPage } from '@/Utils/cashOut';
+import { CommonActions } from '@react-navigation/native';
+import { cashOutPushOnPage, walletRefreshOnScreen } from '@/Utils/cashOut';
 import LightTheme from '@/Theme/LightTheme';
 import {
   PUSH_TYPES,
@@ -389,6 +390,12 @@ const PushNotificationManager = () => {
         const current = navigationRef.isReady()
           ? navigationRef.getCurrentRoute()
           : null;
+        // the Wallet on screen reads again now, before View or Dismiss
+        // (WAL-11: it kept the old balance and lines)
+        const walletRefresh = walletRefreshOnScreen(current, msg?.data);
+        if (walletRefresh) {
+          navigationRef.dispatch(CommonActions.setParams(walletRefresh));
+        }
         if (cashOutPushOnPage(current, msg?.data)) {
           return;
         }

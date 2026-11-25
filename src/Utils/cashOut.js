@@ -316,6 +316,35 @@ function cashOutPushOnPage(route, data) {
   return saysIt;
 }
 
+// Money in or out: a top-up credited, a cash-out paid or returned. Each one
+// changes the Wallet's balance and adds a line to it.
+const WALLET_PUSHES = ['wallet_credited', ...CASH_OUT_PUSHES];
+
+// WAL-11 (2026-11-26): where a money notification's View goes, the Wallet,
+// with a fresh stamp. navigate() to the screen already on top only changes
+// its params: it stays focused, so its read on focus never ran again and an
+// open Wallet kept the old balance after "Cash out ... did not go through".
+// The Wallet reads again whenever the stamp changes (walletStampIsNew).
+function walletRoute(now = Date.now()) {
+  return { name: 'WalletScreen', params: { walletRefreshAt: now } };
+}
+
+// A money notification arriving in the open app while the Wallet is on
+// screen (`route`, the current navigation route): the params to set on it so
+// it reads again at once, whether View or Dismiss is tapped; null otherwise.
+function walletRefreshOnScreen(route, data, now = Date.now()) {
+  if (!WALLET_PUSHES.includes(data?.type) || route?.name !== 'WalletScreen') {
+    return null;
+  }
+  return { walletRefreshAt: now };
+}
+
+// Whether the Wallet's stamp asks for a new read: set, and not the one it
+// opened with or last read for (opening reads already, on focus).
+function walletStampIsNew(seen, stamp) {
+  return stamp !== undefined && stamp !== null && stamp !== seen;
+}
+
 module.exports = {
   CASH_OUT_TIMEOUT_MS,
   RESULT_CHECK_FAST_MS,
@@ -329,6 +358,10 @@ module.exports = {
   watchResultPushes,
   resultPageSaysIt,
   cashOutPushOnPage,
+  WALLET_PUSHES,
+  walletRoute,
+  walletRefreshOnScreen,
+  walletStampIsNew,
   GCASH,
   MAX_NAME,
   MINIMUM_CASH_OUT,

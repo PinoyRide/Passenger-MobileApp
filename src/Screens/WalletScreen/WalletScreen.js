@@ -1,15 +1,20 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import {
+  useFocusEffect,
+  useNavigation,
+  useRoute,
+} from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Container from '@/Components/Container/Container';
@@ -20,6 +25,7 @@ import { modern } from '@/Theme/modern';
 import { selectUserInfo } from '@/Redux/Slices/userSlice';
 import TransactionRow, { EmptyTransactions } from './TransactionRow';
 import appAlert from '@/Utils/appAlert';
+import { walletStampIsNew } from '@/Utils/cashOut';
 
 // The note under "Activate your wallet": that the identity check is optional
 // and nothing waits for it (a passed check only shows ACTIVE; cash in, pay
@@ -40,35 +46,66 @@ const WalletScreen = () => {
   const look = modern(useTheme());
   const styles = getStyles(look);
   const navigation = useNavigation();
+  const route = useRoute();
   const userInfo = useSelector(selectUserInfo);
   const walletRequest = useApiRequest();
   const ekycRequest = usePostRequest();
   const [wallet, setWallet] = useState(null);
   const [starting, setStarting] = useState(false);
 
+  // The page's read (in a ref, so the focus, the stamp and the pull always
+  // call the latest one). `showing` is false once the page has gone.
+  const showing = useRef(true);
+  const loadRef = useRef(async () => {});
+  loadRef.current = async () => {
+    if (!userInfo?.id) {
+      return;
+    }
+    const { response } = await walletRequest.request(
+      'GET',
+      AppConstants.API.CUSTOMER_WALLET(userInfo.id),
+    );
+    if (showing.current && response?.data) {
+      setWallet(response.data);
+    }
+  };
+
   // read again each time the page shows: after a top-up, or after the
   // identity check in the browser
   useFocusEffect(
     useCallback(() => {
-      if (!userInfo?.id) {
-        return undefined;
-      }
-      let showing = true;
-      (async () => {
-        const { response } = await walletRequest.request(
-          'GET',
-          AppConstants.API.CUSTOMER_WALLET(userInfo.id),
-        );
-        if (showing && response?.data) {
-          setWallet(response.data);
-        }
-      })();
+      showing.current = true;
+      loadRef.current();
       return () => {
-        showing = false;
+        showing.current = false;
       };
+      // a new sign-in reads again
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [userInfo?.id]),
   );
+
+  // ... and when a money notification stamps it while it is already on
+  // screen (View in its box, or the push itself): the page stays focused, so
+  // the focus read above does not run (WAL-11, 2026-11-26)
+  const stamp = route.params?.walletRefreshAt;
+  const seenStamp = useRef(stamp);
+  useEffect(() => {
+    if (walletStampIsNew(seenStamp.current, stamp)) {
+      seenStamp.current = stamp;
+      loadRef.current();
+    }
+  }, [stamp]);
+
+  // pull down to read again
+  const [pulling, setPulling] = useState(false);
+  const pull = async () => {
+    setPulling(true);
+    try {
+      await loadRef.current();
+    } finally {
+      setPulling(false);
+    }
+  };
 
   const balance =
     wallet?.availBalance ?? userInfo?.wallet_details?.avail_balance ?? 0;
@@ -144,7 +181,15 @@ const WalletScreen = () => {
 
       <ScrollView
         contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={pulling}
+            onRefresh={pull}
+            colors={[look.muted]}
+            tintColor={look.muted}
+          />
+        }>
         <View style={styles.balanceCard}>
           <View style={styles.balanceTop}>
             <View style={styles.flex}>
