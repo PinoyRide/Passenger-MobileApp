@@ -1,4 +1,5 @@
 import { createSlice } from '@reduxjs/toolkit';
+import { isNewer } from '@/Utils/sessionSwap';
 
 // Matches ADVANCE_MAX_OPEN_PER_CUSTOMER on the backend.
 const ADVANCE_PARK_LIMIT = 3;
@@ -66,6 +67,10 @@ const initialState = {
   // (X-Customer-Session). Kept apart from userInfo, which profile updates
   // replace.
   sessionToken: null,
+  // When the stored token was made by a swap (Unix ms; null for the one from
+  // signing in): a token handed out later is stored only over an older one
+  // (Utils/sessionSwap.js).
+  sessionTokenAt: null,
   savedPlaces: [], // Array of saved locations
   // the drop-offs and pick-ups of recent trips (recentPlaces.js)
   recentPlaces: [],
@@ -106,15 +111,31 @@ const userSlice = createSlice({
         state.parkedAdvanceBookings = [];
         state.seenPromoIds = [];
         state.sessionToken = null;
+        state.sessionTokenAt = null;
       }
       state.userInfo = action.payload;
     },
     setSessionToken: (state, action) => {
       state.sessionToken = action.payload || null;
+      state.sessionTokenAt = null;
+    },
+    // A new token the API handed out behind the scenes (F-2 part 2): kept only
+    // while signed in, and only over an older one.
+    swapSessionToken: (state, action) => {
+      const { token, at } = action.payload || {};
+      if (!token || !state.sessionToken || !state.userInfo) {
+        return;
+      }
+      if (!isNewer(at, state.sessionTokenAt)) {
+        return;
+      }
+      state.sessionToken = token;
+      state.sessionTokenAt = at;
     },
     clearUserInfo: state => {
       state.userInfo = null;
       state.sessionToken = null;
+      state.sessionTokenAt = null;
       state.ratedBookingIds = [];
       state.acknowledgedScheduledIds = [];
       state.minimizedAdvanceBookingIds = [];
@@ -353,6 +374,7 @@ const userSlice = createSlice({
 export const {
   setUserInfo,
   setSessionToken,
+  swapSessionToken,
   clearUserInfo,
   setHasShownLoginSuccess,
   addSavedPlace,

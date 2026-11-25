@@ -66,6 +66,9 @@ const SHARED = [
   // the version as people see it, 2.0.103 as 2.1.04 (the owner, 2026-11-25)
   'src/Utils/displayVersion.js',
   'src/Utils/__tests__/displayVersion.test.mjs',
+  // the silent sign-in token swap (security finding F-2 part 2, 2026-11-25)
+  'src/Utils/sessionSwap.js',
+  'src/Utils/__tests__/sessionSwap.test.mjs',
   'src/Utils/codeChannel.js',
   'src/Utils/accountDeletion.js',
   'src/Utils/bottomSpace.js',

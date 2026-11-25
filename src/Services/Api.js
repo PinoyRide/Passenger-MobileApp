@@ -8,7 +8,7 @@ import { getCurrentRouteName, navigate } from '@/Utils/NavigationService';
 import { checkIsOnline } from '@/Utils/Network';
 import { signalSignedOut, signedOutReason } from '@/Utils/signedOut';
 import { UPDATING_MESSAGE, isServerDown, readable } from '@/Utils/serverDown';
-import { sessionHeader } from '@/Utils/sessionHeader';
+import { sessionHeader, takeNewToken } from '@/Utils/sessionHeader';
 
 const REQUEST_TIMEOUT_MS = 15000;
 const OFFLINE_MESSAGE =
@@ -281,6 +281,8 @@ const usePostRequest = () => {
         timeout: REQUEST_TIMEOUT_MS,
         ...config,
       });
+      // a new sign-in token handed out behind the scenes, even on a stale answer
+      takeNewToken(res.headers);
 
       // 🛑 Stale-response guard: a newer request has already fired (and
       // possibly already resolved) since this one started — e.g. this call
@@ -320,6 +322,7 @@ const usePostRequest = () => {
         return { response: res.data, error: null };
       }
     } catch (err) {
+      takeNewToken(err?.response?.headers);
       if (!isLatest()) {
         return { response: null, error: null, stale: true };
       }
