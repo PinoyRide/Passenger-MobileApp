@@ -130,6 +130,12 @@
   },
   "overrides": {
     "@grpc/grpc-js": "^1.14.7",
-    "postcss": "^8.5.33"
+    "postcss": "^8.5.33",
+    "babel-plugin-module-resolver": {
+      "glob": "^8.1.0"
+    },
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "^11.0.9"
+    }
   }
 }
