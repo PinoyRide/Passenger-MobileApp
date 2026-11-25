@@ -205,8 +205,15 @@ class LaunchScreen private constructor(private val activity: Activity) {
     return if (downloading) R.string.launch_downloading else R.string.launch_checking
   }
 
+  /**
+   * The sentences in the order a start goes through them. The sentence only moves forward: the update
+   * library stops reporting a download once it is in (and when it fails), well before React Native starts,
+   * and asking it again then would put "Checking for updates…" back after "Downloading the update…".
+   */
+  private val inOrder = intArrayOf(R.string.launch_checking, R.string.launch_downloading, R.string.launch_starting)
+
   private fun say(text: Int) {
-    if (text == said) {
+    if (text == said || inOrder.indexOf(text) < inOrder.indexOf(said)) {
       return
     }
     said = text

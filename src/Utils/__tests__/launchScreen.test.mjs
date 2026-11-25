@@ -102,6 +102,31 @@ test('the three sentences are the ones a person can act on', () => {
   assert.equal(sentence('launch_starting'), 'Starting…');
 });
 
+test('the sentence only moves forward: checking, downloading, starting', () => {
+  // The update library stops reporting a download when it is in, before the
+  // app starts; the screen asks it every LOOK_EVERY_MS, so without this it
+  // went back to "Checking for updates…" (UPD-03).
+  const order = (launchScreen.match(
+    /private val inOrder = intArrayOf\(([^)]+)\)/,
+  ) || [])[1];
+  assert.ok(order, 'LaunchScreen.kt lists the sentences in order');
+  assert.deepEqual(
+    order.split(',').map(s => s.trim()),
+    [
+      'R.string.launch_checking',
+      'R.string.launch_downloading',
+      'R.string.launch_starting',
+    ],
+  );
+  const say = launchScreen.slice(launchScreen.indexOf('private fun say('));
+  assert.match(
+    say.slice(0, say.indexOf('said = text')),
+    /inOrder\.indexOf\(text\) < inOrder\.indexOf\(said\)\) \{\s+return/,
+  );
+  // every sentence goes through say()
+  assert.equal(launchScreen.match(/\.setText\(/g).length, 1);
+});
+
 test('the window is the launch screen colour before anything is drawn', () => {
   const styles = read(`${RES}/values/styles.xml`);
   const splash = styles.slice(styles.indexOf('name="Theme.App.SplashScreen"'));
