@@ -188,6 +188,7 @@ const WalletScreen = () => {
             onRefresh={pull}
             colors={[look.muted]}
             tintColor={look.muted}
+            progressBackgroundColor={look.card}
           />
         }>
         <View style={styles.balanceCard}>

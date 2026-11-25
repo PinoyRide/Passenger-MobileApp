@@ -394,7 +394,10 @@ const PushNotificationManager = () => {
         // (WAL-11: it kept the old balance and lines)
         const walletRefresh = walletRefreshOnScreen(current, msg?.data);
         if (walletRefresh) {
-          navigationRef.dispatch(CommonActions.setParams(walletRefresh));
+          navigationRef.dispatch({
+            ...CommonActions.setParams(walletRefresh),
+            source: current.key,
+          });
         }
         if (cashOutPushOnPage(current, msg?.data)) {
           return;
