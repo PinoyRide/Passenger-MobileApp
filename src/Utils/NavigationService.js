@@ -14,3 +14,5 @@ export function getCurrentRouteName() {
     ? navigationRef.getCurrentRoute()?.name
     : undefined;
 }
+
+// update-test-5: no-change test update for QA UPD-03 (2026-11-25)
