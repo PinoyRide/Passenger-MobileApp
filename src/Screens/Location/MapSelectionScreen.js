@@ -107,7 +107,7 @@ const MapSelectionScreen = () => {
 
   const handleConfirm = () => {
     if (!pickupLocation && !dropoffLocation) {
-      alert('Please select at least one location');
+      appAlert('No Location Chosen', 'Please select at least one location');
       return;
     }
 

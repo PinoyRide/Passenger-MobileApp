@@ -28,12 +28,18 @@ const sources = (dir = join(app, 'src')) =>
     return path.endsWith('.js') ? [path] : [];
   });
 
+// Alert.alert, or the bare global alert(), which React Native draws as the
+// same platform dialog, titled "Alert" and white in Dark mode (QA, Passenger
+// 2.0.102: Confirm with no place chosen on Select Location). window.alert in
+// a react-native-web branch is the browser's own and is left alone.
+const PLATFORM_DIALOG = /Alert\.alert\(|(^|[^.\w$])alert\(/m;
+
 test('no platform dialog outside appAlert', () => {
   const left = sources()
     .map(file => relative(app, file))
     .filter(file => !PLATFORM_ON_PURPOSE.has(file))
     .filter(file =>
-      readFileSync(join(app, file), 'utf8').includes('Alert.alert('),
+      PLATFORM_DIALOG.test(readFileSync(join(app, file), 'utf8')),
     );
   assert.deepEqual(
     left,

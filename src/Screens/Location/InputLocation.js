@@ -352,7 +352,10 @@ const InputLocation = () => {
       if (place) {
         choosePoint(field, place, fieldTextOf(item));
       } else {
-        alert('Unable to get that place. Please try again.');
+        appAlert(
+          'Place Not Found',
+          'Unable to get that place. Please try again.',
+        );
       }
     } finally {
       pickingRef.current = false;
@@ -407,14 +410,17 @@ const InputLocation = () => {
         } catch (error) {
           // Offline, timed out, or Google API error
           console.error('Reverse geocode error:', error);
-          alert('Unable to get address from location.');
+          appAlert('Address Not Found', 'Unable to get address from location.');
         } finally {
           setIsLocatingCurrentPosition(false);
         }
       },
       error => {
         console.error('Location error:', error);
-        alert('Unable to get location. Please try again.');
+        appAlert(
+          'Location Not Found',
+          'Unable to get location. Please try again.',
+        );
         setIsLocatingCurrentPosition(false);
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 },
