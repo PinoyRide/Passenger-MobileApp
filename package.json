@@ -127,5 +127,9 @@
         ]
       }
     }
+  },
+  "overrides": {
+    "@grpc/grpc-js": "^1.14.7",
+    "postcss": "^8.5.33"
   }
 }
