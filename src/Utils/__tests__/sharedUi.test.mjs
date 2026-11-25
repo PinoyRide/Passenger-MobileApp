@@ -87,6 +87,10 @@ const SHARED = [
   // the other party's number on Booking Details (KI-63, 2026-11-25)
   'src/Utils/bookingContact.js',
   'src/Utils/__tests__/bookingContact.test.mjs',
+  // crash summaries for the API: error type and place in the code only (A-211)
+  'src/Utils/crashSummary.js',
+  'src/Services/crashReporter.js',
+  'src/Utils/__tests__/crashSummary.test.mjs',
   // the payment-done picture (AppTransactionComplete)
   'src/Assets/Common/Success_Image.png',
   // the iOS project's config plugins (npx expo prebuild --platform ios)

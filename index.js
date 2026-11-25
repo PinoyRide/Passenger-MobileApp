@@ -1,5 +1,7 @@
 // first: release builds keep personal data out of the system log
 import './src/Utils/quietLogs';
+// second: a crash summary (error type and place in the code only) reaches the API (A-211)
+import './src/Services/crashSummaryStart';
 import { registerRootComponent } from 'expo';
 
 import App from './App';
