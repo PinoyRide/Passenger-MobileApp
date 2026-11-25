@@ -351,6 +351,15 @@ const PushNotificationManager = () => {
     }
     return onForegroundPush(msg => {
       const parsed = parsePushData(msg?.data);
+      // logcat: whether a push reached the open app at all (QA LAT-16)
+      console.info(
+        '[push] foreground',
+        msg?.data?.type || '-',
+        'booking',
+        parsed.bookingId,
+        'on',
+        currentRouteName(),
+      );
       // a message for the chat on screen shows in it: no banner over it
       if (
         parsed.type === PUSH_TYPES.CHAT_MESSAGE &&

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import usePostRequest from '@/Services/Api';
 import { Constants } from '@/Utils';
+import { riderCancelReplacement } from '@/Utils/riderCancelNotice';
 import {
   removeMinimizedAdvanceBookingId,
   removeParkedAdvanceBooking,
@@ -19,6 +20,7 @@ const useParkedAdvanceBookingPoll = ({
   customerId,
   enabled,
   onBookingSynced,
+  onRiderCancelled,
 }) => {
   const dispatch = useDispatch();
   const parked = useSelector(selectParkedAdvanceBookings);
@@ -27,6 +29,8 @@ const useParkedAdvanceBookingPoll = ({
   parkedRef.current = parked;
   const onSyncedRef = useRef(onBookingSynced);
   onSyncedRef.current = onBookingSynced;
+  const onRiderCancelledRef = useRef(onRiderCancelled);
+  onRiderCancelledRef.current = onRiderCancelled;
 
   useEffect(() => {
     if (!enabled || !customerId || !parked.length) {
@@ -53,6 +57,13 @@ const useParkedAdvanceBookingPoll = ({
       if (statusNum === 3 || statusNum === 4) {
         dispatch(removeParkedAdvanceBooking(bookingId));
         dispatch(removeMinimizedAdvanceBookingId(bookingId));
+        // The rider cancelled and the ride is offered again under a new
+        // reference: the passenger is told (QA LAT-16; until then this
+        // dropped it without a word). Home adopts the new booking once a
+        // rider accepts it (useAdvanceBookingDiscovery), as before.
+        if (riderCancelReplacement(data)) {
+          onRiderCancelledRef.current?.(data);
+        }
         return;
       }
       dispatch(

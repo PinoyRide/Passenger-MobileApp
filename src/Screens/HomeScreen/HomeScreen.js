@@ -142,7 +142,8 @@ import useRiderEtaPoll from '@/Hooks/useRiderEtaPoll';
 import useRiderLocationPoll from '@/Hooks/useRiderLocationPoll';
 import useAdvanceBookingDiscovery from '@/Hooks/useAdvanceBookingDiscovery';
 import useParkedAdvanceBookingPoll from '@/Hooks/useParkedAdvanceBookingPoll';
-import appAlert from '@/Utils/appAlert';
+import appAlert, { isAlertAsked } from '@/Utils/appAlert';
+import { riderCancelAlert } from '@/Utils/riderCancelNotice';
 
 // Matches backend ADVANCE_MAX_OPEN_PER_CUSTOMER.
 const ADVANCE_MAX_OPEN = 3;
@@ -417,6 +418,9 @@ const HomeScreen = () => {
   useParkedAdvanceBookingPoll({
     customerId: userInfo?.id,
     enabled: bookLater.enabled && parkedAdvanceBookings.length > 0,
+    // a closed scheduled ride the rider cancelled: say so, with the new
+    // reference, wherever the passenger is (QA LAT-16)
+    onRiderCancelled: data => tellRiderCancelled(data),
     onBookingSynced: data => {
       if (isReturnedToPool(data)) {
         dispatch(clearAcknowledgedScheduledForBooking(data.id));
@@ -662,6 +666,17 @@ const HomeScreen = () => {
     setShowPushNotice(true);
   };
 
+  // "Booking update" for a rider cancel, drawn by AlertHost over whatever
+  // screen is open, not by Home (QA LAT-16: the passenger on Booking Details
+  // saw nothing). Once per cancelled booking (riderCancelNotice.js).
+  const tellRiderCancelled = oldBooking => {
+    const box = riderCancelAlert(oldBooking);
+    if (!box || isAlertAsked(box.key)) {
+      return;
+    }
+    appAlert(box.title, box.message, [{ text: 'OK' }], { key: box.key });
+  };
+
   // A rider cancel re-pools the trip under a NEW booking (old one: status 4 +
   // replaced_by). Swap every saved id to the new booking, tell the passenger
   // the new reference, then reload it through the normal restore path.
@@ -687,16 +702,7 @@ const HomeScreen = () => {
       pushTargetRef.current = { ...pushTargetRef.current, id: String(newId) };
     }
     if (notify) {
-      notifyPush(
-        // not_set_off: the rider never tapped "Go to Pick Up Location" and
-        // the trip was passed on (backend InstantRelease)
-        (oldBooking.not_set_off
-          ? "Your rider didn't respond. We're finding you a new rider."
-          : "Your rider cancelled. We're finding you a new rider.") +
-          (oldBooking.replaced_by_ref_code
-            ? ` New reference: ${oldBooking.replaced_by_ref_code}`
-            : ''),
-      );
+      tellRiderCancelled(oldBooking);
     }
     setIsRestoringBooking(true);
     checkActiveBooking.makePostRequest(Constants.ENDPOINT.GET_BOOKING_DETAILS, {
