@@ -21,6 +21,14 @@ import { selectUserInfo } from '@/Redux/Slices/userSlice';
 import TransactionRow, { EmptyTransactions } from './TransactionRow';
 import appAlert from '@/Utils/appAlert';
 
+// The note under "Activate your wallet": that the identity check is optional
+// and nothing waits for it (a passed check only shows ACTIVE; cash in, pay
+// and cash out work without it). It used to promise "RideRewards", which do
+// not exist (Q-WALLET-TEXT: the team's wording O-2, chosen by the owner in
+// A-199 and shipped by A-217).
+const ACTIVATE_NOTE =
+  'Optional. Check your ID once. Your wallet works either way.';
+
 // The Wallet page, as the owner's design draws it (2026-11-22): the balance
 // and whether the wallet is active, Cash in / Cash out, activating the
 // wallet, and the latest transactions. Activating is the PayCools identity
@@ -193,7 +201,7 @@ const WalletScreen = () => {
             disabled={starting}
             accessibilityRole="button"
             accessibilityLabel="Activate your wallet"
-            accessibilityHint="Go cashless and start earning RideRewards"
+            accessibilityHint={ACTIVATE_NOTE}
             accessibilityState={{ busy: starting }}
             style={({ pressed }) => [
               styles.activate,
@@ -204,9 +212,7 @@ const WalletScreen = () => {
             </View>
             <View style={styles.flex}>
               <Text style={styles.activateTitle}>Activate your wallet</Text>
-              <Text style={styles.activateNote}>
-                Go cashless and start earning RideRewards
-              </Text>
+              <Text style={styles.activateNote}>{ACTIVATE_NOTE}</Text>
             </View>
             {starting ? (
               <ActivityIndicator color={look.muted} />

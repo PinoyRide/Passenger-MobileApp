@@ -91,6 +91,9 @@ const SHARED = [
   'src/Utils/crashSummary.js',
   'src/Services/crashReporter.js',
   'src/Utils/__tests__/crashSummary.test.mjs',
+  // the support contact: Help & support and Contact support (Q-WALLET-TEXT)
+  'src/Utils/supportContact.js',
+  'src/Utils/__tests__/supportContact.test.mjs',
   // the payment-done picture (AppTransactionComplete)
   'src/Assets/Common/Success_Image.png',
   // the iOS project's config plugins (npx expo prebuild --platform ios)

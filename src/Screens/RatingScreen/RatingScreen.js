@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Linking,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -39,8 +38,8 @@ import {
   tagsFor,
 } from '@/Utils/ratingPage';
 import { modern } from '@/Theme/modern';
-
-const SUPPORT_NUMBER = '09770368299';
+import appAlert from '@/Utils/appAlert';
+import { supportAlert } from '@/Utils/supportContact';
 
 const PAYMENT = { cash: 'Cash', wallet: 'Wallet' };
 
@@ -156,11 +155,10 @@ const RatingScreen = () => {
     });
   };
 
-  const handleContactSupport = () => {
-    Linking.openURL(
-      Platform.OS === 'android' ? `tel:${SUPPORT_NUMBER}` : 'telprompt:',
-    );
-  };
+  // the support contact Settings > Help & support shows (Utils/
+  // supportContact.js). It used to dial a number never confirmed as a
+  // support line (Q-WALLET-TEXT, the owner A-217).
+  const handleContactSupport = () => appAlert(...supportAlert(Linking.openURL));
 
   const handleViewDetails = () => {
     if (!booking?.id) {

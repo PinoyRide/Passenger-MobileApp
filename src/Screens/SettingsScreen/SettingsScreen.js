@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import {
   BackHandler,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -30,6 +31,7 @@ import {
   selectUserInfo,
 } from '@/Redux/Slices/userSlice';
 import appAlert from '@/Utils/appAlert';
+import { supportAlert } from '@/Utils/supportContact';
 
 // The Account page, opened by the profile button on the map, as the owner's
 // design draws it (2026-11-22): who you are, the wallet, the ride pages,
@@ -118,9 +120,9 @@ const SettingsScreen = () => {
     navigation.navigate('PromoReferralsScreen');
   };
 
-  // asked for by the owner, 2026-11-22: there is no help page yet
-  const helpComingSoon = () =>
-    appAlert('Help & support', 'Help and support in the app is coming soon.');
+  // the support contact, the same in both apps (Utils/supportContact.js;
+  // the owner, A-217: a placeholder until the support email is given)
+  const showSupport = () => appAlert(...supportAlert(Linking.openURL));
 
   return (
     <Container style={styles.container} background={look.page}>
@@ -255,7 +257,7 @@ const SettingsScreen = () => {
             icon="help-circle-outline"
             title="Help & support"
             tone="quiet"
-            onPress={helpComingSoon}
+            onPress={showSupport}
           />
         </MenuGroup>
 
