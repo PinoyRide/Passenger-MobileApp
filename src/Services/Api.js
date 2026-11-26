@@ -9,6 +9,7 @@ import { checkIsOnline } from '@/Utils/Network';
 import { signalSignedOut, signedOutReason } from '@/Utils/signedOut';
 import { UPDATING_MESSAGE, isServerDown, readable } from '@/Utils/serverDown';
 import { sessionHeader, takeNewToken } from '@/Utils/sessionHeader';
+import { deviceIdHeader, waitForDeviceId } from '@/Utils/deviceIdHeader';
 import {
   WALLET_OFF_MESSAGE,
   appBuildHeader,
@@ -249,12 +250,16 @@ const usePostRequest = () => {
       AppUtil.debug(url);
       AppUtil.debugDeep(params);
 
+      // the phone's id is read once before the first request (Utils/deviceIdHeader.js)
+      await waitForDeviceId();
       let requestData;
       const headers = {
         'x-api-key': Constants.API_KEY,
         // play or dev: the API refuses the money routes to the Play build
         // (Utils/walletOff.js)
         ...appBuildHeader(),
+        // which phone (Utils/deviceIdHeader.js): the same phone may sign in again
+        ...deviceIdHeader(),
       };
       // the passenger's sign-in token: the API answers a request naming a
       // passenger only with it (Utils/sessionHeader.js)

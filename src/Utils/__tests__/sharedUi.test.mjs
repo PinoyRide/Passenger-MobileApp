@@ -108,6 +108,9 @@ const SHARED = [
   // no wallet in the Google Play build (A-287, A-290; WALLET-OFF-BUILD)
   'src/Utils/walletOff.js',
   'src/Utils/__tests__/walletOff.test.mjs',
+  // which phone a request comes from: the same phone may sign in again (A-316)
+  'src/Utils/deviceIdHeader.js',
+  'src/Utils/__tests__/deviceIdHeader.test.mjs',
   // the payment-done picture (AppTransactionComplete)
   'src/Assets/Common/Success_Image.png',
   // the iOS project's config plugins (npx expo prebuild --platform ios)

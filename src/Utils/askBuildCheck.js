@@ -1,5 +1,6 @@
 import { installedVersion } from '@/Utils/installedVersion';
 import { Constants } from '@/Utils';
+import { deviceIdHeader } from '@/Utils/deviceIdHeader';
 import { appBuildHeader } from '@/Utils/walletOff';
 import {
   TIMEOUT_MS,
@@ -18,7 +19,7 @@ export const askBuildCheck = async (app, { tripUnderWay = false } = {}) => {
       buildCheckAddress(Constants.BASE_URI, app, installedVersion()),
       {
         signal: controller.signal,
-        headers: { Accept: 'application/json', ...appBuildHeader() },
+        headers: { Accept: 'application/json', ...appBuildHeader(), ...deviceIdHeader() },
       },
     );
     if (!answer.ok) {

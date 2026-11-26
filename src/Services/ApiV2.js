@@ -14,6 +14,7 @@ import { signalSignedOut, signedOutReason } from '@/Utils/signedOut';
 import { UPDATING_MESSAGE, isServerDown } from '@/Utils/serverDown';
 import { sessionHeader, takeNewToken } from '@/Utils/sessionHeader';
 import { installedVersion } from '@/Utils/installedVersion';
+import { deviceIdHeader, waitForDeviceId } from '@/Utils/deviceIdHeader';
 import {
   WALLET_OFF_MESSAGE,
   appBuildHeader,
@@ -90,6 +91,8 @@ const useApiRequest = () => {
     }
 
     try {
+      // the phone's id is read once before the first request (Utils/deviceIdHeader.js)
+      await waitForDeviceId();
       const res = await axios.request({
         method,
         url: Constants.BASE_URI + path,
@@ -108,6 +111,8 @@ const useApiRequest = () => {
           // play or dev: the API refuses the money routes to the Play build
           // (Utils/walletOff.js)
           ...appBuildHeader(),
+          // which phone (Utils/deviceIdHeader.js): the same phone may sign in again
+          ...deviceIdHeader(),
           // the passenger's sign-in token: customers/{id}/... answers only
           // with it (Utils/sessionHeader.js)
           ...sessionHeader(),
