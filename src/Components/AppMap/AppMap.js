@@ -30,7 +30,7 @@ import useVehicleTracker from '../../Utils/useVehicleTracker';
 import NavArrow from './NavArrow';
 import MapView, { Circle, Marker, Polyline } from 'react-native-maps';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { modern } from '@/Theme/modern';
+import { GOLD, modern } from '@/Theme/modern';
 import { SWEEP_MS, boundsAround, ringsAt } from '../../Utils/radarPing';
 import { Constants } from '@/Utils';
 import { fetchWithTimeout } from '@/Utils/Network';
@@ -69,7 +69,7 @@ const NearbyDot = ({ coordinate }) => {
       {/* room around the disc, so its shadow is not cut off */}
       <View style={dotStyles.room}>
         <View style={dotStyles.disc}>
-          <Icon name="motorbike" size={16} color="#FEC107" />
+          <Icon name="motorbike" size={16} color={GOLD} />
         </View>
       </View>
     </Marker>

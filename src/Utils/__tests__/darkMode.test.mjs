@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // Dark mode (Settings > Dark mode, the owner, 2026-11-23: "in rider
 // profile>settings we have a dark mode but not implemented in passenger").
 // What turned screens unreadable in the dark look when it came, kept from
-// coming back.
+// coming back. The same file in both apps since A-184 piece a (2026-11-26,
+// sharedUi.test.mjs): the Rider app is held to it too.
 
 const app = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const read = path => readFileSync(join(app, path), 'utf8');
@@ -84,25 +85,43 @@ test('cards and pages are not painted colors.onPrimary (white in both looks)', (
   );
 });
 
-// White kept on purpose: the start screen matches the white loading screen
-// before it (android launch_background, a new APK to change), and these
-// boxes carry their own dark words.
+// White kept on purpose: these boxes carry their own dark words. Paths of
+// both apps (the file is shared); a path the app does not have is skipped.
+// (The start screen left the list when it took the phone's look, QA UPD-14.)
 const WHITE_ON_PURPOSE = new Set([
-  'src/Screens/SplashScreen/SplashScreen.js',
   'src/Screens/Login/UpdateRequiredScreen.js',
   'src/Services/Push/PushNotificationManager.js',
-  // a step dot on the black camera screen
+  // a step dot on the black camera screen (Passenger, Rider)
   'src/Screens/Profile/LivenessSelfieScreen.js',
+  'src/Screens/Register/LivenessSelfieScreen.js',
+  // Rider boxes with their own dark words on white, until A-184 piece c2
+  // draws them as the AlertBox; take each off this list then
+  'src/Components/AlertBox/PickupWarningModal.js',
+  'src/Screens/AdvanceBookingScreen/CancelPenaltyModal.js',
+  'src/Screens/AdvanceBookingScreen/EmergencyCancelModals.js',
 ]);
 
+const WHITE = /backgroundColor:\s*['"](#fff|#ffffff|white)['"]/i;
+
 test('nothing else is painted white whatever the look', () => {
-  const white = lines(
-    /backgroundColor:\s*['"](#fff|#ffffff|white)['"]/i,
-  ).filter(line => !WHITE_ON_PURPOSE.has(line.split(':')[0]));
+  const white = lines(WHITE).filter(
+    line => !WHITE_ON_PURPOSE.has(line.split(':')[0]),
+  );
   assert.deepEqual(
     white,
     [],
     'a white card stays white in the dark look and hides theme-coloured words on it: use colors.card or modern.js',
+  );
+});
+
+test('the white kept on purpose is still there (an emptied file leaves the list)', () => {
+  const stale = [...WHITE_ON_PURPOSE].filter(
+    path => existsSync(join(app, path)) && !WHITE.test(read(path)),
+  );
+  assert.deepEqual(
+    stale,
+    [],
+    'no white left in these: take them off WHITE_ON_PURPOSE',
   );
 });
 
@@ -111,8 +130,14 @@ test('the app follows the chosen look: theme, navigator and status bar', () => {
   assert.match(root, /<ThemeProvider>/);
   assert.match(root, /<StatusBar style=\{isDark \? 'light' : 'dark'\} \/>/);
   const navigator = read('src/Navigators/Application.js');
-  assert.match(navigator, /<PaperProvider theme=\{theme\}>/);
-  assert.doesNotMatch(navigator, /theme=\{LightTheme\}/);
+  // the Passenger app wraps its navigator in Paper's provider, the Rider app
+  // its whole root: either way the chosen theme, never the light one
+  assert.match(root + navigator, /<PaperProvider theme=\{theme\}>/);
+  assert.doesNotMatch(root + navigator, /theme=\{LightTheme\}/);
+  assert.match(
+    navigator,
+    /<NavigationContainer\s+theme=\{(theme|navigationTheme)\}/,
+  );
   assert.match(
     read('src/Screens/SettingsScreen/AccountSettingsScreen.js'),
     /<ThemeSwitch \/>/,

@@ -165,7 +165,7 @@ const getStyles = ({ colors }) =>
       justifyContent: 'center',
     },
     amount: {
-      fontFamily: 'Poppins Bold',
+      fontFamily: 'Poppins SemiBold',
       fontSize: 20,
       color: colors.primary,
       textAlign: 'center',

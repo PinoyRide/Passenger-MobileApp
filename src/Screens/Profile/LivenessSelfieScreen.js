@@ -29,6 +29,7 @@ import {
   stepsFor,
   stepsPassed,
 } from '@/Utils/livenessCheck';
+import { GOLD } from '@/Theme/modern';
 
 // Takes the passenger's profile photo, and makes sure a real person is taking
 // it of themselves: they are asked to look straight, turn their head a little
@@ -562,7 +563,7 @@ const styles = StyleSheet.create({
     borderWidth: 4,
     borderColor: '#FFFFFF',
   },
-  ovalSettled: { borderColor: '#FFC107' },
+  ovalSettled: { borderColor: GOLD },
   ovalDone: { borderColor: '#4CAF50' },
   panel: {
     flex: 1,
@@ -580,7 +581,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.35)',
   },
   stepDotCurrent: { backgroundColor: '#FFFFFF' },
-  stepDotDone: { backgroundColor: '#FFC107' },
+  stepDotDone: { backgroundColor: GOLD },
   prompt: {
     fontSize: 20,
     lineHeight: 28,
@@ -596,7 +597,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.8)',
     textAlign: 'center',
   },
-  hintProblem: { color: '#FFC107' },
+  hintProblem: { color: GOLD },
   note: {
     marginTop: 10,
     fontSize: 11,
@@ -630,7 +631,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 28,
     borderRadius: 24,
-    backgroundColor: '#FFC107',
+    backgroundColor: GOLD,
   },
   buttonText: {
     fontSize: 15,

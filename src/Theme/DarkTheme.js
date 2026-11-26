@@ -3,6 +3,7 @@ import {
   MD3DarkTheme as PaperDarkTheme,
   configureFonts,
 } from 'react-native-paper';
+import { GOLD, ON_GOLD } from './modern';
 
 // The dark look (Settings > Dark mode; the phone's own setting until the
 // person chooses, Contexts/ThemeContext.js). Every colour LightTheme.js has is
@@ -11,7 +12,7 @@ import {
 // same colour, it has the same value, so the two apps look alike in the dark.
 
 const fontConfig = {
-  fontFamily: 'Avenir LT Std 65 Medium',
+  fontFamily: 'Poppins Regular',
 };
 
 const custom = {
@@ -19,7 +20,7 @@ const custom = {
     ...configureFonts({ config: fontConfig }),
     titleLarge: {
       ...PaperDarkTheme.fonts.titleLarge,
-      fontFamily: 'Avenir LT Std 65 Medium',
+      fontFamily: 'Poppins Regular',
     },
   },
 };
@@ -30,7 +31,8 @@ const DarkTheme = {
   colors: {
     ...NavigationDarkTheme.colors,
     ...PaperDarkTheme.colors,
-    primary: '#FFCD05', //brand color yellow
+    primary: GOLD, // the one brand gold (modern.js)
+    onYellow: ON_GOLD, // words and icons on the gold
     primaryLight: 'rgb(48, 45, 55)',
     primaryDark: 'rgb(151, 130, 195)',
     primaryLight2: 'rgb(42, 40, 48)',
@@ -80,7 +82,7 @@ const DarkTheme = {
     onSurfaceDisabled: 'rgba(230, 225, 230, 0.38)',
     backdrop: 'rgba(50, 47, 56, 0.4)',
 
-    brand: '#E8BF46',
+    brand: GOLD,
     brandLight: '#FFDF80',
     onBrand: 'rgb(28, 27, 30)',
     brandContainer: 'rgb(92, 67, 0)',

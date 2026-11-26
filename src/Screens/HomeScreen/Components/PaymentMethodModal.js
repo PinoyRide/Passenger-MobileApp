@@ -262,7 +262,7 @@ const getStyles = ({ colors }) =>
     },
     manageText: {
       fontSize: 16,
-      fontFamily: 'Poppins Light',
+      fontFamily: 'Poppins Regular',
       color: colors.primary,
       textAlign: 'center',
       marginTop: 12,

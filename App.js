@@ -54,7 +54,6 @@ const App = () => {
     'Poppins Regular': require('./src/Assets/Fonts/Poppins/Poppins-Regular.ttf'),
     'Poppins Medium': require('./src/Assets/Fonts/Poppins/Poppins-Medium.ttf'),
     'Poppins SemiBold': require('./src/Assets/Fonts/Poppins/Poppins-SemiBold.ttf'),
-    'Poppins Light': require('./src/Assets/Fonts/Poppins/Poppins-Light.ttf'),
   });
 
   if (!fontsLoaded) {

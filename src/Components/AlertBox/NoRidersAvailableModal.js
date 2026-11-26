@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { Icon, useTheme } from 'react-native-paper';
-import { modern } from '@/Theme/modern';
+import { GOLD, modern } from '@/Theme/modern';
 
 // Figma frame 120 (node 296-3698): shown when no rider accepted within 5 min.
 const NoRidersAvailableModal = ({
@@ -25,7 +25,7 @@ const NoRidersAvailableModal = ({
     <Modal transparent visible={visible} animationType="fade">
       <View style={styles.overlay}>
         <View style={styles.card} testID="no-riders-modal">
-          <Icon source="emoticon-sad-outline" size={56} color="#FFC107" />
+          <Icon source="emoticon-sad-outline" size={56} color={GOLD} />
           <Text style={styles.title}>No Riders Available</Text>
           <Text style={styles.body}>
             Sorry, no riders have accepted your booking yet. You can try again
@@ -107,7 +107,7 @@ const getStyles = (dark, look) =>
       justifyContent: 'center',
       marginTop: 8,
     },
-    primary: { backgroundColor: '#FFC107' },
+    primary: { backgroundColor: GOLD },
     secondary: { backgroundColor: '#FFE08A' },
     primaryText: {
       fontFamily: 'Poppins Medium',

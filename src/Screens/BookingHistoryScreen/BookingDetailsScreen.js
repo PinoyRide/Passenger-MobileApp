@@ -910,7 +910,7 @@ const getStyles = ({ colors, insets }) =>
       marginVertical: 14,
     },
     paymentLabel: {
-      fontFamily: 'Poppins Light',
+      fontFamily: 'Poppins Regular',
       fontSize: 12,
       color: colors.text,
     },
@@ -919,12 +919,12 @@ const getStyles = ({ colors, insets }) =>
       alignItems: 'center',
     },
     paymentMethodText: {
-      fontFamily: 'Poppins Light',
+      fontFamily: 'Poppins Regular',
       fontSize: 12,
       color: colors.text,
     },
     contactExpiredText: {
-      fontFamily: 'Poppins Light',
+      fontFamily: 'Poppins Regular',
       fontSize: 12,
       color: colors.grey4,
       fontStyle: 'italic',
@@ -942,7 +942,7 @@ const getStyles = ({ colors, insets }) =>
       marginRight: 10,
     },
     riderName: {
-      fontFamily: 'Poppins Light',
+      fontFamily: 'Poppins Regular',
       fontWeight: '400',
       fontSize: 12,
       color: colors.text,

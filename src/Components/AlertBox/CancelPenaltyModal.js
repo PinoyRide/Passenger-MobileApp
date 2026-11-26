@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { Icon, useTheme } from 'react-native-paper';
 import { ON_PRIMARY_BUTTON_TEXT } from '@/Theme';
-import { modern } from '@/Theme/modern';
+import { GOLD, modern } from '@/Theme/modern';
 import { cancelDialogState } from '@/Utils/cancellationDialog';
 
 const formatPeso = amount => {
@@ -54,7 +54,7 @@ const CancelPenaltyModal = ({
       onRequestClose={onNo}>
       <View style={styles.overlay}>
         <View style={styles.card} testID="cancel-penalty-modal">
-          <Icon source="cancel" size={56} color="#FFC107" />
+          <Icon source="cancel" size={56} color={GOLD} />
           <Text style={styles.title}>{dialog.title}</Text>
           <Text style={styles.body}>{dialog.body}</Text>
           {dialog.showAmount && amountText ? (
@@ -140,7 +140,7 @@ const getStyles = (dark, look) =>
       alignItems: 'center',
       justifyContent: 'center',
     },
-    yes: { backgroundColor: '#FFC107' },
+    yes: { backgroundColor: GOLD },
     no: { backgroundColor: '#FFE08A' },
     yesText: {
       fontFamily: 'Poppins Medium',

@@ -13,6 +13,9 @@ import { fileURLToPath } from 'node:url';
 // (Render packs one app at a time).
 const SHARED = [
   'src/Theme/modern.js',
+  // the colour tokens' contrast and the dark look, in both apps (A-184 piece a)
+  'src/Utils/__tests__/tokens.test.mjs',
+  'src/Utils/__tests__/darkMode.test.mjs',
   'src/Components/AppButton/AppButton.js',
   'src/Components/AlertBox/AlertBox.js',
   'src/Components/AppTextInput/AppTextInput.js',

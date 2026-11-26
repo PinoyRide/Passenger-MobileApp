@@ -128,7 +128,7 @@ const getStyles = ({ colors }) =>
       marginRight: 12,
     },
     label: {
-      fontFamily: 'Poppins Light',
+      fontFamily: 'Poppins Regular',
       fontWeight: 500,
       fontSize: 16,
       color: colors.text,

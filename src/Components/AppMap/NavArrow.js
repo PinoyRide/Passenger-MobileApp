@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
+import { GOLD } from '@/Theme/modern';
 
 // Vehicle marker for the live map: a round puck with a pointed nose and a
 // navigation arrow, drawn pointing "up". The parent <Marker> turns it to the
@@ -25,7 +26,7 @@ const triangle = (halfBase, height, color) => ({
   borderBottomColor: color,
 });
 
-const NavArrow = ({ color = '#FFC107', size = 30 }) => {
+const NavArrow = ({ color = GOLD, size = 30 }) => {
   const pad = Math.round(size * 0.36); // room around the puck for the nose
   const box = size + pad * 2;
   const centre = box / 2;

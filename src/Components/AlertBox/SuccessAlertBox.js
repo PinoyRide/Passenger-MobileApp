@@ -57,7 +57,7 @@ const getStyles = ({ colors }) =>
     },
     title: {
       fontSize: 25,
-      fontFamily: 'Poppins Semibold',
+      fontFamily: 'Poppins SemiBold',
       fontWeight: '600',
       color: colors.darkGrey,
       marginBottom: 8,
