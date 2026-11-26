@@ -57,6 +57,8 @@ const UNFINISHED_SCREENS = [
   'InputLocation',
   'MapSelectionScreen',
   'SaveLocationScreen',
+  // the Rider's home address being searched or typed (A-328)
+  'HomeAddressScreen',
   'RatingScreen',
 ];
 

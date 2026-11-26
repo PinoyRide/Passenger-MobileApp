@@ -23,7 +23,7 @@ test('a booking request on screen and a payment hold it too', () => {
 });
 
 test('so does something half done: a code already texted, a form, a photo check', () => {
-  for (const screen of ['OTPScreen', 'DeleteAccountScreen', 'RegisterFormScreen', 'RiderApplicationScreen', 'LivenessSelfieScreen', 'InputLocation']) {
+  for (const screen of ['OTPScreen', 'DeleteAccountScreen', 'RegisterFormScreen', 'RiderApplicationScreen', 'LivenessSelfieScreen', 'InputLocation', 'HomeAddressScreen']) {
     assert.equal(busyReason({ screen }), 'unfinished', screen);
   }
   for (const screen of ['WalletScreen', 'SettingsScreen', 'BookingHistoryScreen', undefined]) {

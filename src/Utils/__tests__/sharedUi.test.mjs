@@ -118,6 +118,14 @@ const SHARED = [
   // which phone a request comes from: the same phone may sign in again (A-316)
   'src/Utils/deviceIdHeader.js',
   'src/Utils/__tests__/deviceIdHeader.test.mjs',
+  // the place search, shared by Add Saved Place and the Rider's Home Address (A-328)
+  'src/Utils/placeSession.js',
+  'src/Utils/__tests__/placeSession.test.mjs',
+  'src/Utils/placeSearch.js',
+  'src/Utils/__tests__/placeSearch.test.mjs',
+  'src/Hooks/usePlaceSearch.js',
+  'src/Components/PlaceSearch/PlaceSearchBar.js',
+  'src/Components/PlaceSearch/PlaceResultRow.js',
   // the payment-done picture (AppTransactionComplete)
   'src/Assets/Common/Success_Image.png',
   // the iOS project's config plugins (npx expo prebuild --platform ios)
