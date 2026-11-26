@@ -6,9 +6,19 @@ import { modern } from '@/Theme/modern';
 
 // One suggestion of a place search: what the place is, where, and how far
 // (the distance is left out where it means nothing, as for a home address).
+// One line each unless asked for more (the Rider's home address: 2 and 2, so
+// a short line still shows its city at a large font).
 // Taken out of the Passenger's Add Saved Place for the Rider's Home Address
 // (A-328), looking as it did. The same file in both apps (sharedUi.test.mjs).
-const PlaceResultRow = ({ icon, title, subtitle, distance, onPress }) => {
+const PlaceResultRow = ({
+  icon,
+  title,
+  subtitle,
+  distance,
+  onPress,
+  titleLines = 1,
+  subtitleLines = 1,
+}) => {
   const look = modern(useTheme());
   const styles = getStyles({ look });
 
@@ -25,11 +35,11 @@ const PlaceResultRow = ({ icon, title, subtitle, distance, onPress }) => {
         <Icon name={icon} size={18} color={look.chipInk} />
       </View>
       <View style={styles.resultWords}>
-        <Text style={styles.resultTitle} numberOfLines={1}>
+        <Text style={styles.resultTitle} numberOfLines={titleLines}>
           {title}
         </Text>
         {subtitle ? (
-          <Text style={styles.resultSubtitle} numberOfLines={1}>
+          <Text style={styles.resultSubtitle} numberOfLines={subtitleLines}>
             {subtitle}
           </Text>
         ) : null}

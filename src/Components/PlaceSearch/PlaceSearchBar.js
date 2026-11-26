@@ -8,6 +8,12 @@ import { modern } from '@/Theme/modern';
 // a Cancel beside it when asked for. Taken out of the Passenger's Add Saved
 // Place for the Rider's Home Address (A-328), looking as it did. The same file
 // in both apps (sharedUi.test.mjs).
+
+// The clear cross: `muted` (4.90:1 on the bar) and a 48 dp target (design
+// A-328 F2, recommended; awaiting the owner's OK on the look). The one line to
+// go back to the old cross: { color: 'faint', hitSlop: 8 }
+const CLEAR_CROSS = { color: 'muted', hitSlop: 15 };
+
 const PlaceSearchBar = ({
   value,
   onChangeText,
@@ -45,10 +51,14 @@ const PlaceSearchBar = ({
         {value ? (
           <Pressable
             onPress={() => onChangeText('')}
-            hitSlop={8}
+            hitSlop={CLEAR_CROSS.hitSlop}
             accessibilityRole="button"
             accessibilityLabel="Clear the search">
-            <Icon name="close-circle" size={18} color={look.faint} />
+            <Icon
+              name="close-circle"
+              size={18}
+              color={look[CLEAR_CROSS.color]}
+            />
           </Pressable>
         ) : null}
       </View>
