@@ -36,14 +36,27 @@ test('no screen promises RideRewards', () => {
   assert.deepEqual(found, []);
 });
 
-test('the Activate tile says the check is optional, on screen and to a screen reader', () => {
+// WALLET-EKYC-LOCK (the owner, A-325): once the server locks the wallet until
+// the check passes, "Your wallet works either way" is no longer so. The note
+// says it only while the wallet answer is not `locked`; locked, it is the
+// owner's sentence.
+test('the Activate tile tells the truth about the check, on screen and to a screen reader', () => {
   // the tile's words come from Utils/ekycWallet.js since EKYC-HOTFIX
   const words = read('src/Utils/ekycWallet.js');
   assert.match(
     words,
     /const ACTIVATE_NOTE =\s*'Optional\. Check your ID once\. Your wallet works either way\.';/,
   );
+  assert.match(words, /const LOCKED_NOTE = LOCKED_MESSAGE;/);
+  assert.match(
+    read('src/Utils/walletLock.js'),
+    /const LOCKED_MESSAGE = 'Verify your ID to use your wallet\.';/,
+  );
   assert.match(words, /title: 'Activate your wallet',\s*note: ACTIVATE_NOTE,/);
+  assert.match(
+    words,
+    /note: tile\.kind === 'none' \? LOCKED_NOTE : truthful\(tile\.note, true\)/,
+  );
   const wallet = read('src/Screens/WalletScreen/WalletScreen.js');
   assert.match(wallet, /accessibilityHint=\{tile\.note\}/);
   assert.match(

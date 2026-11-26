@@ -37,14 +37,19 @@ import {
   ekycRefusal,
   ekycTile,
 } from '@/Utils/ekycWallet';
+import { lockedAlert, walletLocked } from '@/Utils/walletLock';
 
 // The Wallet page, as the owner's design draws it (2026-11-22): the balance
 // and whether the wallet is active, Cash in / Cash out, activating the
 // wallet, and the latest transactions. Activating is the PayCools identity
 // check, opened in the browser; until PayCools is switched on the server says
-// it is not available yet. Nothing requires an active wallet yet. There is no
-// sending money to another person (the owner, 2026-11-23: "remove"; PayCools
-// has no sending between people either).
+// it is not available yet. While the server locks the wallet until the check
+// passes (`locked`, WALLET-EKYC-LOCK, the owner A-325), Cash in and Cash out
+// say "Verify your ID to use your wallet." and offer Verify ID, which starts
+// the check; Verify ID on another screen opens this page with `verifyAt`,
+// which starts it here (Utils/walletLock.js). There is no sending money to
+// another person (the owner, 2026-11-23: "remove"; PayCools has no sending
+// between people either).
 const WalletScreen = () => {
   const look = modern(useTheme());
   const styles = getStyles(look);
@@ -139,6 +144,8 @@ const WalletScreen = () => {
   // where the check stands (the API's `ekyc`; Utils/ekycWallet.js)
   const active = ekycPassed(wallet);
   const tile = ekycTile(wallet);
+  // locked until the check passes: Cash in and Cash out ask to verify first
+  const locked = walletLocked(wallet);
   const transactions = wallet?.transactions ?? [];
 
   // While a check is being checked and the page is open, ask for its status
@@ -190,9 +197,36 @@ const WalletScreen = () => {
       return;
     }
     // the words by the refusal's reason; the tries left change, so read again
-    appAlert(...ekycRefusal(reason, error || response?.message));
+    appAlert(...ekycRefusal(reason, error || response?.message, locked));
     loadRef.current();
   };
+
+  // "Verify your ID to use your wallet.": Verify ID starts the check when one
+  // can be started now; otherwise one OK and where the check stands
+  const askToVerify = () => {
+    const canStart = tile?.canStart !== false;
+    appAlert(
+      ...lockedAlert(canStart ? activate : null, {
+        note: canStart ? undefined : tile?.note,
+      }),
+    );
+  };
+
+  // Verify ID on another screen (Cash in, the booking sheet, Payment
+  // options): opened with a new `verifyAt`, start the check once the wallet
+  // has been read, if one can be started (the tile says why not otherwise)
+  const verifyStamp = route.params?.verifyAt;
+  const seenVerify = useRef(null);
+  useEffect(() => {
+    if (!wallet || !walletStampIsNew(seenVerify.current, verifyStamp)) {
+      return;
+    }
+    seenVerify.current = verifyStamp;
+    if (tile?.canStart) {
+      activate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [verifyStamp, wallet]);
 
   const actions = [
     {
@@ -200,8 +234,13 @@ const WalletScreen = () => {
       label: 'Cash in',
       icon: 'plus',
       gold: true,
-      onPress: () =>
-        navigation.navigate('CashInScreen', { available_balance: balance }),
+      onPress: () => {
+        if (locked) {
+          askToVerify();
+          return;
+        }
+        navigation.navigate('CashInScreen', { available_balance: balance });
+      },
     },
     // Cash out (the owner, 2026-11-23: "since they can cash in they can also
     // cash out"): through PayCools to any e-wallet or bank it pays out to, at
@@ -210,11 +249,16 @@ const WalletScreen = () => {
       id: 'cash-out',
       label: 'Cash out',
       icon: 'bank-transfer-out',
-      onPress: () =>
+      onPress: () => {
+        if (locked) {
+          askToVerify();
+          return;
+        }
         navigation.navigate('CashOutScreen', {
           walletDetails: { avail_balance: balance, cashable_balance: cashable },
           fromLabel: 'PinoyRide Wallet',
-        }),
+        });
+      },
     },
   ];
 

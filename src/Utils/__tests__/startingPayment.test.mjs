@@ -45,6 +45,24 @@ test('advance bookings are paid in cash, whatever the balance', () => {
   );
 });
 
+// WALLET-EKYC-LOCK (A-325): until the ID check passes the server refuses a
+// ride paid with the wallet, so a locked wallet starts every ride on cash.
+test('cash while the wallet is locked, whatever the balance', () => {
+  assert.equal(
+    startingPayment({ balance: 5000, fare: 120, locked: true }),
+    'cash',
+  );
+  assert.equal(
+    startingPayment({ balance: '120.00', fare: 120, locked: true }),
+    'cash',
+  );
+  // an answer without `locked` (an older API) keeps the rule by balance
+  assert.equal(
+    startingPayment({ balance: 5000, fare: 120, locked: undefined }),
+    'wallet',
+  );
+});
+
 // The booking sheet applies it, and keeps a method the passenger picked.
 test('the booking sheet starts each trip by this rule', () => {
   const home = new URL(

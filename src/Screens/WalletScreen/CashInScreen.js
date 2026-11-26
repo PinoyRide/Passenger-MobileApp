@@ -23,6 +23,8 @@ import { selectUserInfo } from '@/Redux/Slices/userSlice';
 import { useSelector } from 'react-redux';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { bottomSpace } from '@/Utils/bottomSpace';
+import appAlert from '@/Utils/appAlert';
+import { isLockedRefusal, lockedAlert, verifyParams } from '@/Utils/walletLock';
 
 const cashInValidationSchema = Yup.object().shape({
   amount: Yup.string()
@@ -105,6 +107,12 @@ const CashInScreen = () => {
   };
 
   useEffect(() => {
+    // locked until the ID check passes (WALLET-EKYC-LOCK, A-325): the same
+    // box as the Wallet page, Verify ID starts the check there
+    if (requestToPay.error && isLockedRefusal(requestToPay.reason)) {
+      appAlert(...lockedAlert(() => navigation.navigate(...verifyParams())));
+      return;
+    }
     if (requestToPay.error) {
       console.warn('Request to pay error:', requestToPay.error);
       setAlertMessage(requestToPay.error);

@@ -69,7 +69,8 @@ const TopUpAmountModal = ({ visible, onClose, onError, onSuccess }) => {
     if (requestToPay.error) {
       console.warn('Request to pay error:', requestToPay.error);
       onClose();
-      onError?.(requestToPay.error);
+      // with its reason: the sheet tells the wallet lock (ekyc_required) apart
+      onError?.(requestToPay.error, requestToPay.reason);
       return;
     }
 

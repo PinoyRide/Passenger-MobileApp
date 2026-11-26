@@ -6,11 +6,23 @@
 // Pure (no RN imports) so it runs under `node --test`. Passenger only: the
 // Rider app shows no identity check.
 
-// The note under "Activate your wallet": that the identity check is optional
+const { LOCKED_MESSAGE, walletLocked } = require('./walletLock');
+
+// The note under "Activate your wallet". While the server does not lock the
+// wallet (the setting off, or an API from before A-325), the check is optional
 // and nothing waits for it (the team's wording O-2, chosen by the owner in
-// A-199 and shipped by A-217; walletText.test.mjs).
+// A-199 and shipped by A-217). While it does (`locked`, WALLET-EKYC-LOCK,
+// A-325), the owner's sentence: the wallet works once the check has passed
+// (Utils/walletLock.js; walletText.test.mjs).
 const ACTIVATE_NOTE =
   'Optional. Check your ID once. Your wallet works either way.';
+const LOCKED_NOTE = LOCKED_MESSAGE;
+
+// "Your wallet works as usual." is not so while the wallet is locked: those
+// words are left out then.
+const AS_USUAL = / Your wallet works as usual\./;
+const truthful = (words, locked) =>
+  locked ? words.replace(AS_USUAL, '') : words;
 
 // A failed or unfinished check's reason code, in plain words (§4.3).
 const REASON_WORDS = {
@@ -46,6 +58,17 @@ const STARTABLE = ['none', 'failed', 'incomplete'];
 // not go through, with Try again. An API without `canStart` keeps the rule by
 // state.
 function ekycTile(wallet) {
+  const tile = tileFor(wallet);
+  if (!tile || !walletLocked(wallet)) {
+    return tile;
+  }
+  return {
+    ...tile,
+    note: tile.kind === 'none' ? LOCKED_NOTE : truthful(tile.note, true),
+  };
+}
+
+function tileFor(wallet) {
   if (!wallet || ekycPassed(wallet)) {
     return null;
   }
@@ -150,14 +173,18 @@ const REFUSALS = {
   ],
 };
 
-function ekycRefusal(reason, error) {
-  return (
-    REFUSALS[reason] || [
-      'Activate your wallet',
-      error ||
-        'Identity verification is not available yet. Please try again later.',
-    ]
-  );
+// `locked`: the wallet is locked until the check passes (Utils/walletLock.js),
+// so no box says it works as usual.
+function ekycRefusal(reason, error, locked = false) {
+  const known = REFUSALS[reason];
+  if (known) {
+    return [known[0], truthful(known[1], locked)];
+  }
+  return [
+    'Activate your wallet',
+    error ||
+      'Identity verification is not available yet. Please try again later.',
+  ];
 }
 
 const OPEN_FAILED = ["Couldn't open the check", 'Please try again.'];
@@ -181,6 +208,7 @@ function ekycCheckIsOver(status) {
 
 module.exports = {
   ACTIVATE_NOTE,
+  LOCKED_NOTE,
   REASON_WORDS,
   REASON_FALLBACK,
   OPEN_FAILED,

@@ -33,6 +33,7 @@ import {
 import appAlert from '@/Utils/appAlert';
 import { supportAlert } from '@/Utils/supportContact';
 import { walletOff } from '@/Utils/walletOff';
+import { lockedAlert, verifyParams, walletLocked } from '@/Utils/walletLock';
 
 // The Account page, opened by the profile button on the map, as the owner's
 // design draws it (2026-11-22): who you are, the wallet, the ride pages,
@@ -51,6 +52,9 @@ const SettingsScreen = () => {
   const [balance, setBalance] = useState(
     userInfo?.wallet_details?.avail_balance ?? null,
   );
+  // locked until the ID check passes (WALLET-EKYC-LOCK, A-325): Cash in asks
+  // to verify first (Utils/walletLock.js)
+  const [locked, setLocked] = useState(false);
   const [promoIds, setPromoIds] = useState([]);
   const [showSafetyGuide, setShowSafetyGuide] = useState(false);
   // the Google Play build has no wallet (Utils/walletOff.js): no card, no
@@ -92,6 +96,9 @@ const SettingsScreen = () => {
         const amount = response?.data?.availBalance;
         if (showing && amount !== undefined && amount !== null) {
           setBalance(amount);
+        }
+        if (showing && response?.data) {
+          setLocked(walletLocked(response.data));
         }
       })();
       (async () => {
@@ -221,9 +228,15 @@ const SettingsScreen = () => {
             </View>
             <Pressable
               onPress={() =>
-                navigation.navigate('CashInScreen', {
-                  available_balance: balance ?? 0,
-                })
+                locked
+                  ? appAlert(
+                      ...lockedAlert(() =>
+                        navigation.navigate(...verifyParams()),
+                      ),
+                    )
+                  : navigation.navigate('CashInScreen', {
+                      available_balance: balance ?? 0,
+                    })
               }
               hitSlop={6}
               accessibilityRole="button"

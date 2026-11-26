@@ -78,8 +78,13 @@ import { recentPlacesFrom, withBooking } from '@/Utils/recentPlaces';
 import { AppUtil, Constants } from '@/Utils';
 import usePostRequest from '@/Services/Api';
 import useApiRequest from '@/Services/ApiV2';
-import { toLegacyCustomer } from '@/Utils/customerMapper';
 import { startingPayment } from '@/Utils/startingPayment';
+import {
+  isLockedRefusal,
+  lockedAlert,
+  verifyParams,
+  walletLocked,
+} from '@/Utils/walletLock';
 import PaymentMethodModal from './Components/PaymentMethodModal';
 import BookingStatusModal from './Components/BookingStatusModal';
 import NoteToRiderModal from './Components/NoteToRiderModal';
@@ -1576,6 +1581,14 @@ const HomeScreen = () => {
   };
 
   const handleCreateBookingRequest = () => {
+    // a ride paid with a wallet locked until the ID check passes
+    // (WALLET-EKYC-LOCK, A-325): the same box as the Wallet page, nothing
+    // booked; Verify ID starts the check there, or the ride goes on cash
+    if (createBooking.error && isLockedRefusal(createBooking.reason)) {
+      bookingInFlightRef.current = false;
+      appAlert(...lockedAlert(() => navigation.navigate(...verifyParams())));
+      return;
+    }
     if (createBooking.error) {
       bookingInFlightRef.current = false;
       // the server's "Insufficient balance!" for a ride paid with the wallet
@@ -2332,17 +2345,24 @@ const HomeScreen = () => {
     }
     let cancelled = false;
     (async () => {
+      // the wallet answer without its transactions: the balance, and whether
+      // the wallet is locked until the ID check passes (cash then, A-325)
       const { response } = await getWalletBalance.request(
         'GET',
-        Constants.API.CUSTOMER(userInfo.id),
+        `${Constants.API.CUSTOMER_WALLET(userInfo.id)}?take=0`,
       );
       if (cancelled || paymentChosenForRef.current === trip) {
         return;
       }
-      const balance = toLegacyCustomer(response?.data)?.wallet_details
-        ?.avail_balance;
+      const wallet = response?.data;
       paymentStartedForRef.current = started;
-      setSelectedPayment(startingPayment({ balance, fare: startingFare }));
+      setSelectedPayment(
+        startingPayment({
+          balance: wallet?.availBalance,
+          fare: startingFare,
+          locked: walletLocked(wallet),
+        }),
+      );
     })();
     return () => {
       cancelled = true;

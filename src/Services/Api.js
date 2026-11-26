@@ -54,6 +54,11 @@ const usePostRequest = () => {
   // offline — lets callers (e.g. a polling loop) tell that apart from a
   // real API error and stay silent instead of alert-spamming the user.
   const [isOffline, setIsOffline] = useState(false);
+  // The last refusal's reason code (data.reason), for a screen that reacts to
+  // `error` and picks its words by the reason (the wallet lock, ekyc_required:
+  // Utils/walletLock.js). Set before `error`: without batching each one
+  // renders on its own, and a caller reacting to `error` must already see it.
+  const [reason, setReason] = useState(null);
 
   // Bumped on every call. A response/error is only applied to state if it
   // still belongs to the latest call — this stops an old, slow-to-resolve
@@ -219,6 +224,7 @@ const usePostRequest = () => {
     const isLatest = () => thisRequestId === requestIdRef.current;
 
     setLoading(true);
+    setReason(null);
     setError(null);
     setIsOffline(false);
 
@@ -336,9 +342,11 @@ const usePostRequest = () => {
       } else if (isNotOK(res)) {
         //  Extract error message properly
         const errorMessage = extractErrorMessage(res.data.message || res.data);
-        setError(errorMessage);
         // the API's reason code, for a screen that picks its words by it
-        // (eKYC refusals: Utils/ekycWallet.js)
+        // (eKYC refusals: Utils/ekycWallet.js; the wallet lock:
+        // Utils/walletLock.js)
+        setReason(res.data?.data?.reason ?? null);
+        setError(errorMessage);
         return {
           response: null,
           error: errorMessage,
@@ -408,7 +416,8 @@ const usePostRequest = () => {
         message = err.message || 'An unknown error occurred';
       }
 
-      // isOffline first, as above
+      // isOffline and the reason first, as above
+      setReason(err.response?.data?.data?.reason ?? null);
       setIsOffline(offline);
       setError(message);
       // a refusal (4xx) carries its reason code in data.reason, as above
@@ -425,7 +434,7 @@ const usePostRequest = () => {
     }
   };
 
-  return { makePostRequest, response, loading, error, isOffline };
+  return { makePostRequest, response, loading, error, isOffline, reason };
 };
 
 export default usePostRequest;

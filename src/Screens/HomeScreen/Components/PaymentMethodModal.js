@@ -14,18 +14,29 @@ import { AlertBox, AppButton } from '@/Components';
 import TopUpAmountModal from './TopUpAmountModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { bottomSpace } from '@/Utils/bottomSpace';
+import { useNavigation } from '@react-navigation/native';
 import useApiRequest from '@/Services/ApiV2';
-import { toLegacyCustomer } from '@/Utils/customerMapper';
 import { AppUtil, Constants } from '@/Utils';
 import { selectUserInfo } from '@/Redux/Slices/userSlice';
 import { walletOff } from '@/Utils/walletOff';
+import appAlert from '@/Utils/appAlert';
+import {
+  LOCKED_MESSAGE,
+  isLockedRefusal,
+  lockedAlert,
+  verifyParams,
+  walletLocked,
+} from '@/Utils/walletLock';
 
 // Cash, or the Pinoy Ride Wallet with its balance (back at the owner's request,
 // 2026-11-22; hidden since the TOP PH days). The server checks the balance when
 // the ride is booked and takes the fare when the trip ends. Advance bookings
 // stay cash (the app switches them to cash). Top up opens the top-up page,
 // which works once PayCools is switched on. The Google Play build has no
-// wallet (Utils/walletOff.js): Cash only, no balance read, no top-up.
+// wallet (Utils/walletOff.js): Cash only, no balance read, no top-up. While
+// the wallet is locked until the ID check passes (`locked` in the wallet
+// answer, WALLET-EKYC-LOCK, A-325), the wallet and Top up say "Verify your ID
+// to use your wallet." with Verify ID (Utils/walletLock.js).
 const PaymentMethodModal = ({
   visible,
   onClose,
@@ -38,28 +49,35 @@ const PaymentMethodModal = ({
   const { colors } = useTheme();
   const styles = getStyles({ colors });
   const userInfo = useSelector(selectUserInfo);
-  const getCustomer = useApiRequest();
+  const navigation = useNavigation();
+  const getWallet = useApiRequest();
 
   const [showTopUpModal, setShowTopUpModal] = useState(false);
   const [alertMessage, setAlertMessage] = useState('');
   const [showAlert, setShowAlert] = useState(false);
   const [balance, setBalance] = useState(null);
+  const [locked, setLocked] = useState(false);
   const noWallet = walletOff();
 
-  // the wallet's balance, read again each time the sheet opens
+  // the wallet's balance and whether it is locked, read again each time the
+  // sheet opens (the wallet answer, without its transactions)
   useEffect(() => {
     if (noWallet || !visible || !userInfo?.id) {
       return;
     }
     let cancelled = false;
     (async () => {
-      const { response } = await getCustomer.request(
+      const { response } = await getWallet.request(
         'GET',
-        Constants.API.CUSTOMER(userInfo.id),
+        `${Constants.API.CUSTOMER_WALLET(userInfo.id)}?take=0`,
       );
-      const wallet = toLegacyCustomer(response?.data)?.wallet_details;
-      if (!cancelled && wallet?.avail_balance !== undefined) {
-        setBalance(wallet.avail_balance);
+      const wallet = response?.data;
+      if (cancelled || !wallet) {
+        return;
+      }
+      setLocked(walletLocked(wallet));
+      if (wallet.availBalance !== undefined && wallet.availBalance !== null) {
+        setBalance(wallet.availBalance);
       }
     })();
     return () => {
@@ -71,11 +89,24 @@ const PaymentMethodModal = ({
   let walletNote = 'Balance …';
   if (cashOnly) {
     walletNote = 'Advance bookings are paid in cash';
+  } else if (locked) {
+    walletNote = LOCKED_MESSAGE;
   } else if (balance !== null) {
     walletNote = `Balance ₱${AppUtil.fn(balance)}`;
   }
 
-  const handleTopUpError = errorMessage => {
+  // "Verify your ID to use your wallet.": the sheet closes, Verify ID starts
+  // the check on the Wallet page
+  const askToVerify = () => {
+    onClose();
+    appAlert(...lockedAlert(() => navigation.navigate(...verifyParams())));
+  };
+
+  const handleTopUpError = (errorMessage, reason) => {
+    if (isLockedRefusal(reason)) {
+      askToVerify();
+      return;
+    }
     setAlertMessage(errorMessage);
     setShowAlert(true);
   };
@@ -149,6 +180,10 @@ const PaymentMethodModal = ({
                 cashOnly && styles.optionDisabled,
               ]}
               onPress={() => {
+                if (locked) {
+                  askToVerify();
+                  return;
+                }
                 onSelect?.('wallet');
                 onClose();
               }}>
@@ -173,7 +208,7 @@ const PaymentMethodModal = ({
               title="Top up the wallet"
               mode="outlined"
               noSpacing
-              onPress={() => setShowTopUpModal(true)}
+              onPress={() => (locked ? askToVerify() : setShowTopUpModal(true))}
             />
           )}
         </View>

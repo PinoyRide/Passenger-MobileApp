@@ -1,15 +1,30 @@
-import { useNavigation } from '@react-navigation/native';
-import React from 'react';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import React, { useCallback, useState } from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
+import { useSelector } from 'react-redux';
+import { AppButton } from '@/Components';
+import useApiRequest from '@/Services/ApiV2';
+import { Constants } from '@/Utils';
+import { selectUserInfo } from '@/Redux/Slices/userSlice';
+import {
+  LOCKED_MESSAGE,
+  VERIFY_LABEL,
+  verifyParams,
+  walletLocked,
+} from '@/Utils/walletLock';
 
 // How a ride is paid (the owner, 2026-11-23: "starting on pinoy ride wallet if
 // there is enough balance"): the booking sheet starts on the wallet when its
 // balance covers the fare (src/Utils/startingPayment.js), on cash otherwise.
-// This page says so; the choice itself is made on the booking sheet.
+// This page says so; the choice itself is made on the booking sheet. While
+// the wallet is locked until the ID check passes (`locked`, WALLET-EKYC-LOCK,
+// A-325) every ride starts on cash, and the page says "Verify your ID to use
+// your wallet." with Verify ID, which starts the check on the Wallet page.
 const METHODS = [
   {
     label: 'PinoyRide Wallet',
+    wallet: true,
     note: 'Used first when your balance covers the fare',
     icon: require('@/Assets/Common/HomeScreen/PaymentMethodModal/Wallet.png'),
   },
@@ -24,6 +39,33 @@ const PaymentOptionScreen = () => {
   const { colors } = useTheme();
   const styles = getStyles({ colors });
   const navigation = useNavigation();
+  const userInfo = useSelector(selectUserInfo);
+  const walletRequest = useApiRequest();
+  const [locked, setLocked] = useState(false);
+
+  // whether the wallet is locked, read each time the page shows (the wallet
+  // answer without its transactions)
+  useFocusEffect(
+    useCallback(() => {
+      if (!userInfo?.id) {
+        return undefined;
+      }
+      let showing = true;
+      (async () => {
+        const { response } = await walletRequest.request(
+          'GET',
+          `${Constants.API.CUSTOMER_WALLET(userInfo.id)}?take=0`,
+        );
+        if (showing && response?.data) {
+          setLocked(walletLocked(response.data));
+        }
+      })();
+      return () => {
+        showing = false;
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [userInfo?.id]),
+  );
 
   const handleBack = () => {
     navigation.replace('SettingsScreen');
@@ -54,17 +96,31 @@ const PaymentOptionScreen = () => {
             />
             <View style={styles.textContainer}>
               <Text style={styles.label}>{method.label}</Text>
-              <Text style={styles.warning}>{method.note}</Text>
+              <Text style={styles.warning}>
+                {locked && method.wallet ? LOCKED_MESSAGE : method.note}
+              </Text>
             </View>
           </View>
         ))}
 
         <View style={styles.divider} />
 
-        <Text style={styles.warning}>
-          Each ride starts on your PinoyRide Wallet when it has enough for the
-          fare. You can switch to cash for any ride on the booking sheet.
-        </Text>
+        {locked ? (
+          <>
+            <Text style={styles.warning}>
+              Your rides start on cash until your ID is checked.
+            </Text>
+            <AppButton
+              title={VERIFY_LABEL}
+              onPress={() => navigation.navigate(...verifyParams())}
+            />
+          </>
+        ) : (
+          <Text style={styles.warning}>
+            Each ride starts on your PinoyRide Wallet when it has enough for the
+            fare. You can switch to cash for any ride on the booking sheet.
+          </Text>
+        )}
       </View>
     </View>
   );
