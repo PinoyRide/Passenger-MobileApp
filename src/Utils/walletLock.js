@@ -11,6 +11,11 @@
 
 const LOCKED_REASON = 'ekyc_required';
 const LOCKED_MESSAGE = 'Verify your ID to use your wallet.';
+// the box's body under the owner's sentence (Q-UX-WALLET-EKYC-LOCK-WORDS item
+// 1): true while locked, the lock only stops the money being used
+const LOCKED_BODY =
+  'The check takes a few minutes. Until then your rides start on cash. ' +
+  'Money already in your wallet stays there.';
 const VERIFY_LABEL = 'Verify ID';
 
 // Whether the wallet answer says the wallet is locked.
@@ -21,16 +26,16 @@ const walletLocked = wallet => wallet?.locked === true;
 const isLockedRefusal = refusal =>
   (typeof refusal === 'string' ? refusal : refusal?.reason) === LOCKED_REASON;
 
-// The box, as appAlert's arguments. With `onVerify`: Cancel (quiet) and
+// The box, as appAlert's arguments: the sentence and its body. With `onVerify`: Cancel (quiet) and
 // Verify ID (filled). Without it (a check already being checked, or none can
 // be started today): one OK, with `note` saying where the check stands.
 function lockedAlert(onVerify, { note } = {}) {
   if (typeof onVerify !== 'function') {
-    return [LOCKED_MESSAGE, '', undefined, note ? { note } : {}];
+    return [LOCKED_MESSAGE, LOCKED_BODY, undefined, note ? { note } : {}];
   }
   return [
     LOCKED_MESSAGE,
-    '',
+    LOCKED_BODY,
     [
       { text: 'Cancel', style: 'cancel' },
       { text: VERIFY_LABEL, onPress: onVerify },
@@ -39,12 +44,20 @@ function lockedAlert(onVerify, { note } = {}) {
 }
 
 // Verify ID on any other screen: the Wallet page, which starts the check when
-// it sees a new `verifyAt` (navigation.navigate(...verifyParams())).
-const verifyParams = (now = Date.now()) => ['WalletScreen', { verifyAt: now }];
+// it sees a new `verifyAt` (navigation.navigate(...verifyParams())). `pop`:
+// back to the Wallet page already open under the screen (Cash in opened from
+// it), not a second one on top (React Navigation 7 pushes a new one without
+// it; app code review Low); a new one only when none is open.
+const verifyParams = (now = Date.now()) => [
+  'WalletScreen',
+  { verifyAt: now },
+  { pop: true },
+];
 
 module.exports = {
   LOCKED_REASON,
   LOCKED_MESSAGE,
+  LOCKED_BODY,
   VERIFY_LABEL,
   walletLocked,
   isLockedRefusal,

@@ -31,6 +31,7 @@ import {
   OPEN_FAILED,
   STATUS_POLL_FOR_MS,
   STATUS_POLL_MS,
+  canStartCheck,
   ekycCheckIsOver,
   ekycJustPassed,
   ekycPassed,
@@ -185,6 +186,11 @@ const WalletScreen = () => {
   }, [checkingReference]);
 
   const activate = async () => {
+    // never a new check once the wallet is active (a failed retry would
+    // lock it again), nor one the tile does not offer
+    if (!canStartCheck(walletRef.current)) {
+      return;
+    }
     setStarting(true);
     const { response, error, reason } = await ekycRequest.makePostRequest(
       AppConstants.ENDPOINT.GET_EKYC_URL,
@@ -204,7 +210,7 @@ const WalletScreen = () => {
   // "Verify your ID to use your wallet.": Verify ID starts the check when one
   // can be started now; otherwise one OK and where the check stands
   const askToVerify = () => {
-    const canStart = tile?.canStart !== false;
+    const canStart = canStartCheck(wallet);
     appAlert(
       ...lockedAlert(canStart ? activate : null, {
         note: canStart ? undefined : tile?.note,
@@ -222,7 +228,7 @@ const WalletScreen = () => {
       return;
     }
     seenVerify.current = verifyStamp;
-    if (tile?.canStart) {
+    if (canStartCheck(wallet)) {
       activate();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

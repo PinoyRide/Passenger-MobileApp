@@ -55,7 +55,7 @@ test('the Activate tile tells the truth about the check, on screen and to a scre
   assert.match(words, /title: 'Activate your wallet',\s*note: ACTIVATE_NOTE,/);
   assert.match(
     words,
-    /note: tile\.kind === 'none' \? LOCKED_NOTE : truthful\(tile\.note, true\)/,
+    /if \(tile\.kind === 'none'\) \{\s*return \{ \.\.\.tile, note: LOCKED_NOTE \};/,
   );
   const wallet = read('src/Screens/WalletScreen/WalletScreen.js');
   assert.match(wallet, /accessibilityHint=\{tile\.note\}/);

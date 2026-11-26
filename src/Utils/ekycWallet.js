@@ -23,6 +23,10 @@ const LOCKED_NOTE = LOCKED_MESSAGE;
 const AS_USUAL = / Your wallet works as usual\./;
 const truthful = (words, locked) =>
   locked ? words.replace(AS_USUAL, '') : words;
+// ... and a tile that offers no way on says so instead (failed, no more tries
+// today, blocked; Q-UX-WALLET-EKYC-LOCK-WORDS item 5)
+const STAYS_OFF = ' Your wallet stays off until your ID passes.';
+const STAYS_OFF_KINDS = ['failed', 'no_tries', 'blocked'];
 
 // A failed or unfinished check's reason code, in plain words (§4.3).
 const REASON_WORDS = {
@@ -62,10 +66,21 @@ function ekycTile(wallet) {
   if (!tile || !walletLocked(wallet)) {
     return tile;
   }
+  if (tile.kind === 'none') {
+    return { ...tile, note: LOCKED_NOTE };
+  }
+  const note = truthful(tile.note, true);
   return {
     ...tile,
-    note: tile.kind === 'none' ? LOCKED_NOTE : truthful(tile.note, true),
+    note: STAYS_OFF_KINDS.includes(tile.kind) ? note + STAYS_OFF : note,
   };
+}
+
+// Whether a new check may be started from this wallet answer: never once the
+// wallet is active (code review Low 1: a passed passenger who started again
+// and failed would lock their own wallet), else as the tile offers it.
+function canStartCheck(wallet) {
+  return !ekycPassed(wallet) && ekycTile(wallet)?.canStart === true;
 }
 
 function tileFor(wallet) {
@@ -209,6 +224,7 @@ function ekycCheckIsOver(status) {
 module.exports = {
   ACTIVATE_NOTE,
   LOCKED_NOTE,
+  STAYS_OFF,
   REASON_WORDS,
   REASON_FALLBACK,
   OPEN_FAILED,
@@ -216,6 +232,7 @@ module.exports = {
   STATUS_POLL_FOR_MS,
   ekycPassed,
   ekycTile,
+  canStartCheck,
   ekycRefusal,
   ekycJustPassed,
   ekycCheckIsOver,

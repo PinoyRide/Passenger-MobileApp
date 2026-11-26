@@ -10,13 +10,21 @@ import starting from '../startingPayment.js';
 const {
   LOCKED_REASON,
   LOCKED_MESSAGE,
+  LOCKED_BODY,
   VERIFY_LABEL,
   walletLocked,
   isLockedRefusal,
   lockedAlert,
   verifyParams,
 } = lock;
-const { ACTIVATE_NOTE, LOCKED_NOTE, ekycTile, ekycRefusal } = ekyc;
+const {
+  ACTIVATE_NOTE,
+  LOCKED_NOTE,
+  STAYS_OFF,
+  ekycTile,
+  ekycRefusal,
+  canStartCheck,
+} = ekyc;
 const { startingPayment } = starting;
 
 // WALLET-EKYC-LOCK (the owner, A-325): until the passenger's ID check has
@@ -32,6 +40,11 @@ test('the words and the reason are the contract', () => {
   assert.equal(LOCKED_REASON, 'ekyc_required');
   assert.equal(LOCKED_MESSAGE, 'Verify your ID to use your wallet.');
   assert.equal(VERIFY_LABEL, 'Verify ID');
+  // the box's body (Q-UX-WALLET-EKYC-LOCK-WORDS item 1)
+  assert.equal(
+    LOCKED_BODY,
+    'The check takes a few minutes. Until then your rides start on cash. Money already in your wallet stays there.',
+  );
 });
 
 test('locked only when the wallet answer says locked: true', () => {
@@ -71,7 +84,7 @@ test('the box: the sentence, Cancel quiet, Verify ID starts the check', () => {
     verified += 1;
   });
   assert.equal(title, LOCKED_MESSAGE);
-  assert.equal(message, '');
+  assert.equal(message, LOCKED_BODY);
   assert.equal(buttons.length, 2);
   assert.deepEqual(
     { text: buttons[0].text, style: buttons[0].style },
@@ -87,7 +100,7 @@ test('a check that cannot be started now: one OK, and what is going on', () => {
     note: 'This takes a few minutes. You can leave this page.',
   });
   assert.equal(title, LOCKED_MESSAGE);
-  assert.equal(message, '');
+  assert.equal(message, LOCKED_BODY);
   assert.equal(buttons, undefined);
   assert.equal(
     options.note,
@@ -96,9 +109,24 @@ test('a check that cannot be started now: one OK, and what is going on', () => {
 });
 
 test('Verify ID from another screen opens the Wallet page and starts the check there', () => {
-  const [name, params] = verifyParams(1234);
+  const [name, params, options] = verifyParams(1234);
   assert.equal(name, 'WalletScreen');
   assert.deepEqual(params, { verifyAt: 1234 });
+  // back to the Wallet page already open (Cash in came from it), not a second
+  // one on top (React Navigation 7; app code review Low)
+  assert.deepEqual(options, { pop: true });
+  // every screen goes there only this way
+  for (const file of [
+    'src/Screens/WalletScreen/CashInScreen.js',
+    'src/Screens/HomeScreen/Components/PaymentMethodModal.js',
+    'src/Screens/HomeScreen/HomeScreen.js',
+    'src/Screens/SettingsScreen/SettingsScreen.js',
+    'src/Screens/PaymentOptionScreen/PaymentOptionScreen.js',
+  ]) {
+    const text = read(file);
+    assert.match(text, /navigation\.navigate\(\.\.\.verifyParams\(\)\)/, file);
+    assert.doesNotMatch(text, /verifyAt/, file);
+  }
 });
 
 test('a locked wallet starts every ride on cash, whatever the balance', () => {
@@ -127,6 +155,34 @@ test('the Activate tile tells the truth: locked or not', () => {
     const tile = ekycTile(locked(state));
     assert.doesNotMatch(tile.note, /works (as usual|either way)/, state);
   }
+  // and the tiles that offer no way on say the wallet stays off
+  // (Q-UX-WALLET-EKYC-LOCK-WORDS item 5)
+  assert.equal(STAYS_OFF, ' Your wallet stays off until your ID passes.');
+  const noTries = {
+    active: false,
+    locked: true,
+    ekyc: { state: 'failed', reason: 'face', triesLeftToday: 0 },
+  };
+  for (const [name, wallet] of [
+    ['failed', locked('failed')],
+    ['no_tries', noTries],
+    ['blocked', locked('blocked')],
+  ]) {
+    const tile = ekycTile(wallet);
+    assert.equal(tile.kind, name);
+    assert.ok(tile.note.endsWith(STAYS_OFF), `${name}: ${tile.note}`);
+    // unlocked, no such words
+    assert.doesNotMatch(
+      ekycTile({ ...wallet, locked: false }).note,
+      /stays off/,
+      name,
+    );
+  }
+  for (const state of ['none', 'checking', 'review']) {
+    const wallet = locked(state);
+    wallet.ekyc.triesLeftToday = 3;
+    assert.doesNotMatch(ekycTile(wallet).note, /stays off/, state);
+  }
   for (const reason of [
     'ekyc_attempts_used',
     'ekyc_unavailable',
@@ -138,6 +194,41 @@ test('the Activate tile tells the truth: locked or not', () => {
     // unlocked, the words are as before
     assert.match(ekycRefusal(reason, null)[1], /works as usual/);
   }
+});
+
+// Code review Low 1: a passenger whose wallet is active is never offered a
+// new check (a failed retry would lock the wallet again).
+test('an active wallet offers no ID check, whatever else the answer says', () => {
+  for (const wallet of [
+    { active: true, locked: true, ekyc: { state: 'none', canStart: true } },
+    { active: true, ekyc: { state: 'failed', triesLeftToday: 2 } },
+    { active: false, ekyc: { state: 'passed', canStart: true } },
+    { active: true, locked: true },
+    null,
+  ]) {
+    assert.equal(canStartCheck(wallet), false, JSON.stringify(wallet));
+    assert.equal(ekycTile(wallet), null, JSON.stringify(wallet));
+  }
+  assert.equal(
+    canStartCheck({ active: false, locked: true, ekyc: { state: 'none' } }),
+    true,
+  );
+  assert.equal(
+    canStartCheck({
+      active: false,
+      locked: true,
+      ekyc: { state: 'checking', canStart: false },
+    }),
+    false,
+  );
+  // the Wallet page starts a check only through it
+  const wallet = read('src/Screens/WalletScreen/WalletScreen.js');
+  assert.match(
+    wallet,
+    /const activate = async \(\) => \{[^}]{0,200}?if \(!canStartCheck\(walletRef\.current\)\) \{\s*return;\s*\}\s*setStarting\(true\);/,
+  );
+  assert.match(wallet, /const canStart = canStartCheck\(wallet\);/);
+  assert.match(wallet, /if \(canStartCheck\(wallet\)\) \{\s*activate\(\);/);
 });
 
 test('every money screen handles ekyc_required with the same box', () => {
