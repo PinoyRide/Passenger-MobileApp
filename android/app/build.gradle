@@ -36,16 +36,46 @@ def enableMinifyInReleaseBuilds = (findProperty('android.enableMinifyInReleaseBu
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
 /**
- * Release signing for local builds. EAS Build signs with the credentials it stores and ignores this.
- * Put these in ~/.gradle/gradle.properties (never in the repo):
- *   PINOYRIDE_UPLOAD_STORE_FILE=/absolute/path/to/upload-keystore.jks
- *   PINOYRIDE_UPLOAD_STORE_PASSWORD=...
- *   PINOYRIDE_UPLOAD_KEY_ALIAS=...
- *   PINOYRIDE_UPLOAD_KEY_PASSWORD=...
- * Without them a local release build is signed with the debug key, which Google Play rejects.
+ * Release signing: this app's own Develop key (A-100, 2026-11-25), never the debug key. The key and its
+ * passwords are never in the repo: PINOYRIDE_PASSENGER_SIGNING_FILE, a Gradle property (~/.gradle/gradle.properties)
+ * or an environment variable, names a .properties file outside every repository with
+ *   storeFile=/absolute/path/to/passenger-develop.jks
+ *   storePassword=...
+ *   keyAlias=pinoyride-passenger-develop
+ *   keyPassword=...
+ * Without it a release build stops and says so (APK/release.sh also checks the signer of what it builds).
  */
-def hasUploadKey = ['PINOYRIDE_UPLOAD_STORE_FILE', 'PINOYRIDE_UPLOAD_STORE_PASSWORD',
-                    'PINOYRIDE_UPLOAD_KEY_ALIAS', 'PINOYRIDE_UPLOAD_KEY_PASSWORD'].every { project.hasProperty(it) }
+def signingFilePath = findProperty('PINOYRIDE_PASSENGER_SIGNING_FILE') ?: System.getenv('PINOYRIDE_PASSENGER_SIGNING_FILE')
+def releaseSigning = null
+if (signingFilePath) {
+    def signingFile = new File(signingFilePath.toString())
+    if (!signingFile.isFile()) {
+        throw new GradleException("PINOYRIDE_PASSENGER_SIGNING_FILE names a file that is not there: ${signingFile}")
+    }
+    releaseSigning = new Properties()
+    signingFile.withInputStream { releaseSigning.load(it) }
+    def missing = ['storeFile', 'storePassword', 'keyAlias', 'keyPassword'].findAll { !releaseSigning.getProperty(it) }
+    if (missing) {
+        throw new GradleException("${signingFile} lacks ${missing.join(', ')}")
+    }
+}
+
+// The chip types to build and pack: gradle.properties lists all four, and a build can narrow them with
+// -PreactNativeArchitectures=armeabi-v7a,arm64-v8a (what phones use; x86 and x86_64 are for emulators).
+def packedArchitectures = (findProperty('reactNativeArchitectures') ?: 'armeabi-v7a,arm64-v8a,x86,x86_64')
+    .split(',').collect { it.trim() }.findAll { it }
+
+// A release build without this app's key stops: a Develop APK is never signed with the debug key (A-100).
+gradle.taskGraph.whenReady { graph ->
+    if (releaseSigning == null && graph.allTasks.any { it.project == project && it.name ==~ /(assemble|bundle|package)Release/ }) {
+        throw new GradleException("No release key: set PINOYRIDE_PASSENGER_SIGNING_FILE (see the top of android/app/build.gradle)")
+    }
+}
+
+// Develop and Google Play builds come from this one tree (DEV-APP-ID, owner A-285/A-294). A Develop build is
+// com.pinoyride.customer.dev, named "Pinoy Ride DEV", so it installs beside the Play app and nobody mistakes the
+// two. Only a Google Play build (-PpinoyridePlay=true) keeps the real id com.pinoyride.customer.
+def playBuild = (findProperty('pinoyridePlay') ?: 'false').toString().toBoolean()
 
 android {
     ndkVersion rootProject.ext.ndkVersion
@@ -55,10 +85,19 @@ android {
     namespace 'com.pinoyride.customer'
     defaultConfig {
         applicationId 'com.pinoyride.customer'
+        if (!playBuild) {
+            applicationIdSuffix '.dev'
+        }
+        resValue 'string', 'app_label', playBuild ? 'Pinoy Ride' : 'Pinoy Ride DEV'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 7
-        versionName "1.1.6"
+        versionCode 143
+        versionName "2.1.36"
+        // Without this, the ready-made libraries inside dependencies (React Native, Hermes, ML Kit) are packed
+        // for every chip type whatever was asked for, which adds about 50 MB that no phone uses.
+        ndk {
+            abiFilters(*packedArchitectures)
+        }
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
@@ -69,12 +108,12 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
-        if (hasUploadKey) {
+        if (releaseSigning != null) {
             release {
-                storeFile file(PINOYRIDE_UPLOAD_STORE_FILE)
-                storePassword PINOYRIDE_UPLOAD_STORE_PASSWORD
-                keyAlias PINOYRIDE_UPLOAD_KEY_ALIAS
-                keyPassword PINOYRIDE_UPLOAD_KEY_PASSWORD
+                storeFile file(releaseSigning.getProperty('storeFile'))
+                storePassword releaseSigning.getProperty('storePassword')
+                keyAlias releaseSigning.getProperty('keyAlias')
+                keyPassword releaseSigning.getProperty('keyPassword')
             }
         }
     }
@@ -83,11 +122,8 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            if (hasUploadKey) {
+            if (releaseSigning != null) {
                 signingConfig signingConfigs.release
-            } else {
-                logger.warn("pinoy-ride: no PINOYRIDE_UPLOAD_* properties, release is signed with the DEBUG key (not uploadable to Google Play)")
-                signingConfig signingConfigs.debug
             }
             def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'
             shrinkResources enableShrinkResources.toBoolean()

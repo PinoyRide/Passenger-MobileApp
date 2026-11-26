@@ -6,7 +6,9 @@ const SuccessAlertBox = ({ imageSource, title, message, visible, onClose }) => {
   const { colors } = useTheme();
   const styles = getStyles({ colors });
 
-  if (!visible) {return null;}
+  if (!visible) {
+    return null;
+  }
 
   return (
     <Pressable style={styles.backdrop} onPress={onClose}>
@@ -39,7 +41,7 @@ const getStyles = ({ colors }) =>
       height: 215,
       padding: 24,
       alignItems: 'center',
-      backgroundColor: '#fff',
+      backgroundColor: colors.card,
       borderRadius: 16,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 4 },
@@ -55,7 +57,7 @@ const getStyles = ({ colors }) =>
     },
     title: {
       fontSize: 25,
-      fontFamily: 'Poppins Semibold',
+      fontFamily: 'Poppins SemiBold',
       fontWeight: '600',
       color: colors.darkGrey,
       marginBottom: 8,

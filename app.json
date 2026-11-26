@@ -4,14 +4,15 @@
     "slug": "pinoy-ride",
     "owner": "gabriel1337",
     "scheme": "pinoyride",
-    "version": "1.1.6",
+    "version": "2.0.135",
     "plugins": [
       "expo-font",
       [
         "expo-build-properties",
         {
           "ios": {
-            "useFrameworks": "static"
+            "useFrameworks": "static",
+            "deploymentTarget": "15.5"
           }
         }
       ],
@@ -20,14 +21,33 @@
         {
           "iosPermissions": [
             "Camera",
-            "Microphone",
+            "LocationWhenInUse",
             "Notifications"
           ]
         }
       ],
       "@react-native-firebase/app",
       "@react-native-firebase/messaging",
-      "expo-web-browser"
+      "./plugins/withFirebaseConfigure",
+      "./plugins/withPodsForXcode27",
+      "expo-web-browser",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Pinoy Ride uses the camera to take your profile photo and a photo of your ID.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Pinoy Ride uses your location to set your pick-up point and to show riders near you.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
+          "isIosBackgroundLocationEnabled": false
+        }
+      ]
     ],
     "android": {
       "package": "com.pinoyride.customer",
@@ -47,12 +67,37 @@
     },
     "ios": {
       "bundleIdentifier": "com.pinoyride.customer",
+      "newArchEnabled": false,
+      "buildNumber": "143",
+      "supportsTablet": false,
+      "icon": "./assets/ios-icon-1024.png",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "config": {
+        "googleMapsApiKey": "AIzaSyBd5JfsRML-qbsRufc3ElgWI4QY3FKqJuM"
+      },
+      "splash": {
+        "image": "./src/Assets/Common/Pinoy_Ride.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#FFFFFF"
+      },
       "infoPlist": {
-        "NSCameraUsageDescription": "[REASON]",
-        "NSMicrophoneUsageDescription": "[REASON]",
+        "NSCameraUsageDescription": "Pinoy Ride uses the camera to take your profile photo and a photo of your ID.",
+        "NSPhotoLibraryUsageDescription": "Pinoy Ride uses your photos when you choose a picture of your ID or send one in a chat.",
+        "NSLocationWhenInUseUsageDescription": "Pinoy Ride uses your location to set your pick-up point and to show riders near you.",
         "UIBackgroundModes": [
           "remote-notification"
-        ]
+        ],
+        "LSApplicationQueriesSchemes": [
+          "gcash",
+          "paymaya",
+          "maya",
+          "topphapp",
+          "topphapp-pre",
+          "toppay",
+          "tel",
+          "sms"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       },
       "entitlements": {
         "aps-environment": "development"

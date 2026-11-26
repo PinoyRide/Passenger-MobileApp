@@ -1,7 +1,16 @@
-import React, { useState } from 'react';
+import React, {
+  forwardRef,
+  useContext,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
+import { modern } from '@/Theme/modern';
 import AppTextError from '../AppTextError/AppTextError';
+import { KeyboardRoom } from '../KeyboardScroll/KeyboardScroll';
+import { ERROR_LINE } from '@/Utils/keyboardRoom';
 
 // Format phone number with dashes: 927-339-4743
 const formatPhoneDisplay = number => {
@@ -50,26 +59,69 @@ const validatePhilippineNumber = number => {
   return null;
 };
 
-const AppTextInput = ({
-  label,
-  value,
-  onChangeText,
-  onBlur,
-  placeholder,
-  inputMode = 'text', // 'text' | 'phone' | 'amount' | 'comment'
-  error,
-  labelColor,
-  onValidationChange,
-}) => {
-  const { colors } = useTheme();
-  const styles = getStyles({ colors });
+// The 10 digits after +63 of a stored number (639XXXXXXXXX or 09XXXXXXXXX)
+const localPhoneDigits = number => {
+  const digits = String(number || '').replace(/\D/g, '');
+  if (digits.length === 12 && digits.startsWith('63')) {
+    return digits.slice(2);
+  }
+  if (digits.length === 11 && digits.startsWith('0')) {
+    return digits.slice(1);
+  }
+  return digits.slice(0, 10);
+};
+
+const AppTextInput = forwardRef(function AppTextInput(
+  {
+    label,
+    value,
+    onChangeText,
+    onBlur,
+    placeholder,
+    inputMode = 'text', // 'text' | 'email' | 'phone' | 'amount' | 'comment' | 'numeric'
+    error,
+    labelColor,
+    onValidationChange,
+    editable = true, // Add editable prop with default value true
+    containerStyle,
+    inputStyle,
+    autoCapitalize, // undefined keeps RN's default for existing callers
+    // a comment box that starts at its minHeight and grows as it is typed,
+    // instead of four lines from the start
+    grow = false,
+    // the keyboard's Next / Done (A-326 rule 4), passed to the TextInput
+    onFocus,
+    returnKeyType,
+    onSubmitEditing,
+    submitBehavior,
+    autoComplete,
+  },
+  ref,
+) {
+  const theme = useTheme();
+  const { colors } = theme;
+  const look = modern(theme);
+  const styles = getStyles({ colors, look });
   const isPhone = inputMode === 'phone';
   const isAmount = inputMode === 'amount';
   const isComment = inputMode === 'comment';
+  const isNumeric = inputMode === 'numeric';
+  const isEmail = inputMode === 'email';
+
+  // In a KeyboardScroll, the field tells it it took the focus, so its whole
+  // block (label, box, error line) is brought above the keyboard (A-326).
+  // The ref is the TextInput's: focus(), blur(), for Next on the keyboard.
+  const room = useContext(KeyboardRoom);
+  const blockRef = useRef(null);
+  const inputRef = useRef(null);
+  useImperativeHandle(ref, () => inputRef.current, []);
 
   const [isFocused, setIsFocused] = useState(false);
   const [phoneError, setPhoneError] = useState(null);
-  const [displayPhone, setDisplayPhone] = useState('');
+  // A number already filled in (639XXXXXXXXX, as this field reports it) is shown as 9XX XXX XXXX
+  const [displayPhone, setDisplayPhone] = useState(() =>
+    isPhone ? localPhoneDigits(value) : '',
+  );
 
   // Format amount with 2 decimals and commas
   const formatAmount = val => {
@@ -87,12 +139,36 @@ const AppTextInput = ({
     return parts.join('.');
   };
 
-  // Clean input - only allow numbers and one decimal point
+  // Clean input - only allow numbers and one decimal point, round to 2 decimal places
   const cleanAmount = val => {
-    return val
-      .replace(/[^0-9.]/g, '') // Only numbers and decimal
-      .replace(/(\..*?)\.+/g, '$1') // Only one decimal point
-      .replace(/^0+(?=\d)/, ''); // Remove leading zeros (except "0.")
+    // Remove everything except numbers and decimal point
+    let cleaned = val.replace(/[^0-9.]/g, '');
+
+    // Only allow one decimal point
+    cleaned = cleaned.replace(/(\..*?)\.+/g, '$1');
+
+    // Remove leading zeros (except "0." or just "0")
+    cleaned = cleaned.replace(/^0+(?=\d)/, '');
+
+    // Handle decimal places with rounding
+    const parts = cleaned.split('.');
+    if (parts.length > 1) {
+      // If user tries to type more than 2 decimal places, round it
+      if (parts[1].length > 2) {
+        const fullNumber = parseFloat(cleaned);
+        if (!isNaN(fullNumber)) {
+          // Round to 2 decimal places
+          const rounded = Math.round(fullNumber * 100) / 100;
+          cleaned = rounded.toString();
+        } else {
+          // Fallback: just truncate
+          parts[1] = parts[1].slice(0, 2);
+          cleaned = parts.join('.');
+        }
+      }
+    }
+
+    return cleaned;
   };
 
   const handleAmountChange = val => {
@@ -118,8 +194,25 @@ const AppTextInput = ({
     }
   };
 
-  const handleAmountFocus = () => {
+  // the error line under the box, or the room kept for one
+  const reportFocus = shownError => {
+    room?.focus({
+      block: blockRef.current,
+      input: inputRef.current,
+      reserve: shownError ? 0 : ERROR_LINE,
+    });
+  };
+
+  const handleFocus = e => {
+    reportFocus(error);
+    if (onFocus) {
+      onFocus(e);
+    }
+  };
+
+  const handleAmountFocus = e => {
     setIsFocused(true);
+    handleFocus(e);
 
     // Remove formatting when user focuses (remove commas)
     if (value) {
@@ -185,8 +278,9 @@ const AppTextInput = ({
     }
   };
 
-  const handlePhoneFocus = () => {
+  const handlePhoneFocus = e => {
     setPhoneError(null);
+    handleFocus(e);
   };
 
   // Display value: show raw while typing, formatted when not focused
@@ -198,8 +292,25 @@ const AppTextInput = ({
       : ''
     : value;
 
+  // Get keyboard type based on inputMode
+  const getKeyboardType = () => {
+    if (isAmount) {
+      return 'decimal-pad';
+    }
+    if (isNumeric) {
+      return 'numeric';
+    }
+    if (isPhone) {
+      return 'phone-pad';
+    }
+    if (isEmail) {
+      return 'email-address';
+    }
+    return 'default';
+  };
+
   return (
-    <View style={styles.container}>
+    <View ref={blockRef} style={[styles.container, containerStyle]}>
       {label && (
         <Text style={[styles.label, labelColor && { color: labelColor }]}>
           {label}
@@ -211,6 +322,7 @@ const AppTextInput = ({
           style={[
             styles.phoneContainer,
             (error || phoneError) && styles.inputError,
+            !editable && styles.disabledInput,
           ]}>
           {/* PH Flag Emoji */}
           <Text style={styles.flagEmoji}>🇵🇭</Text>
@@ -220,32 +332,46 @@ const AppTextInput = ({
 
           {/* Phone Input - Auto-formatted display */}
           <TextInput
+            ref={inputRef}
             value={formatPhoneDisplay(displayPhone)}
             onChangeText={handlePhoneChange}
             onBlur={handlePhoneBlur}
             onFocus={handlePhoneFocus}
             placeholder={placeholder || '9XX-XXX-XXXX'}
-            placeholderTextColor={colors.darkGrey}
+            placeholderTextColor={colors.onSurfaceVariant}
             style={styles.phoneInput}
             keyboardType="phone-pad"
+            editable={editable}
+            returnKeyType={returnKeyType}
+            onSubmitEditing={onSubmitEditing}
+            submitBehavior={submitBehavior}
           />
         </View>
       ) : (
         <TextInput
+          ref={inputRef}
           value={displayValue}
           onChangeText={isAmount ? handleAmountChange : onChangeText}
           onBlur={isAmount ? handleAmountBlur : onBlur}
-          onFocus={isAmount ? handleAmountFocus : undefined}
+          onFocus={isAmount ? handleAmountFocus : handleFocus}
           placeholder={placeholder}
-          placeholderTextColor={colors.darkGrey}
+          placeholderTextColor={colors.onSurfaceVariant}
           style={[
             isComment ? styles.commentBox : styles.input,
+            inputStyle,
             error && styles.inputError,
+            !editable && styles.disabledInput,
           ]}
-          keyboardType={isAmount ? 'decimal-pad' : 'default'}
+          keyboardType={getKeyboardType()}
           multiline={isComment}
-          numberOfLines={isComment ? 4 : 1}
+          numberOfLines={isComment ? (grow ? undefined : 4) : 1}
           textAlignVertical={isComment ? 'top' : 'center'}
+          editable={editable}
+          autoCapitalize={autoCapitalize ?? (isEmail ? 'none' : undefined)}
+          autoComplete={autoComplete ?? (isEmail ? 'email' : undefined)}
+          returnKeyType={returnKeyType}
+          onSubmitEditing={onSubmitEditing}
+          submitBehavior={submitBehavior}
         />
       )}
 
@@ -254,68 +380,78 @@ const AppTextInput = ({
       )}
     </View>
   );
-};
+});
 
 export default AppTextInput;
 
-const getStyles = ({ colors }) =>
+const getStyles = ({ colors, look }) =>
   StyleSheet.create({
     container: {
-      marginBottom: 20,
+      marginBottom: 18,
     },
     label: {
-      fontFamily: 'Poppins Regular',
-      fontSize: 14,
-      color: 'black',
-      marginBottom: 5,
+      fontFamily: 'Poppins Medium',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.muted,
+      marginBottom: 6,
     },
+    // A field is a quiet filled box with a hairline around it.
     input: {
-      borderBottomWidth: 1,
-      borderColor: colors.surfaceVariant,
+      minHeight: 52,
+      borderWidth: 1,
+      borderColor: look.hairline,
+      borderRadius: 14,
+      backgroundColor: look.soft,
+      color: look.text,
+      fontFamily: 'Poppins Regular',
       fontSize: 16,
-      backgroundColor: 'white',
-      paddingVertical: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
     },
     inputError: {
-      borderColor: 'red',
+      borderColor: colors.error,
+    },
+    disabledInput: {
+      opacity: 0.6,
     },
     phoneContainer: {
+      minHeight: 52,
       flexDirection: 'row',
       alignItems: 'center',
-      borderBottomWidth: 1,
-      borderColor: colors.surfaceVariant,
-      backgroundColor: 'white',
-      paddingVertical: 8,
+      borderWidth: 1,
+      borderColor: look.hairline,
+      borderRadius: 14,
+      backgroundColor: look.soft,
+      paddingHorizontal: 14,
     },
     flagEmoji: {
-      fontSize: 24,
+      fontSize: 20,
       marginRight: 8,
     },
     countryCode: {
+      fontFamily: 'Poppins Medium',
       fontSize: 16,
-      color: 'black',
-      fontFamily: 'Poppins Regular',
-      marginRight: 8,
+      color: look.text,
+      marginRight: 10,
     },
     phoneInput: {
       flex: 1,
-      fontSize: 16,
-      color: 'black',
-      padding: 0,
       fontFamily: 'Poppins Regular',
+      fontSize: 16,
+      color: look.text,
+      paddingVertical: 10,
+      paddingHorizontal: 0,
     },
     commentBox: {
-      backgroundColor: '#F9F9F9',
-      borderRadius: 15,
-      padding: 15,
-      fontSize: 16,
-      color: '#333',
-      borderColor: 'transparent',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 5,
-      elevation: 3,
       minHeight: 100,
+      borderWidth: 1,
+      borderColor: look.hairline,
+      borderRadius: 14,
+      backgroundColor: look.soft,
+      color: look.text,
+      fontFamily: 'Poppins Regular',
+      fontSize: 16,
+      padding: 14,
     },
   });

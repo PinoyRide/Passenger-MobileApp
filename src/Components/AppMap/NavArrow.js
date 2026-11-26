@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
+import { GOLD } from '@/Theme/modern';
 
 // Vehicle marker for the live map: a round puck with a pointed nose and a
 // navigation arrow, drawn pointing "up". The parent <Marker> turns it to the
@@ -25,17 +26,17 @@ const triangle = (halfBase, height, color) => ({
   borderBottomColor: color,
 });
 
-const NavArrow = ({ color = '#FFC107', size = 46 }) => {
+const NavArrow = ({ color = GOLD, size = 30 }) => {
   const pad = Math.round(size * 0.36); // room around the puck for the nose
   const box = size + pad * 2;
   const centre = box / 2;
-  const halo = size + 14;
+  const halo = size + 10;
 
   // Nose: starts a little inside the puck so the two join into one shape.
   const noseHalf = Math.round(size * 0.24);
   const noseHeight = Math.round(size * 0.34);
   const noseTop = pad + Math.round(size * 0.1) - noseHeight;
-  const outline = 4; // white edge around the nose, to match the puck's border
+  const outline = 3; // white edge around the nose, to match the puck's border
 
   // Arrow: tall and narrow, with a notch cut into its base.
   const arrowHalf = Math.round(size * 0.2);
@@ -112,5 +113,5 @@ export default NavArrow;
 const styles = StyleSheet.create({
   abs: { position: 'absolute' },
   halo: { backgroundColor: 'rgba(255, 193, 7, 0.25)' },
-  puck: { borderWidth: 3, borderColor: '#FFFFFF' },
+  puck: { borderWidth: 2, borderColor: '#FFFFFF' },
 });

@@ -1,4 +1,4 @@
-import { Alert, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import {
   PERMISSIONS,
   RESULTS,
@@ -6,6 +6,7 @@ import {
   openSettings,
   request,
 } from 'react-native-permissions';
+import appAlert from '@/Utils/appAlert';
 
 export const LOCATION_PERMISSION = Platform.select({
   ios: PERMISSIONS.IOS.LOCATION_WHEN_IN_USE,
@@ -133,15 +134,18 @@ export async function withCameraPermission(onGranted, reason) {
     reason ||
     'Camera access is needed to take this photo for identity verification.';
   if (status === 'blocked') {
-    Alert.alert(
+    appAlert(
       'Camera Access Blocked',
       `${message} Please enable it in Settings.`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Open Settings', onPress: () => openSettings() },
       ],
+      { icon: 'camera-off-outline' },
     );
     return;
   }
-  Alert.alert('Camera Access Needed', message);
+  appAlert('Camera Access Needed', message, undefined, {
+    icon: 'camera-off-outline',
+  });
 }

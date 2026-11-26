@@ -1,10 +1,15 @@
 import { DeviceEventEmitter } from 'react-native';
+import { walletRoute } from '@/Utils/cashOut';
+import { walletOff } from '@/Utils/walletOff';
 
 // Shared payload (both apps): data{type, booking_id, is_advance, status,
 // eta_minutes}. FCM sends every data value as a string.
 export const PUSH_TYPES = {
   RIDER_ACCEPTED: 'rider_accepted',
   RIDER_HEADING: 'rider_heading',
+  // the owner, 2026-11-24: "should be notified when rider is 10 minutes
+  // away": once per trip, when the rider comes within 10 minutes
+  RIDER_NEARBY: 'rider_nearby',
   RIDER_ARRIVED: 'rider_arrived',
   TRIP_STARTED: 'trip_started',
   TRIP_COMPLETED: 'trip_completed',
@@ -12,7 +17,23 @@ export const PUSH_TYPES = {
   ADVANCE_ACCEPTED: 'advance_accepted',
   // status 4 with cancelled_by='system'
   ADVANCE_EXPIRED: 'advance_expired',
+  // the owner, 2026-11-24: "is our app notifies even when minimized or
+  // closed": a chat message from the rider, and money in or out
+  CHAT_MESSAGE: 'chat_message',
+  WALLET_CREDITED: 'wallet_credited',
+  CASH_OUT_PAID: 'cash_out_paid',
+  CASH_OUT_FAILED: 'cash_out_failed',
+  // a scheduled ride in 1 hour / 5 minutes, and an instant search that
+  // ended with no rider (both open Home on that booking)
+  ADVANCE_REMINDER: 'advance_reminder',
+  NO_RIDER_FOUND: 'no_rider_found',
 };
+
+const WALLET_TYPES = [
+  PUSH_TYPES.WALLET_CREDITED,
+  PUSH_TYPES.CASH_OUT_PAID,
+  PUSH_TYPES.CASH_OUT_FAILED,
+];
 
 const KNOWN_TYPES = Object.values(PUSH_TYPES);
 
@@ -76,12 +97,21 @@ export function getPushRoute(parsed) {
   if (!parsed?.type) {
     return null;
   }
+  // money in or out: the wallet (no booking), with a fresh stamp so a
+  // Wallet already open reads again (WAL-11); Home in the Google Play build,
+  // which has no wallet screen (Utils/walletOff.js)
+  if (WALLET_TYPES.includes(parsed.type)) {
+    return walletOff() ? { name: 'HomeScreen', params: {} } : walletRoute();
+  }
   const id = parsed.bookingId;
   if (!id) {
     // no booking to open: safe fallback
     return { name: 'HomeScreen', params: {} };
   }
   switch (parsed.type) {
+    case PUSH_TYPES.CHAT_MESSAGE:
+      // the trip's chat (it loads the names itself)
+      return { name: 'ChatScreen', params: { bookingId: id } };
     case PUSH_TYPES.ADVANCE_EXPIRED:
       // Booking Details (cancelled) via History, fetched by id if it isn't on
       // page 1 (US-1.6).
@@ -104,6 +134,7 @@ export function getPushRoute(parsed) {
       };
     case PUSH_TYPES.RIDER_ACCEPTED:
     case PUSH_TYPES.RIDER_HEADING:
+    case PUSH_TYPES.RIDER_NEARBY:
     case PUSH_TYPES.RIDER_ARRIVED:
     case PUSH_TYPES.TRIP_STARTED:
     case PUSH_TYPES.TRIP_COMPLETED:

@@ -1,10 +1,21 @@
+import {
+  apiBaseFor,
+  appEnvironment,
+  environmentLabel,
+} from './appEnvironment';
+
 const IS_DEV = true;
 
 const PROD_URL = '';
-// PR CHECK: revert DEV_URL to remote before opening a PR — do not commit localhost/LAN URLs.
-// const DEV_URL = 'https://riderapp.escarez.com/api/';
+// The Develop backend (Render), built from the backend's `Develop` branch.
+// PR CHECK: this is the only DEV_URL to commit — never a localhost/LAN URL.
 // Local only — iOS Simulator: 127.0.0.1 | Android Emulator: 10.0.2.2 | Physical device: Mac LAN IP
-const DEV_URL = 'https://pinoyride-api.lwsdemo.com/api/';
+const DEV_URL = 'https://pinoyride-api-dev.onrender.com/api/';
+
+// Develop or Sandbox, from the installed app's own id (Utils/appEnvironment.js):
+// an id ending ".sandbox" talks to the Sandbox API, everything else to DEV_URL.
+const ENVIRONMENT = appEnvironment();
+const ENVIRONMENT_LABEL = environmentLabel(ENVIRONMENT);
 
 const BASE_DEV = {
   API_OK: 1,
@@ -14,13 +25,20 @@ const BASE_DEV = {
   WU_TIME_OUT_ERROR: -9,
 
   API_KEY: 'e6b9d7987f6d0633c31556a428a6197ef11f3b5be8ed8b3bc8a16c92e560e775',
-  GOOGLE_MAP_API_KEY: 'AIzaSyAlpSoXuJzvo8uR1qbdtbbbk1sx4MHKIQk',
-  BASE_URI: IS_DEV ? DEV_URL : PROD_URL,
+  // Google's Directions and Geocoding, asked by the phone itself (fetch):
+  // the apps' "Routes" key, allowed those two APIs only. The map itself
+  // uses the apps' Map key, which lives where the Maps SDK reads it
+  // (AndroidManifest.xml, app.json, ios Info.plist / AppDelegate).
+  // Place search goes through our API (places/*), never from the phone.
+  GOOGLE_ROUTES_API_KEY: 'AIzaSyCxUZeQ0319rUysToW_tsyWk-5SYvPEAVE',
+  BASE_URI: IS_DEV ? apiBaseFor(ENVIRONMENT, DEV_URL) : PROD_URL,
 
   // Endpoints served by the .NET backend (Services/ApiV2.js). BASE_URI points at the .NET API,
   // which forwards every route it has not ported yet (ENDPOINT below) to Django unchanged.
   API: {
     OTP_LOGIN: 'otp/login',
+    // how a login code can be sent (text, and email when the account has one); sends nothing
+    OTP_LOGIN_OPTIONS: 'otp/login/options',
     OTP_REGISTER: 'otp/register',
     CUSTOMER_LOGIN: 'customers/login',
     CUSTOMER_REGISTER: 'customers/register',
@@ -28,9 +46,27 @@ const BASE_DEV = {
     CUSTOMER_SELFIE: id => `customers/${id}/selfie`,
     CUSTOMER_CONSENT: id => `customers/${id}/consent`,
     CUSTOMER: id => `customers/${id}`,
+    // the Wallet page: balance, whether it is active, the latest transactions; then all of them
+    CUSTOMER_WALLET: id => `customers/${id}/wallet`,
+    CUSTOMER_WALLET_HISTORY: (id, page, perPage = 20) =>
+      `customers/${id}/wallet/history?page=${page}&perPage=${perPage}`,
+    // deleting one's own account: what stands in the way, the confirming code, the deletion
+    CUSTOMER_DELETION_CHECK: id => `customers/${id}/deletion/check`,
+    CUSTOMER_DELETION_CODE: id => `customers/${id}/deletion/code`,
+    CUSTOMER_DELETION: id => `customers/${id}/deletion`,
     CUSTOMER_LOGOUT: id => `customers/${id}/logout`,
     CUSTOMER_FIREBASE_TOKEN: id => `customers/${id}/firebase-token`,
-    PLACE_SEARCH: query => `places/search?query=${encodeURIComponent(query)}`,
+    // One Google session per search (placeSession.js): the suggestions, then
+    // the one place picked
+    PLACE_AUTOCOMPLETE: (query, session, near) =>
+      `places/autocomplete?query=${encodeURIComponent(query)}` +
+      `&session=${encodeURIComponent(session || '')}` +
+      (near ? `&near=${encodeURIComponent(near)}` : ''),
+    PLACE_DETAILS: (placeId, session) =>
+      `places/details?place_id=${encodeURIComponent(placeId)}` +
+      `&session=${encodeURIComponent(session || '')}`,
+    // the "Riders nearby" button: riders within 4 km of a point (Hooks/useNearbyRiders.js)
+    NEARBY_RIDERS: ({ lat, long }) => `nearby-riders?lat=${lat}&lng=${long}`,
   },
 
   // Django endpoints (reached through the .NET proxy)
@@ -41,6 +77,7 @@ const BASE_DEV = {
     UPDATE_BOOKING_STATUS: 'booking/update_status_for_customer/',
     GET_BOOKING_HISTORY: 'booking/get_history/',
     GET_BOOKING_DETAILS: 'booking/get_details/',
+    RIDER_PROFILE: 'booking/rider_profile/',
     GET_BOOKING_CONTACT: 'booking/get_contact/',
     GET_BOOKING_CONFIG: 'booking/get_config/',
     GET_UPCOMING_BOOKINGS: 'booking/get_upcoming/',
@@ -60,7 +97,13 @@ const BASE_DEV = {
     EKYC_CHECK_STATUS: 'ekyc/check_status/',
     //PAYMENT
     QRPH_REQUEST_TO_PAY: 'qrph/request-to-pay/',
+    // the passenger's permanent top-up number (PayCools), shown on Cash In
+    TOP_UP_NUMBER: 'wallet/top-up-number/',
     QRPH_CHECK_STATUS: 'qrph/check_status/',
+    // Cash out (PayCools): the e-wallets and banks, then the cash-out itself
+    GET_BANKS: 'cash_out/get-banks/',
+    CASH_OUT: 'cash_out/cash-out/',
+    CASH_OUT_STATUS: 'cash_out/check_status/',
 
     //MESSAGES (in-app booking chat)
     GET_CONVERSATION: 'messages/conversation/',
@@ -76,6 +119,16 @@ const BASE_DEV = {
   MODULES_IDENTIFIERS: {},
 };
 
-const Constants = { ...BASE_DEV, IS_DEV };
+// The blink of the face check is asked of riders only (the owner, 2026-11-23:
+// "For the rider"; Utils/livenessCheck.js): a passenger's photo is optional.
+const FACE_CHECK_BLINK = false;
+
+const Constants = {
+  ...BASE_DEV,
+  IS_DEV,
+  ENVIRONMENT,
+  ENVIRONMENT_LABEL,
+  FACE_CHECK_BLINK,
+};
 
 export default Constants;

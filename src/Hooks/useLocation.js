@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ensureLocationPermission } from '@/Utils/Permissions';
+import { AppState, Platform } from 'react-native';
+import * as Location from 'expo-location';
+import {
+  checkLocationPermission,
+  ensureLocationPermission,
+} from '@/Utils/Permissions';
+import { shouldResumeWatch } from '@/Utils/locationResume';
 import Geolocation from 'react-native-geolocation-service';
 
 /**
@@ -125,13 +131,29 @@ export const useLocationWatch = (enabled = false) => {
   const [error, setError] = useState(null);
   const [permissionStatus, setPermissionStatus] = useState(null);
   const watchIdRef = useRef(null);
+  // The screen wants positions (startWatching called, stopWatching not yet).
+  const wantedRef = useRef(false);
+  // The watch reported an error, or could not start: it may be dead (see
+  // src/Utils/locationResume.js), so a return to the app may start it again.
+  const failedRef = useRef(false);
+  const resumingRef = useRef(false);
 
   const startWatching = useCallback(async () => {
+    wantedRef.current = true;
+    failedRef.current = false;
     try {
       const permission = await ensureLocationPermission();
       setPermissionStatus(permission);
 
       if (permission === 'granted') {
+        // One watch at a time: Home starts watching on every focus, and each
+        // earlier high-accuracy watch kept running (overnight review
+        // 2026-11-23). Cleared right before the new one, with no await
+        // between, so two calls at once cannot leave one behind either.
+        if (watchIdRef.current !== null) {
+          Geolocation.clearWatch(watchIdRef.current);
+          watchIdRef.current = null;
+        }
         const watchId = Geolocation.watchPosition(
           position => {
             setLocation({
@@ -143,10 +165,12 @@ export const useLocationWatch = (enabled = false) => {
               speed: position.coords.speed,
               timestamp: position.timestamp,
             });
+            failedRef.current = false;
             setError(null);
           },
           err => {
             console.error('Location watch error:', err);
+            failedRef.current = true;
             setError(err.message);
             // Permission denied won't recover by itself; stop the watch so
             // it doesn't keep firing errors (seen on web with location blocked).
@@ -167,15 +191,18 @@ export const useLocationWatch = (enabled = false) => {
         watchIdRef.current = watchId;
         setWatching(true);
       } else {
+        failedRef.current = true;
         setError('Location permission not granted');
       }
     } catch (err) {
       console.error('Start watching error:', err);
+      failedRef.current = true;
       setError(err.message);
     }
   }, []);
 
   const stopWatching = useCallback(() => {
+    wantedRef.current = false;
     if (watchIdRef.current !== null) {
       Geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
@@ -192,6 +219,54 @@ export const useLocationWatch = (enabled = false) => {
       stopWatching();
     };
   }, [enabled]);
+
+  // A watch that failed (Location off at the start, QA ONL-14) starts again
+  // when the app comes back to the front or, on Android, when the
+  // notification shade closes, where Location is switched on. Only after a
+  // failure, and only once Location is on; it checks, never asks.
+  useEffect(() => {
+    const resume = async () => {
+      if (!wantedRef.current || !failedRef.current || resumingRef.current) {
+        return;
+      }
+      resumingRef.current = true;
+      try {
+        const permission = await checkLocationPermission();
+        let servicesEnabled;
+        try {
+          servicesEnabled = await Location.hasServicesEnabledAsync();
+        } catch (e) {
+          servicesEnabled = undefined;
+        }
+        if (
+          shouldResumeWatch({
+            wanted: wantedRef.current,
+            failed: failedRef.current,
+            permission,
+            servicesEnabled,
+          })
+        ) {
+          console.log('📡 Location is back: starting the watch again');
+          await startWatching();
+        }
+      } catch (err) {
+        console.warn('Location resume failed:', err);
+      } finally {
+        resumingRef.current = false;
+      }
+    };
+    const subscriptions = [
+      AppState.addEventListener('change', nextState => {
+        if (nextState === 'active') {
+          resume();
+        }
+      }),
+    ];
+    if (Platform.OS === 'android') {
+      subscriptions.push(AppState.addEventListener('focus', resume));
+    }
+    return () => subscriptions.forEach(s => s.remove());
+  }, [startWatching]);
 
   return {
     location,

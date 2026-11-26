@@ -1,15 +1,23 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { NavigationContainer } from '@react-navigation/native';
+import {
+  NavigationContainer,
+  DarkTheme as NavigationDarkTheme,
+  DefaultTheme as NavigationDefaultTheme,
+} from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import {
+  AccountSettingsScreen,
   BookingDetailsScreen,
   BookingHistoryScreen,
   CashInScreen,
+  CashOutScreen,
   ChatScreen,
+  CodeChannelScreen,
   CompleteProfileScreen,
   ConfirmDetailsScreen,
   CongratsScreen,
+  DeleteAccountScreen,
   EKYCScreen,
   GeneralTermsScreen,
   HomeScreen,
@@ -27,6 +35,7 @@ import {
   PromoReferralsScreen,
   QRPHScreen,
   RatingScreen,
+  RegisterFormScreen,
   RegisterScreen,
   SaveLocationScreen,
   SelfieScreen,
@@ -36,26 +45,55 @@ import {
   UpdateRequiredScreen,
   UploadIDScreen,
   WalletScreen,
+  WalletTransactionsScreen,
 } from '@/Screens';
 import { Text } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
-import LightTheme from '../Theme/LightTheme';
 import { AppTransactionComplete } from '@/Components';
+import AlertHost from '@/Components/AlertBox/AlertHost';
+import { useAppTheme } from '@/Contexts/ThemeContext';
 import { navigationRef } from '@/Utils/NavigationService';
+import { walletOff } from '@/Utils/walletOff';
 
 const Stack = createNativeStackNavigator();
 
 const ApplicationNavigator = () => {
+  const { theme, isDark } = useAppTheme();
+  // The Google Play build has no wallet (Utils/walletOff.js): its screens are
+  // not registered there, so nothing can open them (a link, a notification).
+  // The package name is native: this does not change while the app runs.
+  const noWallet = walletOff();
+  // The screens' own frame: in the light look the navigator's own theme, as it
+  // was before dark mode came; in the dark look its dark theme in our colours.
+  const navigationTheme = useMemo(
+    () =>
+      isDark
+        ? {
+            ...NavigationDarkTheme,
+            colors: {
+              ...NavigationDarkTheme.colors,
+              primary: theme.colors.primary,
+              background: theme.colors.background,
+              card: theme.colors.card,
+              text: theme.colors.text,
+            },
+          }
+        : NavigationDefaultTheme,
+    [isDark, theme],
+  );
+
   return (
     <SafeAreaProvider>
-      <PaperProvider theme={LightTheme}>
-        <NavigationContainer ref={navigationRef}>
+      <PaperProvider theme={theme}>
+        <NavigationContainer theme={navigationTheme} ref={navigationRef}>
           <Stack.Navigator
             initialRouteName="Splash"
             screenOptions={{
               headerShown: true,
               headerTitle: props => (
-                <Text variant="titleLarge">{props.children}</Text>
+                <Text style={{ color: navigationTheme.colors.text }}>
+                  {props.children}
+                </Text>
               ),
 
               headerBackTitleVisible: false,
@@ -78,6 +116,11 @@ const ApplicationNavigator = () => {
             <Stack.Screen
               name="RegisterScreen"
               component={RegisterScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="RegisterFormScreen"
+              component={RegisterFormScreen}
               options={{ headerShown: false }}
             />
             <Stack.Screen
@@ -116,15 +159,22 @@ const ApplicationNavigator = () => {
               options={{ headerShown: false }}
             />
             <Stack.Screen
+              name="CodeChannelScreen"
+              component={CodeChannelScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
               name="OTPScreen"
               component={OTPScreen}
               options={{ headerShown: false }}
             />
-            <Stack.Screen
-              name="EKYCScreen"
-              component={EKYCScreen}
-              options={{ headerShown: false }}
-            />
+            {noWallet ? null : (
+              <Stack.Screen
+                name="EKYCScreen"
+                component={EKYCScreen}
+                options={{ headerShown: false }}
+              />
+            )}
             <Stack.Screen
               name="GeneralTermsScreen"
               component={GeneralTermsScreen}
@@ -171,6 +221,16 @@ const ApplicationNavigator = () => {
               options={{ headerShown: false }}
             />
             <Stack.Screen
+              name="AccountSettingsScreen"
+              component={AccountSettingsScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="DeleteAccountScreen"
+              component={DeleteAccountScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
               name="SettingsScreen"
               component={SettingsScreen}
               options={{ headerShown: false }}
@@ -190,27 +250,41 @@ const ApplicationNavigator = () => {
               component={PromoReferralsScreen}
               options={{ headerShown: false }}
             />
-            <Stack.Screen
-              name="PaymentOptionScreen"
-              component={PaymentOptionScreen}
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen
-              name="WalletScreen"
-              component={WalletScreen}
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen
-              name="CashInScreen"
-              component={CashInScreen}
-              options={{ headerShown: false }}
-            />
-
-            <Stack.Screen
-              name="QRPHScreen"
-              component={QRPHScreen}
-              options={{ headerShown: false }}
-            />
+            {/* the wallet's screens: none in the Google Play build */}
+            {noWallet ? null : (
+              <>
+                <Stack.Screen
+                  name="PaymentOptionScreen"
+                  component={PaymentOptionScreen}
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="WalletScreen"
+                  component={WalletScreen}
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="WalletTransactionsScreen"
+                  component={WalletTransactionsScreen}
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="CashInScreen"
+                  component={CashInScreen}
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="CashOutScreen"
+                  component={CashOutScreen}
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="QRPHScreen"
+                  component={QRPHScreen}
+                  options={{ headerShown: false }}
+                />
+              </>
+            )}
 
             <Stack.Screen
               name="AppTransactionComplete"
@@ -235,6 +309,8 @@ const ApplicationNavigator = () => {
             />
           </Stack.Navigator>
         </NavigationContainer>
+        {/* every Utils/appAlert question, in the look (the owner, 2026-11-23) */}
+        <AlertHost />
       </PaperProvider>
     </SafeAreaProvider>
   );

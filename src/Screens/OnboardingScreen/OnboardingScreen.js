@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Alert,
   AppState,
   Dimensions,
   FlatList,
@@ -23,6 +22,7 @@ import {
   requestLocationPermission,
 } from '@/Utils/Permissions';
 import { openSettings } from 'react-native-permissions';
+import appAlert from '@/Utils/appAlert';
 
 const { width, height } = Dimensions.get('window');
 
@@ -97,7 +97,7 @@ const OnboardingScreen = () => {
     if (result === 'granted') {
       setShowLocationAlert(false);
     } else if (result === 'blocked') {
-      Alert.alert(
+      appAlert(
         'Location Access Blocked',
         'Please enable location access in Settings to use the app.',
         [
@@ -108,6 +108,7 @@ const OnboardingScreen = () => {
           },
           { text: 'Open Settings', onPress: () => openSettings() },
         ],
+        { icon: 'map-marker-off-outline' },
       );
     } else {
       // User denied, keep alert showing
@@ -169,9 +170,9 @@ const OnboardingScreen = () => {
           visible={showLocationAlert}
           setVisible={setShowLocationAlert}
           confirmText="Enable Location"
-          cancelText="Later"
+          secondaryText="Later"
           onConfirm={handleRetryLocationPermission}
-          onCancel={() => setShowLocationAlert(false)}
+          onSecondary={() => setShowLocationAlert(false)}
           dismissable={true}
         />
       )}
@@ -280,7 +281,7 @@ const getStyles = ({ colors }) =>
   StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: colors.onPrimary,
+      backgroundColor: colors.background,
     },
     flatListWrapper: {
       flex: 1,
@@ -306,12 +307,14 @@ const getStyles = ({ colors }) =>
       maxWidth: width * 0.85,
     },
     title: {
+      color: colors.text,
       fontFamily: 'Poppins SemiBold',
       fontSize: isSmallScreen ? 20 : 25,
       textAlign: 'center',
       letterSpacing: -0.45,
     },
     subtitle: {
+      color: colors.text,
       fontFamily: 'Poppins Regular',
       fontSize: isSmallScreen ? 14 : 16,
       textAlign: 'center',

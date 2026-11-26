@@ -11,12 +11,22 @@ import com.facebook.react.defaults.DefaultReactActivityDelegate
 import expo.modules.ReactActivityDelegateWrapper
 
 class MainActivity : ReactActivity() {
+  private var launchScreen: LaunchScreen? = null
+
   override fun onCreate(savedInstanceState: Bundle?) {
     // Set the theme to AppTheme BEFORE onCreate to support
     // coloring the background, status bar, and navigation bar.
     // This is required for expo-splash-screen.
     setTheme(R.style.AppTheme);
     super.onCreate(null)
+    // What the person looks at while the app checks for an update and starts
+    launchScreen = LaunchScreen.show(this)
+  }
+
+  override fun onDestroy() {
+    launchScreen?.dispose()
+    launchScreen = null
+    super.onDestroy()
   }
 
   /**

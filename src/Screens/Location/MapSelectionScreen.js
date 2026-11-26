@@ -1,7 +1,6 @@
 import { AppButton, AppMap } from '@/Components';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
   Dimensions,
   Image,
   ScrollView,
@@ -16,8 +15,13 @@ import { openSettings } from 'react-native-permissions';
 import { Constants } from '@/Utils';
 import { fetchWithTimeout } from '@/Utils/Network';
 import { useLocation } from '@/Hooks/useLocation';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { bottomSpace } from '@/Utils/bottomSpace';
+import appAlert from '@/Utils/appAlert';
 
 const MapSelectionScreen = () => {
+  // The navigation bar may cover the bottom of the screen: keep the bottom content clear of it
+  const { bottom: bottomInset } = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = getStyles({ colors });
   const navigation = useNavigation();
@@ -47,7 +51,7 @@ const MapSelectionScreen = () => {
   // Check permission on mount
   useEffect(() => {
     if (permissionStatus === 'blocked') {
-      Alert.alert(
+      appAlert(
         'Location Access Blocked',
         'Please enable location in Settings to select locations on the map.',
         [
@@ -58,12 +62,14 @@ const MapSelectionScreen = () => {
           },
           { text: 'Open Settings', onPress: () => openSettings() },
         ],
+        { icon: 'map-marker-off-outline' },
       );
     } else if (permissionStatus === 'denied') {
-      Alert.alert(
+      appAlert(
         'Location Required',
         'Location access helps you select locations more easily.',
         [{ text: 'OK' }],
+        { icon: 'map-marker-off-outline' },
       );
     }
   }, [permissionStatus]);
@@ -81,7 +87,7 @@ const MapSelectionScreen = () => {
   const reverseGeocode = async (latitude, longitude, setAddress) => {
     try {
       const response = await fetchWithTimeout(
-        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${Constants.GOOGLE_MAP_API_KEY}`,
+        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${Constants.GOOGLE_ROUTES_API_KEY}`,
       );
       const data = await response.json();
 
@@ -101,7 +107,7 @@ const MapSelectionScreen = () => {
 
   const handleConfirm = () => {
     if (!pickupLocation && !dropoffLocation) {
-      alert('Please select at least one location');
+      appAlert('No Location Chosen', 'Please select at least one location');
       return;
     }
 
@@ -167,7 +173,10 @@ const MapSelectionScreen = () => {
 
       <View style={styles.bottomPanel}>
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: bottomSpace(bottomInset, 20) },
+          ]}
           showsVerticalScrollIndicator={false}>
           <View style={styles.toggleContainer}>
             <TouchableOpacity
@@ -240,7 +249,7 @@ const getStyles = ({ colors }) =>
   StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: '#fff',
+      backgroundColor: colors.background,
     },
     header: {
       flexDirection: 'row',
@@ -274,7 +283,7 @@ const getStyles = ({ colors }) =>
     },
     bottomPanel: {
       flex: 4,
-      backgroundColor: '#fff',
+      backgroundColor: colors.background,
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
       shadowColor: '#000',

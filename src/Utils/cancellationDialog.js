@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import {
   CANCEL_FREE_BODY,
+  CANCEL_FREE_INSTANT_BODY,
   cancelWithPenaltyBody,
 } from './cancellationPolicy.js';
 
@@ -83,6 +84,8 @@ export const cancelDialogState = ({
   failed = false,
   penaltyApplies = false,
   penaltyPercent,
+  // an instant booking (instantCancelPreview): it said "advance booking"
+  instant = false,
 } = {}) => {
   const base = { showAmount: false, yesLabel: 'Yes', noLabel: 'No' };
   if (checking) {
@@ -117,7 +120,7 @@ export const cancelDialogState = ({
     ...base,
     mode: 'free',
     title: 'Cancel Booking?',
-    body: CANCEL_FREE_BODY,
+    body: instant ? CANCEL_FREE_INSTANT_BODY : CANCEL_FREE_BODY,
   };
 };
 

@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Alert,
   Image,
   ScrollView,
   StyleSheet,
@@ -14,6 +13,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { AppButton } from '@/Components';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { withCameraPermission } from '@/Utils/Permissions';
+import appAlert from '@/Utils/appAlert';
 
 const TOTAL_STEPS = 5;
 const CURRENT_STEP = 3;
@@ -46,7 +46,7 @@ const SelfieScreen = () => {
       response => {
         if (response.errorCode === 'camera_unavailable') {
           // Emulator fallback — open gallery instead
-          Alert.alert(
+          appAlert(
             'Camera Unavailable',
             'Camera is not available on this device. Please choose a photo from your gallery instead.',
             [

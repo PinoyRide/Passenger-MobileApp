@@ -4,13 +4,14 @@ import {
   Image,
   ImageBackground,
   Keyboard,
-  ScrollView,
+  Linking,
   StyleSheet,
   Text,
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import KeyboardScroll from '@/Components/KeyboardScroll/KeyboardScroll';
 import { useTheme } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Formik } from 'formik';
@@ -20,6 +21,10 @@ import { AppUtil, Constants } from '@/Utils';
 import { AlertBox, AppButton, AppTextError, AppTextInput } from '@/Components';
 import { selectUserInfo } from '@/Redux/Slices/userSlice';
 import { useSelector } from 'react-redux';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { bottomSpace } from '@/Utils/bottomSpace';
+import appAlert from '@/Utils/appAlert';
+import { isLockedRefusal, lockedAlert, verifyParams } from '@/Utils/walletLock';
 
 const cashInValidationSchema = Yup.object().shape({
   amount: Yup.string()
@@ -41,6 +46,8 @@ const cashInValidationSchema = Yup.object().shape({
 });
 
 const CashInScreen = () => {
+  // The navigation bar may cover the bottom of the screen: keep the bottom content clear of it
+  const { bottom: bottomInset } = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = getStyles({ colors });
   const navigation = useNavigation();
@@ -52,6 +59,29 @@ const CashInScreen = () => {
 
   const [alertMessage, setAlertMessage] = React.useState('');
   const [showAlert, setShowAlert] = React.useState(false);
+
+  // The passenger's permanent top-up number (PayCools), as the Rider app's
+  // Remit cash shows the rider's: pay any amount to it from GCash, any time,
+  // and it lands in the wallet. Shown only once PayCools has issued one (the
+  // owner, 2026-11-22: "turn them on now in all repo that will use it").
+  const topUpNumberRequest = usePostRequest();
+  const [topUpNumber, setTopUpNumber] = React.useState(null);
+  useEffect(() => {
+    let active = true;
+    topUpNumberRequest
+      .makePostRequest(Constants.ENDPOINT.TOP_UP_NUMBER, {}, {}, 'json')
+      .then(answer => {
+        const data = answer?.response?.data;
+        if (active && data?.reference_number) {
+          setTopUpNumber(data);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleBack = () => {
     navigation.goBack();
@@ -77,6 +107,12 @@ const CashInScreen = () => {
   };
 
   useEffect(() => {
+    // locked until the ID check passes (WALLET-EKYC-LOCK, A-325): the same
+    // box as the Wallet page, Verify ID starts the check there
+    if (requestToPay.error && isLockedRefusal(requestToPay.reason)) {
+      appAlert(...lockedAlert(() => navigation.navigate(...verifyParams())));
+      return;
+    }
     if (requestToPay.error) {
       console.warn('Request to pay error:', requestToPay.error);
       setAlertMessage(requestToPay.error);
@@ -162,7 +198,7 @@ const CashInScreen = () => {
 
           return (
             <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-              <ScrollView
+              <KeyboardScroll
                 contentContainerStyle={styles.scrollContent}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}>
@@ -223,10 +259,42 @@ const CashInScreen = () => {
                       ))}
                     </View>
                   </View>
+
+                  {topUpNumber ? (
+                    <View style={styles.numberCard}>
+                      <Text style={styles.numberLabel}>Your top-up number</Text>
+                      <Text style={styles.number} selectable>
+                        {topUpNumber.reference_number}
+                      </Text>
+                      <Text style={styles.numberHint}>
+                        Pay any amount to this number through{' '}
+                        {String(topUpNumber.channel_code || '').startsWith(
+                          'GCASH',
+                        )
+                          ? 'GCash'
+                          : 'the payment channel'}
+                        . It goes to your PinoyRide Wallet. Press and hold the
+                        number to copy it.
+                      </Text>
+                      {topUpNumber.guide_url ? (
+                        <Text
+                          style={styles.numberLink}
+                          onPress={() =>
+                            Linking.openURL(topUpNumber.guide_url)
+                          }>
+                          How to pay
+                        </Text>
+                      ) : null}
+                    </View>
+                  ) : null}
                 </View>
 
                 {/* Proceed Button */}
-                <View style={styles.buttonContainer}>
+                <View
+                  style={[
+                    styles.buttonContainer,
+                    { paddingBottom: bottomSpace(bottomInset, 20) },
+                  ]}>
                   {requestToPay.loading ? (
                     <View style={styles.loadingContainer}>
                       <ActivityIndicator size="large" color={colors.primary} />
@@ -242,7 +310,7 @@ const CashInScreen = () => {
                     />
                   )}
                 </View>
-              </ScrollView>
+              </KeyboardScroll>
             </TouchableWithoutFeedback>
           );
         }}
@@ -255,6 +323,36 @@ export default CashInScreen;
 
 const getStyles = ({ colors }) =>
   StyleSheet.create({
+    numberCard: {
+      marginTop: 20,
+      padding: 14,
+      borderRadius: 12,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.grey3,
+    },
+    numberLabel: {
+      fontFamily: 'Poppins Regular',
+      fontSize: 12,
+      color: colors.grey3,
+    },
+    number: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 20,
+      letterSpacing: 1,
+      color: colors.primary,
+      marginVertical: 4,
+    },
+    numberHint: {
+      fontFamily: 'Poppins Regular',
+      fontSize: 12,
+      color: colors.grey3,
+    },
+    numberLink: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 12,
+      color: colors.primary,
+      marginTop: 8,
+    },
     container: {
       flex: 1,
       backgroundColor: colors.background,
@@ -295,14 +393,14 @@ const getStyles = ({ colors }) =>
     contents: {
       paddingVertical: 5,
       paddingHorizontal: 30,
-      backgroundColor: colors.onPrimary,
+      backgroundColor: colors.background,
     },
     title: {
       fontFamily: 'Poppins Medium',
       fontWeight: '500',
       fontSize: 16,
       marginVertical: 16,
-      color: colors.shadow,
+      color: colors.text,
     },
     subtitle: {
       fontFamily: 'Poppins Regular',
@@ -346,7 +444,7 @@ const getStyles = ({ colors }) =>
     quickAmountLabel: {
       fontFamily: 'Poppins Medium',
       fontSize: 14,
-      color: colors.shadow,
+      color: colors.text,
       marginBottom: 12,
     },
     quickAmountRow: {
@@ -356,7 +454,7 @@ const getStyles = ({ colors }) =>
     },
     quickAmountButton: {
       width: '23%',
-      backgroundColor: colors.onPrimary,
+      backgroundColor: colors.card,
       paddingVertical: 12,
       borderRadius: 10,
       alignItems: 'center',
@@ -376,7 +474,7 @@ const getStyles = ({ colors }) =>
     buttonContainer: {
       paddingHorizontal: 30,
       paddingBottom: 20,
-      backgroundColor: colors.onPrimary,
+      backgroundColor: colors.background,
     },
     loadingContainer: {
       alignItems: 'center',

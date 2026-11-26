@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>API_KEY</key>
+	<string>AIzaSyBU12eb7KeDgIwa6lQ5qOJdUICDbe1vx0M</string>
+	<key>GCM_SENDER_ID</key>
+	<string>290161750334</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>xyz.pinoyride.customer</string>
+	<key>PROJECT_ID</key>
+	<string>pinoy-ride-6a93a</string>
+	<key>STORAGE_BUCKET</key>
+	<string>pinoy-ride-6a93a.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:290161750334:ios:81e322dca6370e2f783c6f</string>
+</dict>
+</plist>

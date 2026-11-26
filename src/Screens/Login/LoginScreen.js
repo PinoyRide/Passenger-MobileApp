@@ -1,21 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
   Image,
   Keyboard,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import KeyboardScroll from '@/Components/KeyboardScroll/KeyboardScroll';
 import Container from '@/Components/Container/Container';
 import { useTheme } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { AlertBox, AppButton, AppTextInput } from '@/Components';
 import useApiRequest from '@/Services/ApiV2';
 import { Constants } from '@/Utils';
+import { handedCode } from '@/Utils/handedCode';
+import { SMS } from '@/Utils/codeChannel';
+import appAlert from '@/Utils/appAlert';
 
 const OFFLINE_ALERT_TITLE = 'No Internet Connection';
 const OFFLINE_ALERT_MESSAGE =
@@ -28,18 +30,25 @@ const LoginScreen = () => {
   const route = useRoute();
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [mobileNumber, setMobileNumber] = useState('');
+  // Just registered: the number is filled in (639XXXXXXXXX)
+  const registeredNumber = route.params?.mobileNumber || '';
+  const [mobileNumber, setMobileNumber] = useState(registeredNumber);
   const [errorMessage, setErrorMessage] = useState('');
-  const [isPhoneValid, setIsPhoneValid] = useState(false);
+  const [isPhoneValid, setIsPhoneValid] = useState(
+    /^639\d{9}$/.test(registeredNumber),
+  );
 
   const [alertMessage, setAlertMessage] = useState('');
   const [showAlert, setShowAlert] = useState(false);
 
-  // Sends the login OTP. The backend answers "does not exist" for an unregistered
-  // number, so this also checks registration. Nothing about the account is returned
+  // Asks how a code can reach this account, then sends it. The backend answers
+  // "does not exist" for an unregistered number and says why an account may not
+  // sign in, before anything is sent. Nothing about the account is returned
   // until OTPScreen logs in with the code.
   const loginCheck = useApiRequest();
+  const sendCode = useApiRequest();
   const isRegister = route.params?.mode === 'register';
+  const busy = loginCheck.loading || sendCode.loading;
 
   useEffect(() => {
     if (route.params?.registrationComplete) {
@@ -64,29 +73,69 @@ const LoginScreen = () => {
 
     setErrorMessage('');
 
+    if (isRegister) {
+      await requestCode(SMS);
+      return;
+    }
+
+    // How can a code reach this account? Every sign-in check runs first; nothing is sent
     const { response, error, offline } = await loginCheck.request(
       'POST',
-      isRegister ? Constants.API.OTP_REGISTER : Constants.API.OTP_LOGIN,
+      Constants.API.OTP_LOGIN_OPTIONS,
       { mobileNo: mobileNumber, userType: 'customer' },
+    );
+    if (offline) {
+      appAlert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
+      return;
+    }
+    if (error || !response) {
+      // Not registered, or the account may not sign in now: the backend says which
+      setAlertMessage(error || 'Unable to send the code. Please try again.');
+      setShowAlert(true);
+      return;
+    }
+    // The next step: where the code goes, a text or an email (the owner,
+    // 2026-11-22: the same as the Rider app). Email can be chosen when the
+    // account has an address.
+    navigation.navigate('CodeChannelScreen', {
+      mobileNumber,
+      channels: response.data?.channels,
+      emailHint: response.data?.emailHint,
+    });
+  };
+
+  // Registering from the terms screen (an older way in): the code is texted.
+  // Logging in, CodeChannelScreen sends it.
+  const requestCode = async channel => {
+    const { response, error, offline } = await sendCode.request(
+      'POST',
+      isRegister ? Constants.API.OTP_REGISTER : Constants.API.OTP_LOGIN,
+      {
+        mobileNo: mobileNumber,
+        userType: 'customer',
+        ...(isRegister ? {} : { channel }),
+      },
     );
 
     if (offline) {
-      Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
+      appAlert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
       return;
     }
 
     if (error || !response) {
-      // Not registered (login), already registered (register), or the OTP could not be sent
+      // Already registered (register), the email could not be sent, or a code went out a minute ago
       setAlertMessage(error || 'Unable to send the code. Please try again.');
       setShowAlert(true);
       return;
     }
 
-    // OTP sent; OTPScreen logs in with it.
     navigation.navigate('OTPScreen', {
       mobileNumber,
       otpSent: true,
+      // a test environment that hands a texted code to the app instead of texting it
+      handedCode: handedCode(response.data),
       mode: isRegister ? 'register' : 'login',
+      channel,
       // what was ticked on the terms screen; recorded with the new account
       consent: isRegister ? route.params?.consent : undefined,
     });
@@ -130,7 +179,7 @@ const LoginScreen = () => {
       </View>
 
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <ScrollView
+        <KeyboardScroll
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
@@ -152,13 +201,13 @@ const LoginScreen = () => {
               helps us keep your account secure.
             </Text>
             <AppButton
-              title={loginCheck.loading ? 'Please wait…' : 'Next'}
+              title={busy ? 'Please wait…' : 'Next'}
               onPress={handleNext}
               isBold
-              disabled={loginCheck.loading}
+              disabled={busy}
             />
           </View>
-        </ScrollView>
+        </KeyboardScroll>
       </TouchableWithoutFeedback>
     </Container>
   );
@@ -199,7 +248,7 @@ const getStyles = ({ colors }) =>
     headerTitle: {
       fontSize: 16,
       fontFamily: 'Poppins Medium',
-      color: colors.shadow,
+      color: colors.text,
     },
     scrollContent: {
       flexGrow: 1,

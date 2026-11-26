@@ -1,38 +1,29 @@
 import React, { useCallback, useState } from 'react';
-import { deletePushToken } from '@/Services/Push/pushPlatform';
-import {
-  ActivityIndicator,
-  BackHandler,
-  Linking,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { BackHandler, Linking, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
-import { useDispatch, useSelector } from 'react-redux';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import AppButton from '@/Components/AppButton/AppButton';
+import { modern } from '@/Theme/modern';
+import { displayVersion } from '@/Utils/displayVersion';
+import { openUpdateLink, updateNeededText } from '@/Utils/updateNeededText';
 
-import useApiRequest from '@/Services/ApiV2';
-import { Constants } from '@/Utils';
-import { logoutErrorText, shouldCallLogout } from '@/Utils/updateLogout';
-import {
-  clearBookingState,
-  clearSavedPlaces,
-  clearUserInfo,
-  selectUserInfo,
-} from '@/Redux/Slices/userSlice';
-
+// Update needed (A-184, C-4): plain words, the gold icon patch, the app's one
+// gold button. Colours only from modern.js, so it turns with the look.
 const UpdateRequiredScreen = ({ route }) => {
-  const { updateLink, currentVersion, minimumVersion } = route.params || {};
-  const { colors } = useTheme();
-  const styles = getStyles({ colors });
-  const dispatch = useDispatch();
-  const userInfo = useSelector(selectUserInfo);
+  // The backend also names a "current version". It is not shown: the person
+  // is told a newer version is needed, not which one they have. The minimum
+  // comes from the API as the real version (2.0.103) and is shown on a small
+  // line as people count it (v2.1.04): Utils/updateNeededText.js.
+  const { updateLink, minimumVersion } = route.params || {};
+  const theme = useTheme();
+  const look = modern(theme);
+  const styles = getStyles(look);
+  const words = updateNeededText(displayVersion(minimumVersion));
 
-  const { request } = useApiRequest();
   const [isProcessing, setIsProcessing] = useState(false);
-  const [logoutError, setLogoutError] = useState('');
+  // the red line under the button when the download page did not open
+  const [problem, setProblem] = useState(null);
 
   // Block the hardware back button — nowhere to go back to, the app is outdated.
   useFocusEffect(
@@ -46,121 +37,115 @@ const UpdateRequiredScreen = ({ route }) => {
     }, []),
   );
 
+  // Off to the download, still signed in (the owner, 2026-11-23: reduce
+  // cost): installing the new APK keeps the app's data, so no new sign-in,
+  // no paid code text. Should the sign-in be lost all the same, the backend
+  // lets a newer version take over the old session (LoginSession). With no
+  // link, or a link that does not open, one red line says so and the button
+  // can be tapped again.
   const handleUpdatePress = async () => {
     if (isProcessing) {
       return;
     }
     setIsProcessing(true);
-    setLogoutError('');
-
-    // Already logged out: nothing to clear on the server, go to the store.
-    let loggedOut = !shouldCallLogout(userInfo);
-    let errorText = '';
-    if (!loggedOut) {
-      try {
-        // Logout must succeed before we open the store. If it fails, the
-        // server keeps is_login=1 and the account gets stuck after the
-        // update, so stay here and let the passenger retry.
-        const { response, error } = await request(
-          'POST',
-          Constants.API.CUSTOMER_LOGOUT(userInfo.id),
-        );
-        loggedOut = !error && !!response;
-        errorText = logoutErrorText(error);
-      } catch (err) {
-        errorText = logoutErrorText(null);
-      }
-    }
-
-    if (!loggedOut) {
-      setLogoutError(errorText);
+    setProblem(null);
+    try {
+      setProblem(await openUpdateLink(updateLink, url => Linking.openURL(url)));
+    } finally {
       setIsProcessing(false);
-      return;
     }
-
-    await deletePushToken();
-    dispatch(clearUserInfo());
-    dispatch(clearBookingState());
-    dispatch(clearSavedPlaces());
-    if (updateLink) {
-      await Linking.openURL(updateLink);
-    }
-    setIsProcessing(false);
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Update Required</Text>
-      <Text style={styles.message}>
-        You're using version {currentVersion || '—'}, but the minimum supported
-        version is now {minimumVersion || '—'}. Please update the app to
-        continue.
+      <View style={styles.iconPatch}>
+        <Icon name="cellphone-arrow-down" size={26} color={look.chipInk} />
+      </View>
+      <Text style={styles.title} maxFontSizeMultiplier={1.3}>
+        {words.title}
       </Text>
-      {logoutError ? <Text style={styles.errorText}>{logoutError}</Text> : null}
-      <TouchableOpacity
-        style={[styles.button, isProcessing && styles.buttonDisabled]}
-        onPress={handleUpdatePress}
-        disabled={isProcessing}>
-        {isProcessing ? (
-          <ActivityIndicator size="small" color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>
-            {logoutError ? 'Retry' : 'Update Now'}
+      <Text style={styles.message} maxFontSizeMultiplier={1.3}>
+        {words.message}
+      </Text>
+      {words.versionLine ? (
+        <Text style={styles.versionLine} maxFontSizeMultiplier={1.3}>
+          {words.versionLine}
+        </Text>
+      ) : null}
+      <View style={styles.buttonRow}>
+        <AppButton
+          title={words.button}
+          onPress={handleUpdatePress}
+          disabled={isProcessing}
+          isBold
+          noSpacing
+        />
+        {problem ? (
+          <Text
+            style={styles.problem}
+            maxFontSizeMultiplier={1.3}
+            accessibilityLiveRegion="polite">
+            {problem}
           </Text>
-        )}
-      </TouchableOpacity>
+        ) : null}
+      </View>
     </View>
   );
 };
 
 export default UpdateRequiredScreen;
 
-const getStyles = ({ colors }) =>
+const getStyles = look =>
   StyleSheet.create({
     container: {
       flex: 1,
       justifyContent: 'center',
       alignItems: 'center',
       paddingHorizontal: 24,
-      backgroundColor: '#fff',
+      backgroundColor: look.surface,
+    },
+    iconPatch: {
+      width: 52,
+      height: 52,
+      borderRadius: look.radiusTile,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 16,
+      backgroundColor: look.chip,
     },
     title: {
-      fontSize: 24,
-      fontWeight: 'bold',
+      fontSize: 20,
+      lineHeight: 28,
       fontFamily: 'Poppins SemiBold',
-      color: colors.primary,
-      marginBottom: 12,
+      color: look.ink,
+      marginBottom: 8,
       textAlign: 'center',
     },
     message: {
       fontSize: 14,
+      lineHeight: 20,
       fontFamily: 'Poppins Regular',
-      color: '#333',
+      color: look.inkSoft,
       textAlign: 'center',
-      marginBottom: 24,
     },
-    button: {
-      backgroundColor: colors.primary,
-      paddingHorizontal: 24,
-      paddingVertical: 12,
-      borderRadius: 8,
-      minWidth: 140,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    errorText: {
+    versionLine: {
       fontSize: 12,
+      lineHeight: 17,
       fontFamily: 'Poppins Regular',
-      color: '#D32F2F',
+      color: look.muted,
       textAlign: 'center',
-      marginBottom: 12,
+      marginTop: 8,
     },
-    buttonDisabled: {
-      opacity: 0.6,
+    buttonRow: {
+      alignSelf: 'stretch',
+      marginTop: 24,
     },
-    buttonText: {
-      fontSize: 14,
-      fontFamily: 'Poppins Medium',
-      color: '#fff',
+    problem: {
+      fontSize: 13,
+      lineHeight: 18,
+      fontFamily: 'Poppins Regular',
+      color: look.red,
+      textAlign: 'center',
+      marginTop: 10,
     },
   });

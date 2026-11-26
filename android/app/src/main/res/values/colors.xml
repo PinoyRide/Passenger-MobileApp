@@ -2,4 +2,12 @@
   <color name="splashscreen_background">#FFFFFF</color>
   <color name="colorPrimary">#023c69</color>
   <color name="colorPrimaryDark">#ffffff</color>
+  <!-- Behind the launcher icon (mipmap-anydpi-v26/ic_launcher.xml) -->
+  <color name="ic_launcher_background">#FAD204</color>
+  <!-- The screen shown while the app starts (LaunchScreen.kt), in the app's light look.
+       values-night/colors.xml has its dark look: the app follows the phone's setting. -->
+  <color name="launch_background">#FFFFFF</color>
+  <color name="launch_text">#6F6A60</color>
+  <color name="launch_track">#EFE9DC</color>
+  <color name="launch_gold">#FEC107</color>
 </resources>

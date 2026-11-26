@@ -16,6 +16,7 @@ import InAppBrowser from 'react-native-inappbrowser-reborn';
 import { AlertBox } from '@/Components';
 import usePostRequest from '@/Services/Api';
 import { AppUtil, Constants } from '@/Utils';
+import { CHECK_EVERY_MS, paymentOutcome } from '@/Utils/paymentWait';
 
 const FLOW = {
   INIT: 'INIT',
@@ -23,7 +24,6 @@ const FLOW = {
   SUCCESS: 'SUCCESS',
   FAILED: 'FAILED',
   EXPIRED: 'EXPIRED',
-  CANCELLED: 'CANCELLED',
 };
 
 const QRPHScreen = () => {
@@ -47,6 +47,23 @@ const QRPHScreen = () => {
     referenceIdRef.current = referenceId;
   }, [referenceId]);
 
+  // Asks the backend where the payment stands (qrph/check_status/). Kept in a
+  // ref, so the timer and the listener below always call the latest one.
+  const checkNowRef = useRef(() => {});
+  checkNowRef.current = () => {
+    if (!referenceIdRef.current) {
+      return;
+    }
+    checkPaymentStatus.makePostRequest(
+      Constants.ENDPOINT.QRPH_CHECK_STATUS,
+      { reference_id: referenceIdRef.current },
+      {},
+      'json',
+    );
+  };
+
+  // Opens PayCools' payment page. When the person closes it, the screen goes
+  // on waiting and asks at once (until 2026-11-23 it went blank instead).
   const openPayment = async url => {
     try {
       if (await InAppBrowser.isAvailable()) {
@@ -56,21 +73,19 @@ const QRPHScreen = () => {
           enableDefaultShare: false,
           modalEnabled: true,
         });
-        setFlowState(FLOW.CANCELLED);
       } else {
-        Linking.openURL(url);
-        setFlowState(FLOW.CANCELLED);
+        await Linking.openURL(url);
       }
     } catch {
       Linking.openURL(url);
-      setFlowState(FLOW.CANCELLED);
     }
+    checkNowRef.current();
   };
 
   useEffect(() => {
     if (paymentUrl && referenceId) {
-      openPayment(paymentUrl);
       setFlowState(FLOW.CHECKING);
+      openPayment(paymentUrl);
     }
   }, [paymentUrl, referenceId]);
 
@@ -79,18 +94,10 @@ const QRPHScreen = () => {
       return;
     }
 
-    intervalRef.current = setInterval(() => {
-      if (!referenceIdRef.current) {
-        return;
-      }
-
-      checkPaymentStatus.makePostRequest(
-        Constants.ENDPOINT.QRPH_CHECK_STATUS,
-        { reference_id: referenceIdRef.current },
-        {},
-        'json',
-      );
-    }, 5000);
+    intervalRef.current = setInterval(
+      () => checkNowRef.current(),
+      CHECK_EVERY_MS,
+    );
 
     return () => {
       if (intervalRef.current) {
@@ -103,15 +110,17 @@ const QRPHScreen = () => {
   useEffect(() => {
     const result = checkPaymentStatus.response?.data;
     AppUtil.debugDeep(result);
-    if (!result?.status) {
-      return;
+    const outcome = paymentOutcome(result?.status);
+    if (outcome === 'waiting') {
+      return; // not paid yet: keep asking
     }
 
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
 
-    if (result.status === 'success') {
+    if (outcome === 'success') {
       setFlowState(FLOW.SUCCESS);
 
       navigation.reset({
@@ -126,6 +135,7 @@ const QRPHScreen = () => {
                 status: result.status,
                 timestamp: result?.ts || new Date().toISOString(),
                 paymentMethod: 'QRPH',
+                transactionId: result?.transactionId || result?.transaction_id,
               },
             },
           },
@@ -134,22 +144,24 @@ const QRPHScreen = () => {
       return;
     }
 
-    if (result.status === 'failed') {
+    if (outcome === 'failed') {
       setFlowState(FLOW.FAILED);
       setAlertMessage('Payment failed. Please try again.');
       return;
     }
 
-    if (result.status === 'expired') {
+    if (outcome === 'expired') {
       setFlowState(FLOW.EXPIRED);
       setAlertMessage('Payment expired. Please restart the payment.');
     }
   }, [checkPaymentStatus.response]);
 
+  // Timers do not run while the browser or the banking app is in front: ask
+  // at once when the person comes back.
   useEffect(() => {
     const sub = AppState.addEventListener('change', state => {
-      if (state === 'active' && flowState === FLOW.CANCELLED) {
-        setFlowState(FLOW.CHECKING);
+      if (state === 'active' && flowState === FLOW.CHECKING) {
+        checkNowRef.current();
       }
     });
 
@@ -163,17 +175,10 @@ const QRPHScreen = () => {
     navigation.goBack();
   };
 
-  const retryPayment = () => {
-    setAlertMessage('');
-    setFlowState(FLOW.INIT);
-    openPayment(paymentUrl);
-    setFlowState(FLOW.CHECKING);
-  };
-
   if (!paymentUrl) {
     return (
       <View style={styles.container}>
-        <Text>No payment URL provided</Text>
+        <Text style={{ color: colors.text }}>No payment URL provided</Text>
       </View>
     );
   }
@@ -210,13 +215,18 @@ const QRPHScreen = () => {
             <Text style={styles.subText}>
               This screen will update automatically
             </Text>
+            <TouchableOpacity onPress={() => openPayment(paymentUrl)}>
+              <Text style={[styles.text, { color: colors.primary }]}>
+                Open the payment page again
+              </Text>
+            </TouchableOpacity>
           </>
         )}
 
         {(flowState === FLOW.FAILED || flowState === FLOW.EXPIRED) && (
-          <TouchableOpacity onPress={retryPayment}>
+          <TouchableOpacity onPress={handleBack}>
             <Text style={[styles.text, { color: colors.primary }]}>
-              Retry Payment
+              Start a new payment
             </Text>
           </TouchableOpacity>
         )}

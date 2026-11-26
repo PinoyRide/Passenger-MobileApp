@@ -25,6 +25,8 @@ function toLegacyCustomer(dto) {
     lname: dto.lname,
     mobile: dto.mobile,
     email: dto.email,
+    // "female" or "male"; null before the passenger said (Profile shows it)
+    gender: dto.gender || null,
     status: dto.status,
     is_login: dto.isLogin,
     selfie: dto.selfie || '',
@@ -58,7 +60,6 @@ function toLegacyCustomer(dto) {
       source: ekyc.source,
     },
     wallet_details: toWallet(dto.wallet),
-    pr_wallet_details: toWallet(dto.pinoyRideWallet),
   };
 }
 

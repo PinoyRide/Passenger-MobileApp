@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
   FlatList,
   Image,
   Linking,
@@ -36,6 +35,8 @@ import {
   transformBooking,
 } from '@/Hooks/bookingTransform';
 import { cancelPreviewOutcome } from '@/Utils/cancellationDialog';
+import appAlert from '@/Utils/appAlert';
+import { contactFrom, noContactText } from '@/Utils/bookingContact';
 
 const BookingDetailsScreen = () => {
   const { colors } = useTheme();
@@ -112,20 +113,8 @@ const BookingDetailsScreen = () => {
       if (cancelled) {
         return;
       }
-      const payload = response?.data;
-      if (payload?.proxy_contact_number) {
-        setRiderContact({
-          number: payload.proxy_contact_number,
-          dialUri: payload.dial_uri,
-        });
-        return;
-      }
-      const msg = String(error || response?.message || '').toLowerCase();
-      if (msg.includes('expired')) {
-        setRiderContact('expired');
-      } else {
-        setRiderContact('unavailable');
-      }
+      // KI-63: a number only when the API has a real one; never made up.
+      setRiderContact(contactFrom(response, error));
     })();
     return () => {
       cancelled = true;
@@ -154,7 +143,7 @@ const BookingDetailsScreen = () => {
   const handleCancelAdvance = async () => {
     const online = await checkIsOnline();
     if (!online) {
-      Alert.alert(
+      appAlert(
         'No Internet Connection',
         'Please check your connection and try again.',
       );
@@ -183,7 +172,7 @@ const BookingDetailsScreen = () => {
   const confirmCancelAdvance = async () => {
     const online = await checkIsOnline();
     if (!online) {
-      Alert.alert(
+      appAlert(
         'No Internet Connection',
         'Please check your connection and try again.',
       );
@@ -515,7 +504,13 @@ const BookingDetailsScreen = () => {
             </View>
           </View>
           <View style={styles.divider} />
-          {getRawStatus(bookingDetails) === 3 ? (
+          {getRawStatus(bookingDetails) === 3 && riderContact === 'none' ? (
+            <View style={styles.paymentRow}>
+              <Text style={styles.contactExpiredText}>
+                {noContactText('Rider')}
+              </Text>
+            </View>
+          ) : getRawStatus(bookingDetails) === 3 ? (
             <View style={styles.paymentRow}>
               <Text style={styles.paymentLabel}>Rider Contact Number :</Text>
               {riderContact === 'loading' ? (
@@ -524,11 +519,7 @@ const BookingDetailsScreen = () => {
                 <Text style={styles.contactExpiredText}>+639**********</Text>
               ) : riderContact?.number ? (
                 <TouchableOpacity
-                  onPress={() =>
-                    Linking.openURL(
-                      riderContact.dialUri || `tel:${riderContact.number}`,
-                    )
-                  }>
+                  onPress={() => Linking.openURL(riderContact.dialUri)}>
                   <Text style={styles.paymentMethodText}>
                     {riderContact.number}
                   </Text>
@@ -681,7 +672,7 @@ const BookingDetailsScreen = () => {
             onPress={handleCancelAdvance}
             disabled={cancelLoading}
             buttonColor={colors.primary}
-            textColor={colors.shadow}
+            textColor={colors.text}
             noSpacing
             isBold
             featureStyle={styles.cancelAdvanceBtn}
@@ -699,7 +690,7 @@ const getStyles = ({ colors, insets }) =>
   StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: colors.onPrimary,
+      backgroundColor: colors.background,
     },
     list: {
       flex: 1,
@@ -746,7 +737,7 @@ const getStyles = ({ colors, insets }) =>
       paddingHorizontal: 16,
     },
     card: {
-      backgroundColor: colors.onPrimary,
+      backgroundColor: colors.card,
       marginVertical: 8,
       paddingHorizontal: 32,
       paddingVertical: 23,
@@ -785,7 +776,7 @@ const getStyles = ({ colors, insets }) =>
       fontFamily: 'Poppins Medium',
       fontWeight: '500',
       fontSize: 12,
-      color: colors.shadow,
+      color: colors.text,
       marginBottom: 15,
     },
     locationRow: {
@@ -802,7 +793,7 @@ const getStyles = ({ colors, insets }) =>
       fontFamily: 'Poppins Regular',
       fontWeight: '400',
       fontSize: 12,
-      color: colors.shadow,
+      color: colors.text,
       flex: 1,
     },
     rebookBtn: {
@@ -817,7 +808,7 @@ const getStyles = ({ colors, insets }) =>
       paddingHorizontal: 16,
       paddingTop: 8,
       paddingBottom: Math.max(insets.bottom, 16),
-      backgroundColor: colors.onPrimary,
+      backgroundColor: colors.background,
     },
     cancelAdvanceBtn: {
       height: 50,
@@ -875,12 +866,12 @@ const getStyles = ({ colors, insets }) =>
     breakdownLabel: {
       fontFamily: 'Poppins Regular',
       fontSize: 11,
-      color: colors.shadow,
+      color: colors.text,
     },
     breakdownValue: {
       fontFamily: 'Poppins Medium',
       fontSize: 11,
-      color: colors.shadow,
+      color: colors.text,
     },
     breakdownNoticeText: {
       fontFamily: 'Poppins Regular',
@@ -904,7 +895,7 @@ const getStyles = ({ colors, insets }) =>
       fontFamily: 'Poppins Regular',
       fontWeight: 'bold',
       fontSize: 12,
-      color: colors.shadow,
+      color: colors.text,
     },
     finalFareValue: {
       fontFamily: 'Poppins Regular',
@@ -919,21 +910,21 @@ const getStyles = ({ colors, insets }) =>
       marginVertical: 14,
     },
     paymentLabel: {
-      fontFamily: 'Poppins Light',
+      fontFamily: 'Poppins Regular',
       fontSize: 12,
-      color: colors.shadow,
+      color: colors.text,
     },
     paymentMethodContainer: {
       flexDirection: 'row',
       alignItems: 'center',
     },
     paymentMethodText: {
-      fontFamily: 'Poppins Light',
+      fontFamily: 'Poppins Regular',
       fontSize: 12,
-      color: colors.shadow,
+      color: colors.text,
     },
     contactExpiredText: {
-      fontFamily: 'Poppins Light',
+      fontFamily: 'Poppins Regular',
       fontSize: 12,
       color: colors.grey4,
       fontStyle: 'italic',
@@ -951,10 +942,10 @@ const getStyles = ({ colors, insets }) =>
       marginRight: 10,
     },
     riderName: {
-      fontFamily: 'Poppins Light',
+      fontFamily: 'Poppins Regular',
       fontWeight: '400',
       fontSize: 12,
-      color: colors.shadow,
+      color: colors.text,
       flex: 1,
     },
     riderRatingContainer: {
@@ -981,7 +972,7 @@ const getStyles = ({ colors, insets }) =>
     reportIssueText: {
       fontFamily: 'Poppins Regular',
       fontSize: 10,
-      color: colors.shadow,
+      color: colors.text,
       marginTop: 5,
     },
     reportIssueTextButton: {

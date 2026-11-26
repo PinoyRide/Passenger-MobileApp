@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "290161750334",
-    "project_id": "pinoy-ride-6a93a",
-    "storage_bucket": "pinoy-ride-6a93a.firebasestorage.app"
+    "project_number": "453843849326",
+    "project_id": "pinoy-ride-57352",
+    "storage_bucket": "pinoy-ride-57352.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:290161750334:android:dfc7eeb863abeb97783c6f",
+        "mobilesdk_app_id": "1:453843849326:android:96185f3e70e12d02d3567f",
         "android_client_info": {
           "package_name": "com.pinoyride.customer"
         }
@@ -15,7 +15,64 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAQVCiFGHhC2aSpE6bBRFcPSRURVk3MJPA"
+          "current_key": "AIzaSyCM007sPqvm5RJaY_Z4StPzWSq3GlglgiY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:453843849326:android:e5a2e529b3e7353cd3567f",
+        "android_client_info": {
+          "package_name": "com.pinoyride.customer.dev"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCM007sPqvm5RJaY_Z4StPzWSq3GlglgiY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:453843849326:android:ad5dc739462c9abcd3567f",
+        "android_client_info": {
+          "package_name": "com.pinoyride.rider"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCM007sPqvm5RJaY_Z4StPzWSq3GlglgiY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:453843849326:android:0bda13e865ad57b6d3567f",
+        "android_client_info": {
+          "package_name": "com.pinoyride.rider.dev"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCM007sPqvm5RJaY_Z4StPzWSq3GlglgiY"
         }
       ],
       "services": {

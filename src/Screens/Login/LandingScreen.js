@@ -5,13 +5,25 @@ import { useTheme } from 'react-native-paper';
 import { AppButton } from '@/Components';
 import { useNavigation } from '@react-navigation/native';
 import Constants from 'expo-constants';
+import { Constants as AppConstants } from '@/Utils';
+import { runningUpdateLabel } from '@/Utils/selfUpdate';
+import { displayVersion } from '@/Utils/displayVersion';
 
 const LandingScreen = () => {
   const { colors } = useTheme();
   const styles = getStyles({ colors });
   const navigation = useNavigation();
 
-  const appVersion = Constants.expoConfig?.version ?? '1.0.0';
+  // shown as people count it (2.0.103 → 2.1.04): Utils/displayVersion.js
+  const appVersion = displayVersion(Constants.expoConfig?.version ?? '1.0.0');
+  // A build that talks to a test backend says which one (Develop or
+  // Sandbox, Utils/appEnvironment.js), to tell it apart from the store app.
+  const environment = AppConstants.IS_DEV
+    ? ` · ${AppConstants.ENVIRONMENT_LABEL}`
+    : '';
+  // When the app is running code it fetched after it was installed, the
+  // commit that code was built from.
+  const update = runningUpdateLabel();
 
   return (
     <Container>
@@ -33,14 +45,18 @@ const LandingScreen = () => {
             Don't have an account?{' '}
             <Text
               style={styles.registerLink}
-              onPress={() => navigation.navigate('GeneralTermsScreen')}>
+              onPress={() => navigation.navigate('RegisterFormScreen')}>
               Register
             </Text>
           </Text>
         </View>
       </View>
       <View style={styles.versionTextContainer}>
-        <Text style={styles.versionText}>v{appVersion}</Text>
+        <Text style={styles.versionText}>
+          v{appVersion}
+          {environment}
+          {update ? ` · ${update}` : ''}
+        </Text>
       </View>
       <View />
     </Container>

@@ -1,33 +1,61 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ON_PRIMARY_BUTTON_TEXT } from '@/Theme';
 import {
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
+  useWindowDimensions,
 } from 'react-native';
-import { Icon, useTheme } from 'react-native-paper';
+import { useTheme } from 'react-native-paper';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { DatePickerModal, TimePickerModal } from 'react-native-paper-dates';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { bottomSpace } from '@/Utils/bottomSpace';
+import { modern } from '@/Theme/modern';
 import {
-  formatScheduledDateLabel,
-  formatScheduledTimeLabel,
-} from '@/Hooks/bookLaterFormat';
+  dateChips,
+  dayText,
+  firstPick,
+  formatTime,
+  pickOnDay,
+  sameDay,
+  scheduleLabel,
+  timeSlots,
+} from '@/Utils/scheduleChips';
 
 const TOO_SOON = '__too_soon__';
 
+// Splits the slots into rows of four, padding the last one so every chip
+// keeps the same width.
+const rowsOfFour = items => {
+  const rows = [];
+  for (let i = 0; i < items.length; i += 4) {
+    rows.push(items.slice(i, i + 4));
+  }
+  return rows;
+};
+
+// The scheduling sheet (docs/booking-redesign-spec.md, "Advance booking", and
+// the design canvas): date chips and a 15-minute time grid instead of two
+// pickers, which stay one tap away ("Pick another date", "Pick another
+// time"). The contract and every rule are the same as before: the minimum
+// lead, the booking window, the default pick and the 30-second re-check.
 const PickDateModal = ({
   visible,
   onClose,
   onConfirm,
+  onRideNow,
   minLeadMinutes = 120,
   maxWindowDays = 30,
   serverOffsetMs = 0,
   leadTimeSubtitleHours = 2,
 }) => {
-  const { colors } = useTheme();
-  const styles = getStyles({ colors });
+  const look = modern(useTheme());
+  const styles = getStyles(look);
+  const { top: topInset, bottom: bottomInset } = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
 
   const correctedNow = () => Date.now() + serverOffsetMs;
 
@@ -54,18 +82,20 @@ const PickDateModal = ({
     return '';
   };
 
+  // Opens on now + lead + 5 minutes (the code's default), on the grid's next
+  // 15-minute step.
   useEffect(() => {
     if (!visible) {
       return;
     }
     const defaultDate = new Date(
-      correctedNow() + minLeadMinutes * 60 * 1000 + 5 * 60 * 1000,
+      firstPick({ now: correctedNow(), minLeadMinutes }),
     );
     setPickedDate(defaultDate);
     setValidationError(validateSelection(defaultDate));
   }, [visible, minLeadMinutes, serverOffsetMs]);
 
-  // Re-check every 30 s so a time that drifts inside the 2 h window flips to the Notice.
+  // Re-check every 30 s, so a time that drifts inside the lead is greyed out.
   useEffect(() => {
     if (!visible) {
       return undefined;
@@ -94,6 +124,12 @@ const PickDateModal = ({
     const err = validateSelection(nextDate);
     setValidationError(err);
     return !err;
+  };
+
+  const choose = ms => {
+    const next = new Date(ms);
+    setPickedDate(next);
+    runValidation(next);
   };
 
   const handleDateConfirm = ({ date }) => {
@@ -133,72 +169,198 @@ const PickDateModal = ({
 
   const subtitle = `Book at least ${leadTimeSubtitleHours} hours ahead`;
 
+  // Re-read on every render; the 30-second tick re-renders.
+  const now = correctedNow();
+  const rules = { now, minLeadMinutes, maxWindowDays };
+  const picked = pickedDate.getTime();
+  const chips = dateChips(rules);
+  const slots = timeSlots({ ...rules, day: picked, picked });
+  const pickedOnChips = chips.some(chip => sameDay(chip.day, picked));
+  const pickedOnSlots = slots.some(slot => slot.at === picked);
+  const canSchedule = !validationError;
+
+  const renderDateChip = chip => {
+    const selected = sameDay(chip.day, picked);
+    return (
+      <Pressable
+        key={chip.day}
+        onPress={() =>
+          choose(pickOnDay({ day: chip.day, picked, now, minLeadMinutes }))
+        }
+        accessibilityRole="radio"
+        accessibilityState={{ selected }}
+        accessibilityLabel={`${chip.label}, ${chip.date} ${chip.month}`}
+        style={[
+          styles.dateChip,
+          selected ? styles.chipSelected : styles.chipResting,
+        ]}>
+        <Text style={[styles.chipSmall, selected && styles.onAccent]}>
+          {chip.label}
+        </Text>
+        <Text style={[styles.chipDate, selected && styles.onAccent]}>
+          {chip.date}
+        </Text>
+        <Text style={[styles.chipSmall, selected && styles.onAccent]}>
+          {chip.month}
+        </Text>
+      </Pressable>
+    );
+  };
+
+  const renderSlot = slot => {
+    // a chosen slot that drifted inside the lead is greyed out, not gold
+    const selected = slot.at === picked && !slot.disabled;
+    return (
+      <Pressable
+        key={slot.at}
+        onPress={() => choose(slot.at)}
+        disabled={slot.disabled}
+        accessibilityRole="radio"
+        accessibilityState={{ selected, disabled: slot.disabled }}
+        accessibilityLabel={slot.label}
+        style={[
+          styles.slot,
+          selected ? styles.chipSelected : styles.chipResting,
+        ]}>
+        <Text
+          style={[
+            styles.slotText,
+            selected && styles.onAccent,
+            slot.disabled && styles.greyedText,
+          ]}>
+          {slot.label}
+        </Text>
+      </Pressable>
+    );
+  };
+
+  // "Pick another date" / "Pick another time": when the pick was made there
+  // rather than on the chips, the row names it, gold, or greyed out when it
+  // has become too soon.
+  const renderMore = ({ icon, text, chosenText, chosen, greyed, onPress }) => {
+    const gold = chosen && !greyed;
+    return (
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        style={[
+          styles.moreRow,
+          gold ? styles.chipSelected : styles.chipResting,
+        ]}>
+        <Icon
+          name={icon}
+          size={17}
+          color={gold ? look.onAccent : look.inkSoft}
+        />
+        <Text
+          style={[
+            styles.moreText,
+            gold && styles.onAccent,
+            chosen && greyed && styles.greyedText,
+          ]}>
+          {chosen ? chosenText : text}
+        </Text>
+      </Pressable>
+    );
+  };
+
   return (
     <Modal
       visible={visible}
       transparent
       animationType="fade"
       onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={onClose}>
-        <Pressable style={styles.card} onPress={e => e.stopPropagation()}>
-          <Text style={styles.title}>Pick a Date</Text>
-          <Text style={styles.subtitle}>{subtitle}</Text>
-
-          <Text style={styles.fieldLabel}>Date</Text>
-          <TouchableOpacity
-            style={styles.valueRow}
-            onPress={() => setShowDatePicker(true)}
-            accessibilityRole="button">
-            <Text style={styles.valueText}>
-              {formatScheduledDateLabel(pickedDate, new Date(correctedNow()))}
-            </Text>
-            <Icon
-              source="calendar-blank-outline"
-              size={12}
-              color={colors.iconMuted ?? '#D0D0D0'}
-            />
-          </TouchableOpacity>
-          <View style={styles.underline} />
-
-          <Text style={[styles.fieldLabel, styles.timeLabel]}>Time</Text>
-          <TouchableOpacity
-            style={styles.valueRow}
-            onPress={() => setShowTimePicker(true)}
-            accessibilityRole="button">
-            <Text style={styles.valueText}>
-              {formatScheduledTimeLabel(pickedDate)}
-            </Text>
-            <Icon
-              source="clock-outline"
-              size={12}
-              color={colors.iconMuted ?? '#D0D0D0'}
-            />
-          </TouchableOpacity>
-          <View style={styles.underline} />
-
-          {validationError && !tooSoon ? (
-            <Text style={styles.errorText}>{validationError}</Text>
-          ) : null}
-
-          <TouchableOpacity
-            style={[
-              styles.confirmButton,
-              validationError ? styles.confirmButtonDisabled : null,
-            ]}
-            disabled={Boolean(validationError)}
-            onPress={handleConfirm}>
-            <Text style={styles.confirmLabel}>Confirm Date and Time</Text>
-          </TouchableOpacity>
-          {tooSoon ? (
-            <Text style={styles.noticeText} testID="pick-date-notice">
-              <Text style={styles.noticeBold}>Notice: </Text>
-              Advance bookings must be scheduled at least{' '}
-              {leadTimeSubtitleHours} hours before the pickup time. Please
-              select a later pickup time to continue.
-            </Text>
-          ) : null}
+      <View style={styles.overlay}>
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onClose}
+          accessible={false}
+        />
+        <Pressable
+          onPress={onClose}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+          style={[styles.close, { top: topInset + 12 }]}>
+          <Icon name="close" size={22} color={look.ink} />
         </Pressable>
-      </Pressable>
+
+        <View
+          style={[styles.sheet, { maxHeight: windowHeight - topInset - 72 }]}>
+          <ScrollView
+            bounces={false}
+            contentContainerStyle={[
+              styles.content,
+              { paddingBottom: bottomSpace(bottomInset, 16, 16) },
+            ]}>
+            <Text style={styles.title} maxFontSizeMultiplier={1.3}>
+              Schedule your ride
+            </Text>
+            <Text style={styles.subtitle}>{subtitle}</Text>
+
+            <Text style={styles.label}>PICK-UP DATE</Text>
+            <View style={styles.row}>
+              {chips.map(renderDateChip)}
+              {Array.from({ length: Math.max(0, 4 - chips.length) }).map(
+                (_, i) => (
+                  <View key={`pad-${i}`} style={styles.pad} />
+                ),
+              )}
+            </View>
+            {renderMore({
+              icon: 'calendar-blank-outline',
+              text: 'Pick another date',
+              chosenText: dayText(picked),
+              chosen: !pickedOnChips,
+              onPress: () => setShowDatePicker(true),
+            })}
+
+            <Text style={[styles.label, styles.labelGap]}>PICK-UP TIME</Text>
+            {rowsOfFour(slots).map(row => (
+              <View key={row[0].at} style={[styles.row, styles.slotRow]}>
+                {row.map(renderSlot)}
+                {Array.from({ length: 4 - row.length }).map((_, i) => (
+                  <View key={`pad-${i}`} style={styles.pad} />
+                ))}
+              </View>
+            ))}
+            {renderMore({
+              icon: 'clock-outline',
+              text: 'Pick another time',
+              chosenText: formatTime(picked),
+              chosen: !pickedOnSlots,
+              greyed: tooSoon,
+              onPress: () => setShowTimePicker(true),
+            })}
+
+            {validationError && !tooSoon ? (
+              <Text style={styles.errorText}>{validationError}</Text>
+            ) : null}
+
+            <Pressable
+              onPress={handleConfirm}
+              disabled={!canSchedule}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !canSchedule }}
+              style={[styles.cta, !canSchedule && styles.ctaDisabled]}>
+              <Text
+                style={[
+                  styles.ctaText,
+                  !canSchedule && styles.ctaTextDisabled,
+                ]}>
+                {`Schedule for ${scheduleLabel({ picked, now })}`}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={onRideNow || onClose}
+              hitSlop={8}
+              accessibilityRole="button"
+              style={styles.rideNow}>
+              <Text style={styles.rideNowText}>Ride now instead</Text>
+            </Pressable>
+          </ScrollView>
+        </View>
+      </View>
 
       <DatePickerModal
         locale="en"
@@ -223,95 +385,173 @@ const PickDateModal = ({
 
 export default PickDateModal;
 
-const getStyles = ({ colors }) =>
+const getStyles = look =>
   StyleSheet.create({
     overlay: {
       flex: 1,
+      justifyContent: 'flex-end',
       backgroundColor: 'rgba(0,0,0,0.4)',
-      justifyContent: 'center',
+    },
+    close: {
+      position: 'absolute',
+      right: 20,
+      width: 44,
+      height: 44,
+      borderRadius: 14,
       alignItems: 'center',
-      paddingHorizontal: 48,
+      justifyContent: 'center',
+      backgroundColor: look.surface,
     },
-    card: {
-      width: 335,
-      backgroundColor: '#FFFFFF',
-      borderRadius: 10,
-      paddingHorizontal: 32.5,
-      paddingTop: 33,
-      paddingBottom: 25.5,
+    sheet: {
+      backgroundColor: look.surface,
+      borderTopLeftRadius: look.radiusSheet,
+      borderTopRightRadius: look.radiusSheet,
     },
+    content: {
+      paddingHorizontal: 20,
+      paddingTop: 24,
+    },
+    // Title role
     title: {
-      fontFamily: 'Poppins Medium',
-      fontSize: 16,
-      color: '#000000',
-      marginBottom: 8,
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 22,
+      lineHeight: 27,
+      letterSpacing: -0.5,
+      color: look.ink,
     },
     subtitle: {
+      marginTop: 4,
       fontFamily: 'Poppins Regular',
-      fontSize: 14,
-      color: '#000000',
-      marginBottom: 24,
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.muted,
     },
-    fieldLabel: {
-      fontFamily: 'Poppins Regular',
-      fontSize: 14,
-      color: colors.grey3 ?? '#7C7C7C',
-      marginBottom: 4,
+    // Label role
+    label: {
+      marginTop: 20,
+      marginBottom: 10,
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 11,
+      lineHeight: 14,
+      letterSpacing: 1.2,
+      color: look.muted,
     },
-    timeLabel: {
-      marginTop: 17,
+    labelGap: {
+      marginTop: 22,
     },
-    valueRow: {
+    row: {
       flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 17,
+      gap: 9,
     },
-    valueText: {
-      fontFamily: 'Poppins Regular',
-      fontSize: 14,
-      color: colors.onSurface,
+    slotRow: {
+      marginBottom: 9,
     },
-    underline: {
-      height: 1,
-      backgroundColor: colors.divider ?? '#DAD4D4',
-      width: '100%',
-      marginBottom: 17.5,
+    pad: {
+      flex: 1,
     },
-    errorText: {
-      fontFamily: 'Poppins Regular',
-      fontSize: 12,
-      color: colors.error,
-      marginBottom: 8,
-    },
-    confirmButton: {
-      width: 270,
-      height: 37.5,
-      borderRadius: 18.5,
-      backgroundColor: colors.primary,
-      alignSelf: 'center',
+    dateChip: {
+      flex: 1,
+      minHeight: 86,
       alignItems: 'center',
       justifyContent: 'center',
-      marginTop: 19.5,
+      borderRadius: look.radiusTile + 2,
     },
-    confirmButtonDisabled: {
-      backgroundColor: '#B3B3B3',
+    slot: {
+      flex: 1,
+      minHeight: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: look.radiusPill,
     },
-    noticeText: {
-      fontFamily: 'Poppins Regular',
-      fontSize: 11,
-      lineHeight: 16,
-      color: '#6B6B6B',
-      textAlign: 'center',
-      marginTop: 10,
+    // the service card's shadow
+    chipSelected: {
+      backgroundColor: look.accent,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.09,
+      shadowRadius: 10,
+      elevation: 4,
     },
-    noticeBold: {
+    chipResting: {
+      backgroundColor: look.soft,
+    },
+    chipSmall: {
       fontFamily: 'Poppins SemiBold',
-      fontWeight: '600',
+      fontSize: 11,
+      lineHeight: 14,
+      color: look.ink,
+      opacity: 0.64,
     },
-    confirmLabel: {
+    chipDate: {
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 21,
+      lineHeight: 26,
+      color: look.ink,
+    },
+    slotText: {
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.ink,
+    },
+    onAccent: {
+      color: look.onAccent,
+    },
+    greyedText: {
+      color: look.muted,
+    },
+    moreRow: {
+      marginTop: 9,
+      minHeight: 44,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      borderRadius: look.radiusPill,
+    },
+    moreText: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.ink,
+    },
+    errorText: {
+      marginTop: 14,
       fontFamily: 'Poppins Regular',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.danger,
+    },
+    cta: {
+      marginTop: 22,
+      minHeight: 58,
+      borderRadius: look.radiusCard - 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 16,
+      backgroundColor: look.accent,
+    },
+    ctaDisabled: {
+      backgroundColor: look.soft,
+    },
+    ctaText: {
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 16,
+      lineHeight: 22,
+      color: look.onAccent,
+    },
+    ctaTextDisabled: {
+      color: look.muted,
+    },
+    rideNow: {
+      alignSelf: 'center',
+      marginTop: 14,
+      paddingVertical: 6,
+    },
+    rideNowText: {
+      fontFamily: 'Poppins Medium',
       fontSize: 14,
-      color: ON_PRIMARY_BUTTON_TEXT,
+      lineHeight: 20,
+      color: look.inkSoft,
     },
   });

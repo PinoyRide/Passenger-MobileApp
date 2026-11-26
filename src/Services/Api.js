@@ -6,6 +6,15 @@ import { useSelector } from 'react-redux';
 import { selectUserInfo } from '@/Redux/Slices/userSlice';
 import { getCurrentRouteName, navigate } from '@/Utils/NavigationService';
 import { checkIsOnline } from '@/Utils/Network';
+import { signalSignedOut, signedOutReason } from '@/Utils/signedOut';
+import { UPDATING_MESSAGE, isServerDown, readable } from '@/Utils/serverDown';
+import { sessionHeader, takeNewToken } from '@/Utils/sessionHeader';
+import { deviceIdHeader, waitForDeviceId } from '@/Utils/deviceIdHeader';
+import {
+  WALLET_OFF_MESSAGE,
+  appBuildHeader,
+  walletOffRefused,
+} from '@/Utils/walletOff';
 
 const REQUEST_TIMEOUT_MS = 15000;
 const OFFLINE_MESSAGE =
@@ -45,6 +54,11 @@ const usePostRequest = () => {
   // offline — lets callers (e.g. a polling loop) tell that apart from a
   // real API error and stay silent instead of alert-spamming the user.
   const [isOffline, setIsOffline] = useState(false);
+  // The last refusal's reason code (data.reason), for a screen that reacts to
+  // `error` and picks its words by the reason (the wallet lock, ekyc_required:
+  // Utils/walletLock.js). Set before `error`: without batching each one
+  // renders on its own, and a caller reacting to `error` must already see it.
+  const [reason, setReason] = useState(null);
 
   // Bumped on every call. A response/error is only applied to state if it
   // still belongs to the latest call — this stops an old, slow-to-resolve
@@ -73,7 +87,7 @@ const usePostRequest = () => {
     const requiredParams = {
       user_type: 'customer',
       customer_id: userInfo?.id,
-      app_version: '1.1.6',
+      app_version: '2.0.135',
     };
     const params = { ...requiredParams, ...obj };
 
@@ -108,9 +122,10 @@ const usePostRequest = () => {
   }
 
   const extractErrorMessage = errorData => {
-    // Handle string errors
+    // Handle string errors (a web page, such as Render's while the API
+    // restarts, becomes a plain message: serverDown.js)
     if (typeof errorData === 'string') {
-      return errorData;
+      return readable(errorData);
     }
 
     // Handle object errors
@@ -209,17 +224,27 @@ const usePostRequest = () => {
     const isLatest = () => thisRequestId === requestIdRef.current;
 
     setLoading(true);
+    setReason(null);
     setError(null);
     setIsOffline(false);
 
     const online = await checkIsOnline();
     if (!online) {
       if (isLatest()) {
-        setError(OFFLINE_MESSAGE);
+        // isOffline before error: without batching each one renders on its
+        // own, and a caller reacting to `error` must already see it offline
+        // (Home's booking poll showed the weak-connection box: QA CHT-09)
         setIsOffline(true);
+        setError(OFFLINE_MESSAGE);
         setLoading(false);
       }
-      return { response: null, error: OFFLINE_MESSAGE, offline: true };
+      // notSent: nothing left the phone (a cash-out can say so plainly)
+      return {
+        response: null,
+        error: OFFLINE_MESSAGE,
+        offline: true,
+        notSent: true,
+      };
     }
 
     try {
@@ -231,10 +256,20 @@ const usePostRequest = () => {
       AppUtil.debug(url);
       AppUtil.debugDeep(params);
 
+      // the phone's id is read once before the first request (Utils/deviceIdHeader.js)
+      await waitForDeviceId();
       let requestData;
       const headers = {
         'x-api-key': Constants.API_KEY,
+        // play or dev: the API refuses the money routes to the Play build
+        // (Utils/walletOff.js)
+        ...appBuildHeader(),
+        // which phone (Utils/deviceIdHeader.js): the same phone may sign in again
+        ...deviceIdHeader(),
       };
+      // the passenger's sign-in token: the API answers a request naming a
+      // passenger only with it (Utils/sessionHeader.js)
+      Object.assign(headers, sessionHeader());
 
       if (contentType === 'multipart') {
         const { fields, files } = splitFilesFromFields(params);
@@ -265,6 +300,8 @@ const usePostRequest = () => {
         timeout: REQUEST_TIMEOUT_MS,
         ...config,
       });
+      // a new sign-in token handed out behind the scenes, even on a stale answer
+      takeNewToken(res.headers);
 
       // 🛑 Stale-response guard: a newer request has already fired (and
       // possibly already resolved) since this one started — e.g. this call
@@ -273,6 +310,14 @@ const usePostRequest = () => {
       // Applying it now would regress the UI to old data.
       if (!isLatest()) {
         return { response: res.data, error: null, stale: true };
+      }
+
+      // Signed out by Pinoy Ride, or the account was deleted — from ANY
+      // endpoint (Utils/signedOut.js). The app signs out as Log Out does.
+      const signedOut = signedOutReason(res.status, res.data);
+      if (signedOut) {
+        signalSignedOut(signedOut);
+        return { response: null, error: null, signedOut: true };
       }
 
       // Always set response
@@ -285,19 +330,46 @@ const usePostRequest = () => {
         return { response: null, error: null, forceUpdate: true };
       }
 
+      // Not in this build (the Play build has no wallet): a calm word, and
+      // nobody is signed out
+      if (walletOffRefused(res.status, res.data)) {
+        setError(WALLET_OFF_MESSAGE);
+        return { response: null, error: WALLET_OFF_MESSAGE, walletOff: true };
+      }
+
       if (isOK(res)) {
         return { response: res.data, error: null };
       } else if (isNotOK(res)) {
         //  Extract error message properly
         const errorMessage = extractErrorMessage(res.data.message || res.data);
+        // the API's reason code, for a screen that picks its words by it
+        // (eKYC refusals: Utils/ekycWallet.js; the wallet lock:
+        // Utils/walletLock.js)
+        setReason(res.data?.data?.reason ?? null);
         setError(errorMessage);
-        return { response: null, error: errorMessage };
+        return {
+          response: null,
+          error: errorMessage,
+          reason: res.data?.data?.reason,
+        };
       } else {
         return { response: res.data, error: null };
       }
     } catch (err) {
+      takeNewToken(err?.response?.headers);
       if (!isLatest()) {
         return { response: null, error: null, stale: true };
+      }
+
+      // Signed-out check on the thrown-error path — a 401 status makes
+      // axios throw, and the payload lands in err.response.data.
+      const signedOut = signedOutReason(
+        err.response?.status,
+        err.response?.data,
+      );
+      if (signedOut) {
+        signalSignedOut(signedOut);
+        return { response: null, error: null, signedOut: true };
       }
 
       // Force-update check on the thrown-error path — a 426 status makes
@@ -308,11 +380,22 @@ const usePostRequest = () => {
         return { response: null, error: null, forceUpdate: true };
       }
 
+      // Not in this build (the Play build has no wallet): a 403 makes axios
+      // throw. A calm word, and nobody is signed out.
+      if (walletOffRefused(err.response?.status, err.response?.data)) {
+        setIsOffline(false);
+        setError(WALLET_OFF_MESSAGE);
+        return { response: null, error: WALLET_OFF_MESSAGE, walletOff: true };
+      }
+
       let message = '';
       let offline = false;
 
-      //  Handle error response with proper extraction
-      if (err.response?.data) {
+      // The API restarting for an update (Render's page or a gateway status):
+      // a plain message, never the page itself
+      if (isServerDown(err.response?.status, err.response?.data)) {
+        message = UPDATING_MESSAGE;
+      } else if (err.response?.data) {
         // Try to extract message from response data
         message = extractErrorMessage(err.response.data);
       } else if (err.response) {
@@ -333,9 +416,17 @@ const usePostRequest = () => {
         message = err.message || 'An unknown error occurred';
       }
 
-      setError(message);
+      // isOffline and the reason first, as above
+      setReason(err.response?.data?.data?.reason ?? null);
       setIsOffline(offline);
-      return { response: null, error: message, offline };
+      setError(message);
+      // a refusal (4xx) carries its reason code in data.reason, as above
+      return {
+        response: null,
+        error: message,
+        offline,
+        reason: err.response?.data?.data?.reason,
+      };
     } finally {
       if (isLatest()) {
         setLoading(false);
@@ -343,7 +434,7 @@ const usePostRequest = () => {
     }
   };
 
-  return { makePostRequest, response, loading, error, isOffline };
+  return { makePostRequest, response, loading, error, isOffline, reason };
 };
 
 export default usePostRequest;

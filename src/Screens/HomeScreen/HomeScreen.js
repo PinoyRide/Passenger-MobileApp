@@ -1,16 +1,22 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Alert,
+  BackHandler,
   DeviceEventEmitter,
   Dimensions,
   Image,
+  Pressable,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  unstable_batchedUpdates,
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { openSettings } from 'react-native-permissions';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { modern } from '@/Theme/modern';
+import { distanceKm, tripChipText } from '@/Utils/tripText';
+import { formatPeso } from '@/Utils/formatPeso';
 import BottomModal from './BottomModal';
 import {
   PUSH_BOOKING_UPDATE_EVENT,
@@ -20,9 +26,10 @@ import {
   AdvanceBookingAcceptedModal,
   AlertBox,
   AppMap,
-  RiderFoundAlertBox,
+  ProfileAvatar,
   SuccessAlertBox,
 } from '@/Components';
+import { fullNameOf } from '@/Utils/personName';
 import {
   useFocusEffect,
   useNavigation,
@@ -50,7 +57,9 @@ import {
   selectParkedAdvanceBookings,
   selectPickupLocation,
   selectRatedBookingIds,
+  selectRecentPlaces,
   selectRiderDetails,
+  selectSavedPlaces,
   selectSelectedService,
   selectUserInfo,
   setActiveBooking,
@@ -61,12 +70,21 @@ import {
   setIsBooked,
   setIsConfirmed,
   setPickupLocation,
+  setRecentPlaces,
   setRiderDetails,
   setSelectedService,
 } from '@/Redux/Slices/userSlice';
+import { recentPlacesFrom, withBooking } from '@/Utils/recentPlaces';
 import { AppUtil, Constants } from '@/Utils';
 import usePostRequest from '@/Services/Api';
-import ServiceModal from './Components/ServiceModal';
+import useApiRequest from '@/Services/ApiV2';
+import { startingPayment } from '@/Utils/startingPayment';
+import {
+  isLockedRefusal,
+  lockedAlert,
+  verifyParams,
+  walletLocked,
+} from '@/Utils/walletLock';
 import PaymentMethodModal from './Components/PaymentMethodModal';
 import BookingStatusModal from './Components/BookingStatusModal';
 import NoteToRiderModal from './Components/NoteToRiderModal';
@@ -77,7 +95,12 @@ import useNetworkStatus from '@/Hooks/useNetworkStatus';
 import { checkIsOnline } from '@/Utils/Network';
 import { getBookingVehicle } from '@/Hooks/bookingVehicle';
 import { getRiderEtaText } from '@/Hooks/riderEta';
-import { getDropoffEtaText, keepDropoffEta } from '@/Utils/dropoffEta';
+import { riderAwayText } from '@/Utils/riderAway';
+import {
+  dropoffArrivalText,
+  getDropoffEtaText,
+  keepDropoffEta,
+} from '@/Utils/dropoffEta';
 import useBookLaterConfig from '@/Hooks/useBookLaterConfig';
 import {
   formatScheduledDateLabel,
@@ -105,15 +128,28 @@ import {
   getReplacementId,
   isAdvanceAcceptedAcknowledged,
   isReturnedToPool,
-  shouldShowRiderFoundAlert,
+  riderHasSetOff,
   transformBooking,
 } from '@/Hooks/bookingTransform';
-import { services as SERVICE_OPTIONS } from './Components/ServiceModal';
+import {
+  services as SERVICE_OPTIONS,
+  serviceById,
+} from './Components/ServiceList';
 import useNoRidersTimer from '@/Hooks/useNoRidersTimer';
+import useAutoClose, { NOTICE_READ_MS } from '@/Hooks/useAutoClose';
+import useSearchReach from '@/Hooks/useSearchReach';
+import useNearbyRiders from '@/Hooks/useNearbyRiders';
+import { ridersNearbyText } from '@/Utils/ridersNearbyText';
+import { FARE_DEBOUNCE_MS, fareKey, shouldPrice } from '@/Utils/fareInquiry';
+import { startSequentialPoll } from '@/Utils/sequentialPoll';
+import { parkedGoesLive } from '@/Utils/parkedGoesLive';
 import useRiderEtaPoll from '@/Hooks/useRiderEtaPoll';
 import useRiderLocationPoll from '@/Hooks/useRiderLocationPoll';
 import useAdvanceBookingDiscovery from '@/Hooks/useAdvanceBookingDiscovery';
 import useParkedAdvanceBookingPoll from '@/Hooks/useParkedAdvanceBookingPoll';
+import appAlert, { isAlertAsked } from '@/Utils/appAlert';
+import { riderCancelAlert } from '@/Utils/riderCancelNotice';
+import { walletOff } from '@/Utils/walletOff';
 
 // Matches backend ADVANCE_MAX_OPEN_PER_CUSTOMER.
 const ADVANCE_MAX_OPEN = 3;
@@ -130,14 +166,19 @@ const hasRider = (booking, rd) =>
   Boolean(rd && typeof rd === 'object' && (rd.id || Object.keys(rd).length));
 
 const HomeScreen = () => {
-  const { colors } = useTheme();
-  const styles = getStyles({ colors });
+  const theme = useTheme();
+  const { colors } = theme;
+  const look = modern(theme);
+  const styles = getStyles({ colors, look });
   const navigation = useNavigation();
   const route = useRoute();
   const dispatch = useDispatch();
 
   // ✅ Use Redux selectors instead of local state
   const userInfo = useSelector(selectUserInfo);
+  // the profile button on the map shows who is signed in
+  const accountName = fullNameOf(userInfo);
+  const accountPhoto = userInfo?.selfie || userInfo?.ekyc_details?.selfie || '';
   const hasShownLoginSuccess = useSelector(selectHasShownLoginSuccess);
   const activeBooking = useSelector(selectActiveBooking);
   const ratedBookingIds = useSelector(selectRatedBookingIds);
@@ -145,6 +186,11 @@ const HomeScreen = () => {
   const riderDetails = useSelector(selectRiderDetails);
   const pickupLocation = useSelector(selectPickupLocation);
   const dropoffLocation = useSelector(selectDropoffLocation);
+  const recentPlaces = useSelector(selectRecentPlaces);
+  const savedPlaces = useSelector(selectSavedPlaces);
+  // read by the history check, which is a callback made once
+  const savedPlacesRef = useRef(savedPlaces);
+  savedPlacesRef.current = savedPlaces;
   const selectedService = useSelector(selectSelectedService);
   const isBooked = useSelector(selectIsBooked);
   const isConfirmed = useSelector(selectIsConfirmed);
@@ -193,9 +239,8 @@ const HomeScreen = () => {
   const locationReady = permissionStatus === 'granted';
 
   const [showSuccess, setShowSuccess] = useState(false);
-  const [showRiderFound, setShowRiderFound] = useState(false);
-  const riderAlertShownRef = useRef(false);
-  const [showServiceModal, setShowServiceModal] = useState(false);
+  // No "We found you a Rider!" box: the trip sheet's "Rider found" banner and
+  // rider card say it (the owner, 2026-11-23: "i think it will be redundunt").
 
   // Modal states (not persisted)
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -227,6 +272,18 @@ const HomeScreen = () => {
   // even when the date is already set (date-first order).
   const [pickupConfirmPending, setPickupConfirmPending] = useState(false);
   const [showAdvanceAccepted, setShowAdvanceAccepted] = useState(false);
+  // Boxes nobody answers close by themselves (Hooks/useAutoClose): a notice
+  // once read (an AlertBox notice does it itself), the others after 3
+  // minutes. "Congratulations" only closes.
+  useAutoClose(showAlert, () => setShowAlert(false));
+  useAutoClose(showPushNotice, () => setShowPushNotice(false));
+  // closed as its own button closes it, so it is not shown again on the next
+  // poll (it came back every 12 s or so: overnight review 2026-11-23)
+  useAutoClose(
+    showAdvanceAccepted,
+    () => handleAdvanceAcceptedClose(),
+    NOTICE_READ_MS,
+  );
   const paymentBeforeScheduleRef = useRef(null);
 
   // 🔍 Diagnostic: confirms whether riderLocation state is actually updating.
@@ -250,11 +307,25 @@ const HomeScreen = () => {
     2: 'In transit. Do not use your phone',
   };
 
-  const riderFoundTimeout = useRef(null);
   const [showWaitingBanner, setShowWaitingBanner] = useState(false);
   const [riderArrivedAt, setRiderArrivedAt] = useState(null);
   const [showSafetyGuide, setShowSafetyGuide] = useState(false);
+  // The map's X during a trip (the owner's design "8 · Rider found",
+  // 2026-11-23): the trip sheet shrinks to its banner so the map is clear;
+  // tapping the banner brings it back. A new step of the trip shows it again.
+  const [tripSheetMinimized, setTripSheetMinimized] = useState(false);
+  useEffect(() => {
+    setTripSheetMinimized(false);
+  }, [bookingStatus, activeBooking?.id]);
   const [penaltyPreview, setPenaltyPreview] = useState(null);
+  // The "Cancel ride" box closes once the trip starts or ends: its Yes would
+  // have cancelled a trip under way (overnight review 2026-11-23; the server
+  // refuses that now too).
+  useEffect(() => {
+    if (penaltyPreview && [2, 3].includes(Number(bookingStatus))) {
+      setPenaltyPreview(null);
+    }
+  }, [bookingStatus, penaltyPreview]);
   const [cancelPreviewLoading, setCancelPreviewLoading] = useState(false);
   const cancelSubmitGuard = useCancellationSubmitGuard();
   const [penaltyLoading, setPenaltyLoading] = useState(false);
@@ -353,10 +424,42 @@ const HomeScreen = () => {
   useParkedAdvanceBookingPoll({
     customerId: userInfo?.id,
     enabled: bookLater.enabled && parkedAdvanceBookings.length > 0,
+    // a closed scheduled ride the rider cancelled: say so, with the new
+    // reference, wherever the passenger is (QA LAT-16)
+    onRiderCancelled: data => tellRiderCancelled(data),
     onBookingSynced: data => {
       if (isReturnedToPool(data)) {
         dispatch(clearAcknowledgedScheduledForBooking(data.id));
       }
+      // The rider set off for (or started) a minimized advance booking: show
+      // the trip now, not after a restart (QA LAT-13; parkedGoesLive.js).
+      const goLive = parkedGoesLive(data, { activeBooking, bookingStatus });
+      if (!goLive) {
+        return;
+      }
+      // after an await on the old architecture: one render, not one per
+      // dispatch (prtc-legacy-arch-no-batching)
+      unstable_batchedUpdates(() => {
+        if (goLive === 'same') {
+          dispatch(removeMinimizedAdvanceBookingId(data.id));
+          dispatch(removeParkedAdvanceBooking(data.id));
+          return;
+        }
+        if (goLive === 'replace') {
+          dispatch(clearBookingState());
+          clearTransientBookingUi();
+        }
+        const parked = parkedAdvanceBookings.find(
+          p => String(p.booking?.id) === String(data.id),
+        );
+        restoreParkedAdvanceSnapshot({
+          ...parked,
+          booking: data,
+          riderDetails: hasRider(null, data.rider_details)
+            ? data.rider_details
+            : parked?.riderDetails,
+        });
+      });
     },
   });
 
@@ -416,6 +519,11 @@ const HomeScreen = () => {
     if (!Array.isArray(bookings)) {
       return;
     }
+    // The same answer gives the recent places of the Where to? sheet and the
+    // place picker (recentPlaces.js): no request of their own.
+    dispatch(
+      setRecentPlaces(recentPlacesFrom(bookings, savedPlacesRef.current)),
+    );
     const ongoing =
       bookings.find(b => Number(b.status) === 2) ||
       bookings.find(b => Number(b.status) === 1) ||
@@ -552,7 +660,6 @@ const HomeScreen = () => {
     }
     setShowWaitingBanner(false);
     setShowAdvanceAccepted(false);
-    riderAlertShownRef.current = false;
     dispatch(clearBookingState());
     clearTransientBookingUi();
     setSelectedPromo(null);
@@ -563,6 +670,17 @@ const HomeScreen = () => {
   const notifyPush = (message, onConfirm) => {
     setPushNotice({ message, onConfirm });
     setShowPushNotice(true);
+  };
+
+  // "Booking update" for a rider cancel, drawn by AlertHost over whatever
+  // screen is open, not by Home (QA LAT-16: the passenger on Booking Details
+  // saw nothing). Once per cancelled booking (riderCancelNotice.js).
+  const tellRiderCancelled = oldBooking => {
+    const box = riderCancelAlert(oldBooking);
+    if (!box || isAlertAsked(box.key)) {
+      return;
+    }
+    appAlert(box.title, box.message, [{ text: 'OK' }], { key: box.key });
   };
 
   // A rider cancel re-pools the trip under a NEW booking (old one: status 4 +
@@ -586,17 +704,11 @@ const HomeScreen = () => {
     setRiderLocation(null);
     setBookingVehicle(null);
     setShowAdvanceAccepted(false);
-    riderAlertShownRef.current = false;
     if (pushTargetRef.current?.id === String(oldBooking.id)) {
       pushTargetRef.current = { ...pushTargetRef.current, id: String(newId) };
     }
     if (notify) {
-      notifyPush(
-        "Your rider cancelled. We're finding you a new rider." +
-          (oldBooking.replaced_by_ref_code
-            ? ` New reference: ${oldBooking.replaced_by_ref_code}`
-            : ''),
-      );
+      tellRiderCancelled(oldBooking);
     }
     setIsRestoringBooking(true);
     checkActiveBooking.makePostRequest(Constants.ENDPOINT.GET_BOOKING_DETAILS, {
@@ -709,45 +821,32 @@ const HomeScreen = () => {
     cancelAdvance.loading ||
     retryBooking.loading;
 
-  const onBookPressed = async () => {
-    // "booking should not go through when there is no internet".
-    const online = await checkIsOnline();
-    if (!online) {
-      Alert.alert(
-        OFFLINE_ALERT_TITLE,
-        'You need an internet connection to book a ride. Please reconnect and try again.',
-      );
+  // A ride picked in the booking sheet's list (ServiceList). The sheet prices
+  // it by itself (the fare effect after showChoosePickupPanel), which drops a
+  // fare asked for another ride, so Confirm always books the ride picked.
+  const handleSelectService = service => {
+    if (
+      service?.id == null ||
+      String(service.id) === String(selectedService?.id)
+    ) {
       return;
     }
-
-    // Check location permission before allowing booking
-    const permission = await ensureLocationPermission();
-
-    if (permission !== 'granted') {
-      if (permission === 'blocked') {
-        Alert.alert(
-          'Location Required',
-          'Location access is blocked. Please enable it in Settings to book a ride.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => openSettings() },
-          ],
-        );
-      } else {
-        Alert.alert(
-          'Location Required',
-          'Location access is required to book a ride. Please enable location services.',
-          [{ text: 'OK' }],
-        );
-      }
-      return;
-    }
-
-    setShowServiceModal(true);
-    riderFoundTimeout.current = setTimeout(() => {
-      // setShowRiderFound(true);
-    }, 15000);
+    dispatch(setSelectedService(service));
   };
+
+  // A ride coming soon cannot be chosen: one kept on the phone from before,
+  // or from a past trip booked again, is let go while nothing is booked, and
+  // the passenger picks a ride on offer. A booking placed for it keeps it.
+  useEffect(() => {
+    if (
+      serviceById(selectedService?.id)?.soon &&
+      !isBooked &&
+      !isConfirmed &&
+      activeBooking?.id == null
+    ) {
+      dispatch(setSelectedService(null));
+    }
+  }, [dispatch, selectedService?.id, isBooked, isConfirmed, activeBooking?.id]);
 
   const handleTopRightPress = () => {
     navigation.navigate('SettingsScreen');
@@ -761,19 +860,21 @@ const HomeScreen = () => {
       if (permission === 'granted') {
         startWatching();
       } else if (permission === 'blocked') {
-        Alert.alert(
+        appAlert(
           'Location Access Blocked',
           'Please enable location in Settings to use the app.',
           [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Open Settings', onPress: () => openSettings() },
           ],
+          { icon: 'map-marker-off-outline' },
         );
       } else if (permission === 'denied') {
-        Alert.alert(
+        appAlert(
           'Location Required',
           'This app needs location access to show your position on the map.',
           [{ text: 'OK' }],
+          { icon: 'map-marker-off-outline' },
         );
       }
     });
@@ -796,9 +897,6 @@ const HomeScreen = () => {
     triggerGetPromoList();
 
     return () => {
-      if (riderFoundTimeout.current) {
-        clearTimeout(riderFoundTimeout.current);
-      }
       stopWatching();
     };
   }, []);
@@ -983,7 +1081,6 @@ const HomeScreen = () => {
         if (activeBooking?.id && !isSaved && restoredNum !== 3) {
           dispatch(clearBookingState());
           clearTransientBookingUi();
-          riderAlertShownRef.current = false;
         }
         if (!isSaved && restoredNum !== 3) {
           dispatch(
@@ -1128,14 +1225,6 @@ const HomeScreen = () => {
             long: booking.rider_details.current_long,
           });
         }
-
-        if (booking.status === 1 && !riderAlertShownRef.current) {
-          AppUtil.debugDeep(riderDetails);
-          if (shouldShowRiderFoundAlert(booking)) {
-            setShowRiderFound(true);
-          }
-          riderAlertShownRef.current = true;
-        }
       }
 
       const restoredStatus = Number(booking.status);
@@ -1187,28 +1276,67 @@ const HomeScreen = () => {
     handleGetPromoList();
   }, [getPromoList.response, getPromoList.error]);
 
+  // The trip a fare is asked for (Utils/fareInquiry.js), and what each
+  // inquiry was for. `purpose` 'price' is the sheet pricing the trip by
+  // itself; 'book' is the Book press, which then books an instant ride, or a
+  // scheduled booking, which opens the Confirm step. A fare is used only for
+  // the trip it was asked for.
+  const fareKeyNow = fareKey({
+    pickup: pickupLocation,
+    dropoff: dropoffLocation,
+    serviceId: selectedService?.id,
+    promoId: selectedPromo?.id,
+    scheduledAt,
+  });
+  const inquiryRef = useRef(null); // { key, purpose } of the inquiry sent last
+  const inquiryPendingRef = useRef(null); // purpose of one still in its checks
+  const pricedKeyRef = useRef(null); // the trip the stored fare is for
+  const handledFareRef = useRef(null); // the last answer applied
+  // A refusal for a trip ({ key, message }): shown under the fare, and that
+  // trip is not asked for again by itself.
+  const [fareProblem, setFareProblem] = useState(null);
+
   //INQUIRE BOOKING
-  const triggerInquireBooking = async (bookingTypeOverride = null) => {
+  const triggerInquireBooking = async (
+    bookingTypeOverride = null,
+    purpose = 'book',
+  ) => {
     // guard against a double-tap firing a second request before the
     // button's disabled state has re-rendered.
     if (inquireBooking.loading) {
       return;
     }
+    // An inquiry still in its checks below: a Book press rides on it.
+    if (inquiryPendingRef.current) {
+      if (purpose === 'book') {
+        inquiryPendingRef.current = 'book';
+      }
+      return;
+    }
+    inquiryPendingRef.current = purpose;
+    const settle = () => {
+      const settled = inquiryPendingRef.current;
+      inquiryPendingRef.current = null;
+      return settled;
+    };
 
     // block — no fare inquiry, no booking, without a connection.
     const online = await checkIsOnline();
     if (!online) {
-      Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
+      settle();
+      appAlert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
       return;
     }
 
     const permission = await ensureLocationPermission();
 
     if (permission !== 'granted') {
-      Alert.alert(
+      settle();
+      appAlert(
         'Location Required',
         'Location access is required to inquire booking.',
         [{ text: 'OK' }],
+        { icon: 'map-marker-off-outline' },
       );
       return;
     }
@@ -1220,6 +1348,7 @@ const HomeScreen = () => {
       ? bookingTypeOverride
       : selectedService?.id;
     if (bookingType == null || bookingType === '') {
+      settle();
       setAlertMessage('Please choose a vehicle type first.');
       setShowAlert(true);
       return;
@@ -1238,6 +1367,16 @@ const HomeScreen = () => {
     if (scheduledAt) {
       postdata.scheduled_pickup_at = scheduledAt.toISOString();
     }
+    inquiryRef.current = {
+      key: fareKey({
+        pickup: pickupLocation,
+        dropoff: dropoffLocation,
+        serviceId: bookingType,
+        promoId: selectedPromo?.id,
+        scheduledAt,
+      }),
+      purpose: settle(),
+    };
     inquireBooking.makePostRequest(
       Constants.ENDPOINT.INQUIRE_BOOKING,
       postdata,
@@ -1245,7 +1384,18 @@ const HomeScreen = () => {
   };
 
   const handleInquireBookingRequest = () => {
+    const request = inquiryRef.current;
+    // priced by the sheet itself: nobody pressed anything, so no alert
+    const byItself = request?.purpose === 'price';
+
     if (inquireBooking.error) {
+      setFareProblem({
+        key: request?.key ?? fareKeyNow,
+        message: inquireBooking.error,
+      });
+      if (byItself) {
+        return;
+      }
       setAlertMessage(inquireBooking.error);
       setShowAlert(true);
       return;
@@ -1256,16 +1406,64 @@ const HomeScreen = () => {
     }
 
     const results = inquireBooking?.response;
+    // Each answer once: the error clearing at the next request re-runs this
+    // with the previous answer still in place.
+    if (results === handledFareRef.current) {
+      return;
+    }
+    handledFareRef.current = results;
     AppUtil.debugDeep(results?.data);
 
+    // Asked for a trip that has changed since: the new trip is priced next.
+    if (request && request.key !== fareKeyNow) {
+      return;
+    }
+
     if (results?.code === 200 && results?.data) {
+      // the fare on the sheet for this same trip, before this answer replaces it
+      const tripKey = request?.key ?? fareKeyNow;
+      const shown =
+        pricedKeyRef.current === tripKey ? inquireBookingResponse : null;
       // save to Redux instead of local state
+      pricedKeyRef.current = tripKey;
+      setFareProblem(null);
       dispatch(setInquireBookingResponse(results.data));
-      dispatch(setIsBooked(true));
+      if (byItself) {
+        return;
+      }
+      if (scheduledAt) {
+        // A scheduled ride's fare shows here for the first time, as an
+        // estimate: its Confirm step books it.
+        dispatch(setIsBooked(true));
+        return;
+      }
+      // An instant ride: Book books (the owner, 2026-11-22: a Confirm after
+      // "Book Motorcycle" "is redundant"), at the fare the sheet showed. One
+      // that changed since, or was not on the sheet yet, is shown instead, and
+      // the next press books it.
+      const sameFare =
+        shown &&
+        Number(shown.total_amount) === Number(results.data.total_amount);
+      if (sameFare) {
+        triggerCreateBooking(results.data);
+      } else if (shown) {
+        setAlertMessage(
+          `The fare is now ${formatPeso(
+            results.data.total_amount,
+          )}. Press Book again to book at this fare.`,
+        );
+        setShowAlert(true);
+      }
     } else if (results?.code === 200) {
       // BUG-1: a 200 with no fare data must not open the summary
-      setAlertMessage(FARE_UNAVAILABLE_MESSAGE);
-      setShowAlert(true);
+      setFareProblem({
+        key: request?.key ?? fareKeyNow,
+        message: FARE_UNAVAILABLE_MESSAGE,
+      });
+      if (!byItself) {
+        setAlertMessage(FARE_UNAVAILABLE_MESSAGE);
+        setShowAlert(true);
+      }
     }
   };
 
@@ -1273,17 +1471,17 @@ const HomeScreen = () => {
     handleInquireBookingRequest();
   }, [inquireBooking.response, inquireBooking.error]);
 
-  // A booking needs a complete profile: first name, last name and a photo of
-  // the passenger (the server refuses it otherwise). It is checked at the
-  // first tap, so nobody picks places and a fare only to be turned away.
+  // A booking needs a complete profile: first name and last name (the server
+  // refuses it otherwise; the photo is optional). It is checked at the first
+  // tap, so nobody picks places and a fare only to be turned away.
   const profileComplete = !!userInfo?.profile_complete;
   const requireCompleteProfile = () => {
     if (profileComplete) {
       return true;
     }
-    Alert.alert(
+    appAlert(
       'Complete Your Profile',
-      'Add your first name, last name and a photo of yourself before booking.',
+      'Add your first name and last name before booking.',
       [
         { text: 'Later', style: 'cancel' },
         {
@@ -1296,56 +1494,67 @@ const HomeScreen = () => {
   };
 
   //CREATE BOOKING
-  const triggerCreateBooking = async () => {
-    if (createBooking.loading) {
+  // A booking on its way, from the press until the server answers: the checks
+  // before the request take a moment, and a second press must not book twice.
+  const bookingInFlightRef = useRef(false);
+  // `fareNow`: the fare just priced for this trip (Book), before the sheet's
+  // copy of it has caught up; the Confirm press uses the sheet's.
+  const triggerCreateBooking = async fareNow => {
+    if (createBooking.loading || bookingInFlightRef.current) {
       return;
     }
+    const fare =
+      fareNow?.total_amount != null ? fareNow : inquireBookingResponse;
     if (!requireCompleteProfile()) {
       return;
     }
 
     // BUG-1: never build payment_details from an empty fare
-    if (!inquireBookingResponse) {
+    if (!fare) {
       setAlertMessage(FARE_UNAVAILABLE_MESSAGE);
       setShowAlert(true);
       return;
     }
 
+    bookingInFlightRef.current = true;
     // block — this is the actual booking-creation call, the one that
     // absolutely must not go through while offline.
     const online = await checkIsOnline();
     if (!online) {
-      Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
+      bookingInFlightRef.current = false;
+      appAlert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
       return;
     }
 
     const permission = await ensureLocationPermission();
 
     if (permission !== 'granted') {
-      Alert.alert(
+      bookingInFlightRef.current = false;
+      appAlert(
         'Location Required',
         'Location access is required to create booking.',
         [{ text: 'OK' }],
+        { icon: 'map-marker-off-outline' },
       );
       return;
     }
 
     const payment_details = {
       type: selectedPayment.toLowerCase(),
-      distance_km_round: inquireBookingResponse?.distance_km_round,
-      minimum_fare: inquireBookingResponse?.minimum_fare,
-      pesos_per_km: inquireBookingResponse?.pesos_per_km,
-      booking_fee: inquireBookingResponse?.booking_fee,
-      base_amount: inquireBookingResponse?.base_amount,
-      commission: inquireBookingResponse?.commission,
-      rider_net_amount: inquireBookingResponse?.rider_net_amount,
-      promo_discount: inquireBookingResponse?.promo_discount,
+      distance_km_round: fare?.distance_km_round,
+      minimum_fare: fare?.minimum_fare,
+      pesos_per_km: fare?.pesos_per_km,
+      booking_fee: fare?.booking_fee,
+      base_amount: fare?.base_amount,
+      commission: fare?.commission,
+      rider_net_amount: fare?.rider_net_amount,
+      promo_discount: fare?.promo_discount,
       tip: 0,
-      total_amount_wo_promo: inquireBookingResponse?.total_amount_wo_promo,
-      total_amount: inquireBookingResponse?.total_amount,
+      total_amount_wo_promo: fare?.total_amount_wo_promo,
+      total_amount: fare?.total_amount,
     };
 
-    const all_payment_details = inquireBookingResponse;
+    const all_payment_details = fare;
 
     const postdata = {
       booking_type: String(selectedService?.id ?? ''),
@@ -1372,8 +1581,22 @@ const HomeScreen = () => {
   };
 
   const handleCreateBookingRequest = () => {
+    // a ride paid with a wallet locked until the ID check passes
+    // (WALLET-EKYC-LOCK, A-325): the same box as the Wallet page, nothing
+    // booked; Verify ID starts the check there, or the ride goes on cash
+    if (createBooking.error && isLockedRefusal(createBooking.reason)) {
+      bookingInFlightRef.current = false;
+      appAlert(...lockedAlert(() => navigation.navigate(...verifyParams())));
+      return;
+    }
     if (createBooking.error) {
-      setAlertMessage(createBooking.error);
+      bookingInFlightRef.current = false;
+      // the server's "Insufficient balance!" for a ride paid with the wallet
+      setAlertMessage(
+        /insufficient balance/i.test(String(createBooking.error))
+          ? "Your Pinoy Ride Wallet doesn't have enough for this ride. Top it up, or pay with cash."
+          : createBooking.error,
+      );
       setShowAlert(true);
       return;
     }
@@ -1381,14 +1604,22 @@ const HomeScreen = () => {
     if (!createBooking.response) {
       return;
     }
+    bookingInFlightRef.current = false;
 
     const results = createBooking?.response;
     AppUtil.debugDeep(results);
 
     if (results?.code === 200) {
-      // save to Redux (automatically persisted)
+      // save to Redux (automatically persisted); booked straight from Book,
+      // an instant ride never went through the Confirm step
+      dispatch(setIsBooked(true));
       dispatch(setIsConfirmed(true));
       dispatch(setActiveBooking(results?.data));
+      dispatch(
+        setRecentPlaces(
+          withBooking(recentPlaces, results?.data, savedPlacesRef.current),
+        ),
+      );
       setShowWaitingBanner(true);
     }
   };
@@ -1412,7 +1643,7 @@ const HomeScreen = () => {
       // stop asking for ETA once the rider has arrived at pickup
       include_rider_eta: riderArrived ? '0' : '1',
     };
-    getBookingDetails.makePostRequest(
+    return getBookingDetails.makePostRequest(
       Constants.ENDPOINT.GET_BOOKING_DETAILS,
       postdata,
     );
@@ -1438,6 +1669,16 @@ const HomeScreen = () => {
     }
 
     const { code, data } = response;
+
+    // An answer about another booking (asked for before this one took its
+    // place) is not this booking's state (overnight review 2026-11-23).
+    if (
+      data?.id != null &&
+      activeBooking?.id != null &&
+      String(data.id) !== String(activeBooking.id)
+    ) {
+      return;
+    }
 
     if (
       code === 200 &&
@@ -1469,6 +1710,13 @@ const HomeScreen = () => {
           : null,
       );
 
+      // An advance booking's "Congratulations" goes by itself once the rider
+      // sets off for the pickup: the passenger watches the rider come on the
+      // map instead.
+      if (riderHasSetOff(data)) {
+        setShowAdvanceAccepted(false);
+      }
+
       if (statusNum === 5) {
         if (isReturnedToPool(data) || !hasRider(data, rider_details)) {
           dispatch(clearAcknowledgedScheduledForBooking(data.id));
@@ -1489,12 +1737,6 @@ const HomeScreen = () => {
         if (data.rider_eta) {
           setRiderEta(data.rider_eta);
           setRiderEtaReceivedAt(Date.now());
-        }
-        if (!riderAlertShownRef.current) {
-          if (shouldShowRiderFoundAlert(data)) {
-            setShowRiderFound(true);
-          }
-          riderAlertShownRef.current = true;
         }
       } else if (statusNum === 2) {
         // Keep last good drop-off ETA across booking-details polls; get_eta owns updates.
@@ -1561,24 +1803,28 @@ const HomeScreen = () => {
     handleGetBookingDetails();
   }, [getBookingDetails.response, getBookingDetails.error]);
 
-  // Poll booking details when confirmed
+  // Poll booking details while a booking is on, one request at a time
+  // (sequentialPoll.js says why).
+  const pollBookingDetailsRef = useRef(null);
+  pollBookingDetailsRef.current = triggerGetBookingDetails;
   useEffect(() => {
     if (!activeBooking?.id) {
-      return;
+      return undefined;
     }
-
-    let intervalId;
-    const intervalTime = bookingStatus === 0 ? 1000 : 2000;
-
-    intervalId = setInterval(() => {
-      triggerGetBookingDetails();
-      setEtaStaleTick(t => t + 1);
-    }, intervalTime);
-
-    return () => {
-      clearInterval(intervalId);
-    };
+    return startSequentialPoll(
+      () => pollBookingDetailsRef.current?.(),
+      bookingStatus === 0 ? 1000 : 2000,
+    );
   }, [bookingStatus, activeBooking?.id, isOnline]);
+
+  // The ETA line ages between answers: a clock tick, no request.
+  useEffect(() => {
+    if (!activeBooking?.id) {
+      return undefined;
+    }
+    const id = setInterval(() => setEtaStaleTick(t => t + 1), 2000);
+    return () => clearInterval(id);
+  }, [activeBooking?.id]);
 
   // push notification received (foreground) or tapped: fetch the latest
   // status now instead of waiting for the next poll tick.
@@ -1643,7 +1889,7 @@ const HomeScreen = () => {
     // server — block it offline rather than let it silently no-op.
     const online = await checkIsOnline();
     if (!online) {
-      Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
+      appAlert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
       return;
     }
 
@@ -1664,7 +1910,6 @@ const HomeScreen = () => {
     setPenaltyPreview(null);
     setCancelPreviewLoading(false);
     dispatch(clearBookingState());
-    riderAlertShownRef.current = false;
     setShowWaitingBanner(false);
     // Reset selections
     setSelectedPromo(null);
@@ -1681,7 +1926,7 @@ const HomeScreen = () => {
   const requestFullCancel = async (bookingIdOverride, confirm, advance) => {
     const online = await checkIsOnline();
     if (!online) {
-      Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
+      appAlert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
       return;
     }
     const cancelInstant = () =>
@@ -1743,7 +1988,7 @@ const HomeScreen = () => {
   const confirmPenaltyCancel = async bookingIdOverride => {
     const online = await checkIsOnline();
     if (!online) {
-      Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
+      appAlert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
       return;
     }
     setPenaltyLoading(true);
@@ -1841,6 +2086,9 @@ const HomeScreen = () => {
       // X buttons on the location screen clear the saved points too.
       onPickupClear: () => dispatch(setPickupLocation(null)),
       onDropoffClear: () => dispatch(setDropoffLocation(null)),
+      // Back there empties both points; a schedule begun for them goes too,
+      // so it cannot come back with the next route.
+      onBackOut: handleRideNow,
     });
   };
 
@@ -1850,7 +2098,7 @@ const HomeScreen = () => {
     }
     const online = await checkIsOnline();
     if (!online) {
-      Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
+      appAlert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
       return;
     }
     // Check the open advance booking limit before any location/date steps.
@@ -1899,6 +2147,49 @@ const HomeScreen = () => {
     }
     if (!scheduledAt) {
       setShowPickDate(true);
+    }
+  };
+
+  // "Ride now instead" on the scheduling sheet: leave the advance booking
+  // entirely, as if Schedule had not been tapped, and give back the payment
+  // it had switched to cash.
+  // Out of the Confirm step, back to choosing (the sheet's Edit and the back
+  // button above the map).
+  const handleBackToEdit = () => {
+    dispatch(setIsBooked(false));
+    dispatch(setInquireBookingResponse(null));
+    setShowWaitingBanner(false);
+    // Back from an advance booking confirm: drop the picked date so
+    // the Advance Booking button shows again (payment restores itself).
+    setScheduledAt(null);
+    setAdvanceBookingFlow(false);
+    setAutoBookAfterSchedule(false);
+    pendingScheduleRef.current = null;
+  };
+
+  // The back button above the map while a ride is being chosen (the design
+  // canvas): from Confirm back to choosing; from choosing back to a clean
+  // "Where to?", both points cleared (the owner, 2026-11-22: the pickup pin
+  // stayed on the map after going back).
+  const handleSheetBack = () => {
+    if (isBooked && !isConfirmed) {
+      handleBackToEdit();
+      return;
+    }
+    dispatch(setDropoffLocation(null));
+    dispatch(setPickupLocation(null));
+  };
+
+  const handleRideNow = () => {
+    setShowPickDate(false);
+    setScheduledAt(null);
+    setAdvanceBookingFlow(false);
+    setPickupConfirmPending(false);
+    setAutoBookAfterSchedule(false);
+    pendingScheduleRef.current = null;
+    if (paymentBeforeScheduleRef.current !== null) {
+      setSelectedPayment(paymentBeforeScheduleRef.current);
+      paymentBeforeScheduleRef.current = null;
     }
   };
 
@@ -1965,6 +2256,211 @@ const HomeScreen = () => {
     // 4 = last booking cancelled; Home is idle again (same as BottomModal)
     (bookingStatus === 0 || bookingStatus === 4);
 
+  // Price the trip by itself as soon as pickup, drop-off and a ride are all
+  // set, and again, debounced, when one of them, the promo or the pickup time
+  // changes; not on the Book press (docs/booking-redesign-spec.md, "Service
+  // list"). A fare kept for another trip, or from before the app restarted,
+  // is dropped first: Confirm books the stored fare's own figures. Nothing is
+  // priced once the booking is placed.
+  const fareHeld = isConfirmed || Boolean(activeBooking?.id);
+  const triggerInquireBookingRef = useRef(triggerInquireBooking);
+  triggerInquireBookingRef.current = triggerInquireBooking;
+  useEffect(() => {
+    if (fareHeld) {
+      return undefined;
+    }
+    if (inquireBookingResponse && pricedKeyRef.current !== fareKeyNow) {
+      pricedKeyRef.current = null;
+      dispatch(setInquireBookingResponse(null));
+      return undefined; // runs again without it
+    }
+    const ask = shouldPrice({
+      key: fareKeyNow,
+      held: showChoosePickupPanel || !isOnline || !locationReady,
+      loading: inquireBooking.loading,
+      pricedKey: inquireBookingResponse ? pricedKeyRef.current : null,
+      failedKey: fareProblem?.key ?? null,
+    });
+    if (!ask) {
+      return undefined;
+    }
+    const timer = setTimeout(
+      () => triggerInquireBookingRef.current(null, 'price'),
+      FARE_DEBOUNCE_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [
+    dispatch,
+    fareHeld,
+    fareKeyNow,
+    inquireBookingResponse,
+    showChoosePickupPanel,
+    isOnline,
+    locationReady,
+    inquireBooking.loading,
+    fareProblem,
+  ]);
+
+  // The fare the sheet may show: the one for the trip on screen (a placed
+  // booking keeps its own). The map chip says how long and how far it is.
+  const sheetFare =
+    fareHeld || pricedKeyRef.current === fareKeyNow
+      ? inquireBookingResponse
+      : null;
+
+  // Each trip starts on the PinoyRide Wallet when its balance covers the fare,
+  // on cash otherwise (the owner, 2026-11-23: "starting on pinoy ride wallet if
+  // there is enough balance"). A method the passenger picks on the sheet stands
+  // for that trip; advance bookings stay cash. The server checks the balance
+  // again when the ride is booked. The Google Play build has no wallet
+  // (Utils/walletOff.js): every trip is cash, and the balance is not read.
+  const getWalletBalance = useApiRequest();
+  const paymentChosenForRef = useRef(null); // the trip the passenger picked for
+  const paymentStartedForRef = useRef(null); // the trip and fare it was set for
+  const startingFare = sheetFare?.total_amount;
+  useEffect(() => {
+    if (
+      startingFare === null ||
+      startingFare === undefined ||
+      isBooked ||
+      isConfirmed ||
+      advanceBookingFlow ||
+      scheduledAt ||
+      !userInfo?.id
+    ) {
+      return undefined;
+    }
+    const trip = fareKeyNow;
+    const started = `${trip}|${startingFare}`;
+    if (
+      paymentChosenForRef.current === trip ||
+      paymentStartedForRef.current === started
+    ) {
+      return undefined;
+    }
+    if (walletOff()) {
+      paymentStartedForRef.current = started;
+      setSelectedPayment(startingPayment({ cashOnly: true }));
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      // the wallet answer without its transactions: the balance, and whether
+      // the wallet is locked until the ID check passes (cash then, A-325)
+      const { response } = await getWalletBalance.request(
+        'GET',
+        `${Constants.API.CUSTOMER_WALLET(userInfo.id)}?take=0`,
+      );
+      if (cancelled || paymentChosenForRef.current === trip) {
+        return;
+      }
+      const wallet = response?.data;
+      paymentStartedForRef.current = started;
+      setSelectedPayment(
+        startingPayment({
+          balance: wallet?.availBalance,
+          fare: startingFare,
+          locked: walletLocked(wallet),
+        }),
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    startingFare,
+    fareKeyNow,
+    isBooked,
+    isConfirmed,
+    advanceBookingFlow,
+    scheduledAt,
+    userInfo?.id,
+  ]);
+  const tripChip =
+    sheetFare && !isConfirmed
+      ? tripChipText({
+          minutes: sheetFare.eta_pickup_to_dropoff_minutes,
+          km: sheetFare.distance_km_round,
+        })
+      : '';
+
+  // The map's controls follow the booking sheet: a ride being chosen (both
+  // points set, nothing placed) gets the back button and the trip chip;
+  // "Where to?" gets the locate button.
+  const sheetShown =
+    !showChoosePickupPanel &&
+    (bookingStatus === 0 || bookingStatus === 4 || bookingStatus === 5);
+  const routeSet = Boolean(pickupLocation && dropoffLocation);
+  // The blue dot steps aside while the pickup is where the person is (as
+  // with "Use my current location"): the pickup pin already says so, and
+  // the two would sit on top of each other. Back once they move away.
+  const pickupKmAway = userLocation
+    ? distanceKm(
+        { lat: userLocation.latitude, long: userLocation.longitude },
+        pickupLocation,
+      )
+    : null;
+  const pickupIsHere = pickupKmAway != null && pickupKmAway < 0.05;
+
+  const choosingRide = sheetShown && routeSet && !isConfirmed;
+  const choosingPlace = sheetShown && !routeSet && !isConfirmed;
+  const mapRef = useRef(null);
+
+  // "Riders nearby", for now (the owner, 2026-11-22): a button on the map
+  // that shows the online riders within 4 km (the backend's reach) who are
+  // not booked or in transit, around the pickup, else around the person. One ask per press;
+  // the riders go by themselves after 30 s, or at the next press. Only while
+  // the booking sheet is up.
+  const { nearby, show: showRiders, hide: hideRiders } = useNearbyRiders();
+  useEffect(() => {
+    if (!sheetShown) {
+      hideRiders();
+    }
+  }, [sheetShown, hideRiders]);
+  // the riders (or the search) on the map: the next press takes them away;
+  // after a failure, it tries again
+  const ridersOn = Boolean(nearby?.looking || nearby?.riders);
+  // The dots only: the map stays where it is (the owner, 2026-11-22: "it
+  // should not affect any, just make it show riders").
+  const toggleRiders = () => {
+    if (ridersOn) {
+      hideRiders();
+      return;
+    }
+    // the map's own blue dot last: the location watch may have no position
+    // yet when the map does
+    showRiders(
+      pickupLocation
+        ? { lat: pickupLocation.lat, long: pickupLocation.long }
+        : userLocation
+        ? { lat: userLocation.latitude, long: userLocation.longitude }
+        : mapRef.current?.userPoint() ?? null,
+    );
+  };
+  // "3 riders within 4 km": the reach comes with the answer
+  const ridersLabel = ridersNearbyText(nearby);
+
+  // Android's back does what the back button does while a ride is chosen,
+  // and what it always did otherwise.
+  const sheetBackRef = useRef(null);
+  sheetBackRef.current = choosingRide && !isLoading ? handleSheetBack : null;
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener(
+        'hardwareBackPress',
+        () => {
+          if (!sheetBackRef.current) {
+            return false;
+          }
+          sheetBackRef.current();
+          return true;
+        },
+      );
+      return () => subscription.remove();
+    }, []),
+  );
+
   const pickDatePromptedRef = useRef(false);
   useEffect(() => {
     if (!advanceBookingFlow || !bookLater.enabled || scheduledAt) {
@@ -2023,18 +2519,45 @@ const HomeScreen = () => {
     : null;
 
   const statusNum = Number(bookingStatus);
+  // a rider has the booking: coming (1) or on the ride (2)
+  const tripUnderWay =
+    Boolean(activeBooking?.id) && (statusNum === 1 || statusNum === 2);
   const riderArrived =
     statusNum === 1 &&
     (Boolean(riderArrivedAt) || riderEta?.state === 'arrived');
   const confirmedBookingView =
     riderArrived || statusNum === 2 || statusNum === 3;
-  // While the rider is on the way, the ETA banner (51) and the Safety Guide
-  // chip (26) float over the map just above the trip sheet (see their `bottom`
-  // styles below). The map counts that strip as covered when framing the rider.
+  // An instant booking waiting for a rider: the booking sheet shows "Finding
+  // your rider" (BottomModal `searching`).
+  const searchingSheet =
+    isConfirmed &&
+    statusNum === 0 &&
+    !scheduledAt &&
+    !activeBooking?.is_advance;
+  // The banner over the map steps aside when the sheet says the same: the
+  // rider's arrival time under "Jomar is on the way", or "Finding your rider".
+  // A booking rebooked for another rider too: the "Booking update" box gave
+  // its new reference, and the banner lay half under "Riders nearby" (seen
+  // on the emulator, 2026-11-23).
+  const sheetSaysIt =
+    (statusNum === 1 && Boolean(riderDetails)) || searchingSheet;
+  const showMapBanner =
+    showWaitingBanner && !confirmedBookingView && !sheetSaysIt;
+  // While the rider is on the way, the ETA banner (51) can float over the map
+  // just above the trip sheet (see its `bottom` style below). The map counts
+  // that strip as covered when framing the rider. (The Safety Guide chip that
+  // floated there too is a line in the sheet since 2026-11-23.)
   const floatingAboveSheet =
-    !confirmedBookingView && (statusNum === 1 || statusNum === 2)
-      ? 15 + (showWaitingBanner ? 59 : 0) + 26
+    !confirmedBookingView &&
+    (statusNum === 1 || statusNum === 2) &&
+    showMapBanner
+      ? 15 + 59
       : 0;
+  // While "Riders nearby" is on the map (`sheetShown`: a booked ride waiting
+  // for its rider, or a scheduled one accepted), the banner sits above it:
+  // both stood on the sheet's top edge, and the button hid the banner's first
+  // words (QA LAT-06/08/19, 2026-11-25). The button: 16 off the sheet, 48 high.
+  const mapBannerBottom = modalHeight + (sheetShown ? 16 + 48 + 10 : 15);
 
   const etaBannerText = riderArrived
     ? 'Your Rider has arrived'
@@ -2068,14 +2591,16 @@ New reference: ${activeBooking.ref_code}`
     enabled: bookLater.enabled && !checkActiveBooking.loading,
     isOnline,
     onFound: booking => {
+      const underWay = [1, 2].includes(Number(booking.status));
       if (
-        minimizedAdvanceBookingIds.includes(String(booking.id)) ||
+        // a minimized booking stays tucked away until its rider sets off
+        (minimizedAdvanceBookingIds.includes(String(booking.id)) &&
+          !underWay) ||
         String(booking.id) === String(activeBooking?.id) ||
         staleBookingIdsRef.current.has(bookingKey(booking))
       ) {
         return;
       }
-      const underWay = [1, 2].includes(Number(booking.status));
       if (activeBooking?.id || isBooked) {
         if (!underWay) {
           return;
@@ -2088,7 +2613,6 @@ New reference: ${activeBooking.ref_code}`
         );
         dispatch(clearBookingState());
         clearTransientBookingUi();
-        riderAlertShownRef.current = false;
       }
       dispatch(
         setPickupLocation({
@@ -2187,13 +2711,32 @@ New reference: ${activeBooking.ref_code}`
     serverOffsetMs: bookLater.serverOffsetMs,
   });
 
+  // While a rider is found, the map pings out from the pickup to the reach of
+  // the request, which widens while nobody accepts (the owner, 2026-11-22:
+  // "make a radar ping 1.5 km for me", then 3 km and 5 km); the map follows
+  // it, the whole circle in view.
+  const searchKm = useSearchReach({
+    booking: activeBooking,
+    startedAt: noRiders.startedAt,
+    active: searchingSheet,
+    offsetMs: bookLater.serverOffsetMs,
+  });
+  const radar =
+    searchingSheet && pickupLocation
+      ? {
+          lat: pickupLocation.lat,
+          long: pickupLocation.long,
+          radiusM: searchKm * 1000,
+        }
+      : null;
+
   const handleNoRidersTryAgain = async () => {
     if (!stillUnaccepted) {
       return;
     }
     const online = await checkIsOnline();
     if (!online) {
-      Alert.alert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
+      appAlert(OFFLINE_ALERT_TITLE, OFFLINE_ALERT_MESSAGE);
       return;
     }
     setRetryLoading(true);
@@ -2263,6 +2806,7 @@ New reference: ${activeBooking.ref_code}`
       ) : null}
       <View style={styles.container}>
         <AppMap
+          ref={mapRef}
           initialLat={currentLocation.latitude}
           initialLong={currentLocation.longitude}
           locationReady={locationReady}
@@ -2276,36 +2820,118 @@ New reference: ${activeBooking.ref_code}`
           riderFixId={riderLocation?.id}
           riderHeardAt={riderLocation?.heardAt}
           bottomInset={modalHeight + floatingAboveSheet}
+          showsUser={!pickupIsHere}
+          nearbyRiders={nearby?.riders}
+          radar={radar}
           bookingStatus={bookingStatus}
           interactive
           style={styles.map}
         />
 
-        <TouchableOpacity
-          style={styles.profileButton}
-          onPress={handleTopRightPress}>
-          <Image
-            source={require('@/Assets/Common/HomeScreen/Profile_Icon_1.png')}
-            style={styles.iconImage}
-          />
-        </TouchableOpacity>
+        {/* While a ride is chosen (the design canvas): back on the left,
+            how long and how far on the right; otherwise the profile button. */}
+        {choosingRide ? (
+          <Pressable
+            onPress={handleSheetBack}
+            disabled={isLoading}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            style={styles.mapBack}>
+            <Icon name="chevron-left" size={28} color={look.ink} />
+          </Pressable>
+        ) : tripUnderWay ? (
+          // during the trip (the design): the X on the left, "Follow rider"
+          // on the right (AppMap), no account button
+          tripSheetMinimized ? null : (
+            <Pressable
+              onPress={() => setTripSheetMinimized(true)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Hide the trip details"
+              style={styles.mapBack}>
+              <Icon name="close" size={24} color={look.ink} />
+            </Pressable>
+          )
+        ) : (
+          <TouchableOpacity
+            style={styles.profileButton}
+            onPress={handleTopRightPress}
+            accessibilityRole="button"
+            accessibilityLabel="Your account">
+            {/* the passenger's photo, else their initials (the owner,
+                2026-11-22); the plain icon only while neither is known */}
+            {accountPhoto || accountName ? (
+              <ProfileAvatar
+                uri={accountPhoto}
+                name={accountName}
+                size={51}
+                style={styles.profileAvatar}
+              />
+            ) : (
+              <Image
+                source={require('@/Assets/Common/HomeScreen/Profile_Icon_1.png')}
+                style={styles.iconImage}
+              />
+            )}
+          </TouchableOpacity>
+        )}
 
-        <RiderFoundAlertBox
-          visible={showRiderFound}
-          onClose={() => setShowRiderFound(false)}
-          riderName={
-            riderDetails
-              ? `${riderDetails.ekyc_details?.first_name} ${riderDetails.ekyc_details?.last_name}`
-              : ''
-          }
-          plateNumber={bookingVehicle?.plateNumber || ''}
-          vehicle={bookingVehicle?.label || ''}
-          imageSource={
-            riderDetails?.ekyc_details?.selfie
-              ? { uri: riderDetails.ekyc_details.selfie }
-              : require('@/Assets/Common/Default_Profile.png')
-          }
-        />
+        {choosingRide && tripChip ? (
+          <View
+            style={styles.tripChip}
+            pointerEvents="none"
+            accessible
+            accessibilityLabel={`Trip: ${tripChip}`}>
+            <Icon name="clock-outline" size={16} color={look.ink} />
+            <Text style={styles.tripChipText}>{tripChip}</Text>
+          </View>
+        ) : null}
+
+        {/* "Where to?": back to where the person is */}
+        {choosingPlace && locationReady ? (
+          <Pressable
+            onPress={() => mapRef.current?.centerOn(userLocation)}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel="Show where I am"
+            style={[styles.locateButton, { bottom: modalHeight + 16 }]}>
+            <Icon name="crosshairs-gps" size={22} color={look.ink} />
+          </Pressable>
+        ) : null}
+
+        {/* "Riders nearby", for now: shows the riders within 4 km for 30 s */}
+        {sheetShown ? (
+          <Pressable
+            onPress={toggleRiders}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityState={{ selected: ridersOn }}
+            accessibilityLabel={
+              nearby
+                ? `${ridersLabel}. ${ridersOn ? 'Hide riders' : 'Try again'}`
+                : 'Riders nearby'
+            }
+            style={[
+              styles.ridersButton,
+              nearby && styles.ridersButtonOn,
+              { bottom: modalHeight + 16 },
+            ]}>
+            <Icon
+              name="motorbike"
+              size={20}
+              color={nearby ? look.surface : look.ink}
+            />
+            <Text
+              style={[
+                styles.ridersButtonText,
+                nearby && styles.ridersButtonTextOn,
+              ]}
+              numberOfLines={1}>
+              {ridersLabel}
+            </Text>
+          </Pressable>
+        ) : null}
 
         {showSuccess && (
           <SuccessAlertBox
@@ -2339,24 +2965,16 @@ New reference: ${activeBooking.ref_code}`
           </TouchableOpacity>
         )}
 
-        {showWaitingBanner && !confirmedBookingView && (
-          <View style={[styles.banner, { bottom: modalHeight + 15 }]}>
+        {showMapBanner && (
+          <View style={[styles.banner, { bottom: mapBannerBottom }]}>
             <Text style={styles.bannerText}>{bannerText}</Text>
           </View>
         )}
 
-        {(statusNum === 1 || statusNum === 2) && !confirmedBookingView && (
-          <TouchableOpacity
-            testID="safety-guide-chip"
-            style={[
-              styles.safetyChip,
-              { bottom: modalHeight + 15 + (showWaitingBanner ? 59 : 0) },
-            ]}
-            onPress={() => setShowSafetyGuide(true)}>
-            <Text style={styles.safetyChipText}>Safety Guide</Text>
-          </TouchableOpacity>
-        )}
-        {statusNum === 2 && <EmergencyButton style={styles.emergencyButton} />}
+        {/* help in an emergency for the whole trip, under "Follow rider" */}
+        {tripUnderWay ? (
+          <EmergencyButton style={styles.emergencyButton} />
+        ) : null}
         <SafetyGuideModal
           visible={showSafetyGuide}
           onClose={() => setShowSafetyGuide(false)}
@@ -2386,6 +3004,7 @@ New reference: ${activeBooking.ref_code}`
           penaltyAmount={penaltyPreview?.penalty_amount}
           prettyPenaltyAmount={penaltyPreview?.pretty_penalty_amount}
           penaltyApplies={Boolean(penaltyPreview?.penalty_applies)}
+          instant={Boolean(penaltyPreview?.instant)}
           penaltyPercent={
             penaltyPreview?.cancellation_policy
               ?.passenger_cancel_penalty_percent
@@ -2416,6 +3035,7 @@ New reference: ${activeBooking.ref_code}`
         <PickDateModal
           visible={showPickDate}
           onClose={() => setShowPickDate(false)}
+          onRideNow={handleRideNow}
           onConfirm={handlePickDateConfirm}
           minLeadMinutes={bookLater.minLeadMinutes}
           maxWindowDays={bookLater.maxWindowDays}
@@ -2484,8 +3104,9 @@ New reference: ${activeBooking.ref_code}`
             bookingStatus === 5) && (
             <BottomModal
               onLayout={e => setModalHeight(e.nativeEvent.layout.height)}
+              services={SERVICE_OPTIONS}
               selectedService={selectedService}
-              onBookPressed={onBookPressed}
+              onSelectService={handleSelectService}
               pickup={pickupLocation}
               dropoff={dropoffLocation}
               onPickupChange={location => {
@@ -2500,8 +3121,11 @@ New reference: ${activeBooking.ref_code}`
               onDropoffChange={location =>
                 dispatch(setDropoffLocation(location))
               }
-              onChangeService={() => setShowServiceModal(true)}
+              onPlacesBack={handleRideNow}
               onInquireBooking={() => {
+                if (bookingInFlightRef.current) {
+                  return;
+                }
                 if (requireCompleteProfile()) {
                   triggerInquireBooking();
                 }
@@ -2513,17 +3137,7 @@ New reference: ${activeBooking.ref_code}`
               // One designed dialog (never the phone's native one), chosen
               // by the cancel_advance preview: free or with penalty.
               onBackToConfirm={() => requestFullCancel(undefined, true)}
-              onBackToEdit={() => {
-                dispatch(setIsBooked(false));
-                dispatch(setInquireBookingResponse(null));
-                setShowWaitingBanner(false);
-                // Back from an advance booking confirm: drop the picked date so
-                // the Advance Booking button shows again (payment restores itself).
-                setScheduledAt(null);
-                setAdvanceBookingFlow(false);
-                setAutoBookAfterSchedule(false);
-                pendingScheduleRef.current = null;
-              }}
+              onBackToEdit={handleBackToEdit}
               isBooked={isBooked}
               isConfirmed={isConfirmed}
               showPaymentModal={showPaymentModal}
@@ -2533,8 +3147,12 @@ New reference: ${activeBooking.ref_code}`
               selectedPayment={selectedPayment}
               selectedPromo={selectedPromo}
               noteToRider={noteToRider}
-              inquireBookingResponse={inquireBookingResponse}
+              inquireBookingResponse={sheetFare}
+              fareProblem={
+                fareProblem?.key === fareKeyNow ? fareProblem.message : null
+              }
               isLoading={isLoading}
+              isPricing={inquireBooking.loading}
               permissionStatus={permissionStatus}
               // lets the modal disable Book/Confirm buttons while offline
               // too (defense-in-depth on top of the checks in the triggers)
@@ -2555,6 +3173,7 @@ New reference: ${activeBooking.ref_code}`
               }
               showMinimizeButton={showAcceptedAdvanceTracking}
               onMinimizePress={handleMinimizeAcceptedAdvance}
+              searching={searchingSheet}
             />
           )}
 
@@ -2569,19 +3188,36 @@ New reference: ${activeBooking.ref_code}`
             bookingStatus={bookingStatus}
             pickup={pickupLocation}
             dropoff={dropoffLocation}
-            selectedService={selectedService}
-            onChangeService={() => setShowServiceModal(true)}
             vehicle={bookingVehicle}
+            // under "Jomar is on the way": the arrival time the banner had
+            etaText={statusNum === 1 ? bannerText : ''}
+            // the "Rider found" banner's right side: "3 min away"
+            awayText={
+              statusNum === 1 ? riderAwayText(riderEta, riderEtaReceivedAt) : ''
+            }
+            minimized={tripSheetMinimized}
+            onExpand={() => setTripSheetMinimized(false)}
+            // the existing cancel, with its free or priced dialog; only while
+            // the rider is on the way (the spec: a quiet link, not a button)
+            onCancelRide={
+              statusNum === 1
+                ? () => requestFullCancel(undefined, true)
+                : undefined
+            }
             confirmedBookingView={confirmedBookingView}
             statusBannerText={
               confirmedBookingView && showWaitingBanner && bannerText
                 ? bannerText
                 : ''
             }
-            showSafetyGuide={
-              confirmedBookingView && (statusNum === 1 || statusNum === 2)
+            arrivalText={statusNum === 2 ? dropoffArrivalText(riderEta) : ''}
+            // while the rider comes the sheet is the design's: the plate is
+            // on the driver card, and the map has the Emergency button
+            safetyTip={
+              statusNum === 2
+                ? 'Hold on, and keep your phone away while riding.'
+                : ''
             }
-            onSafetyGuidePress={() => setShowSafetyGuide(true)}
           />
         )}
 
@@ -2589,7 +3225,9 @@ New reference: ${activeBooking.ref_code}`
           visible={showPaymentModal}
           onClose={() => setShowPaymentModal(false)}
           selectedPayment={selectedPayment}
+          cashOnly={advanceBookingFlow || Boolean(scheduledAt)}
           onSelect={method => {
+            paymentChosenForRef.current = fareKeyNow;
             setSelectedPayment(method);
           }}
         />
@@ -2609,23 +3247,6 @@ New reference: ${activeBooking.ref_code}`
           onSave={handleNoteSave}
           initialNote={noteToRider}
         />
-
-        <ServiceModal
-          visible={showServiceModal}
-          onClose={() => setShowServiceModal(false)}
-          onSelect={service => {
-            dispatch(setSelectedService(service));
-            setShowServiceModal(false);
-            if (
-              pickupLocation &&
-              dropoffLocation &&
-              service?.id != null &&
-              (isBooked || inquireBookingResponse)
-            ) {
-              triggerInquireBooking(service.id);
-            }
-          }}
-        />
       </View>
     </>
   );
@@ -2635,7 +3256,7 @@ export default HomeScreen;
 
 const { width, height } = Dimensions.get('window');
 
-const getStyles = ({ colors }) =>
+const getStyles = ({ colors, look }) =>
   StyleSheet.create({
     container: {
       flex: 1,
@@ -2646,25 +3267,11 @@ const getStyles = ({ colors }) =>
       width,
       height,
     },
-    safetyChip: {
-      position: 'absolute',
-      left: 30,
-      height: 26,
-      paddingHorizontal: 10,
-      borderRadius: 4,
-      backgroundColor: '#084CF7',
-      justifyContent: 'center',
-      zIndex: 10,
-    },
-    safetyChipText: {
-      fontFamily: 'Poppins Medium',
-      fontSize: 11,
-      color: '#FFFFFF',
-    },
+    // under "Follow rider" (AppMap: top 61, 48 high, right 28)
     emergencyButton: {
       position: 'absolute',
-      top: 70,
-      right: 92,
+      top: 121,
+      right: 28,
       zIndex: 15,
     },
     profileButton: {
@@ -2673,10 +3280,112 @@ const getStyles = ({ colors }) =>
       right: 28,
       zIndex: 15,
     },
+    // the back button and the chip sit where the profile button does
+    // (51 high at top 60)
+    mapBack: {
+      position: 'absolute',
+      top: 61,
+      left: 28,
+      zIndex: 15,
+      width: 48,
+      height: 48,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: look.surface,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.12,
+      shadowRadius: 10,
+      elevation: 6,
+    },
+    locateButton: {
+      position: 'absolute',
+      right: 20,
+      zIndex: 15,
+      width: 48,
+      height: 48,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: look.surface,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.12,
+      shadowRadius: 10,
+      elevation: 6,
+    },
+    // on the left, level with the locate button
+    ridersButton: {
+      position: 'absolute',
+      left: 20,
+      zIndex: 15,
+      maxWidth: '70%',
+      height: 48,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 16,
+      borderRadius: 24,
+      backgroundColor: look.surface,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.12,
+      shadowRadius: 10,
+      elevation: 6,
+    },
+    ridersButtonOn: {
+      backgroundColor: look.ink,
+    },
+    ridersButtonText: {
+      flexShrink: 1,
+      fontFamily: 'Poppins Medium',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.ink,
+    },
+    ridersButtonTextOn: {
+      color: look.surface,
+    },
+    tripChip: {
+      position: 'absolute',
+      top: 65,
+      right: 28,
+      zIndex: 15,
+      minHeight: 40,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 14,
+      borderRadius: 20,
+      backgroundColor: look.surface,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.12,
+      shadowRadius: 10,
+      elevation: 6,
+    },
+    tripChipText: {
+      fontFamily: 'Poppins Medium',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.ink,
+    },
     iconImage: {
       width: 51,
       height: 51,
       resizeMode: 'contain',
+    },
+    // the photo or the initials on the map: a white ring keeps it apart from
+    // the streets under it
+    profileAvatar: {
+      borderWidth: 2.5,
+      borderColor: '#FFFFFF',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.18,
+      shadowRadius: 6,
+      elevation: 5,
     },
     // Figma frame 93: 370x51, 30pt side inset, radius 10, #FEC107
     banner: {
@@ -2726,10 +3435,11 @@ const getStyles = ({ colors }) =>
       fontSize: 12,
       color: '#FFFFFF',
     },
+    // white on the red banner, in both looks
     offlineBannerText: {
       fontWeight: '600',
       fontSize: 12,
-      color: colors.primaryLight,
+      color: '#FFFFFF',
     },
     loadingContainer: {
       flex: 1,

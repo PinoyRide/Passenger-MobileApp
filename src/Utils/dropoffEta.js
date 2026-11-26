@@ -2,6 +2,8 @@
 // Arrival = now + eta_minutes, shown as "12:15 PM". Uses booking/get_eta.
 // Once a drop-off ETA has appeared, keep it until a newer valid one arrives
 // or the ride ends — never hide it for staleness or a failed poll.
+const { arrivalText } = require('./arrivalText');
+
 const IN_TRANSIT = 'In transit. Do not use your phone';
 
 const isDropoffEta = eta =>
@@ -64,10 +66,41 @@ const getDropoffEtaText = (dropoffEta, _receivedAt, now = Date.now()) => {
     : IN_TRANSIT;
 };
 
+// Minutes in a pretty ETA: "15 mins", "1 hr 5 mins"; null when it has none.
+const minutesInPretty = pretty => {
+  if (typeof pretty !== 'string') {
+    return null;
+  }
+  const hours = pretty.match(/(\d+)\s*h/i);
+  const minutes = pretty.match(/(\d+)\s*min/i);
+  if (!hours && !minutes) {
+    return null;
+  }
+  return (
+    (hours ? Number(hours[1]) * 60 : 0) + (minutes ? Number(minutes[1]) : 0)
+  );
+};
+
+// During the trip, the line under "Heading to Pembo Taguig" in the trip sheet
+// (the owner, 2026-11-23: "make it cleaner and the ETA"): "Arriving at 4:10
+// AM · 15 min" or "Arriving now" (Utils/arrivalText.js, shared with the Rider
+// app); '' until a drop-off ETA has come.
+const dropoffArrivalText = (dropoffEta, now = Date.now()) => {
+  if (!isDropoffEta(dropoffEta)) {
+    return '';
+  }
+  const minutes =
+    dropoffEta.eta_minutes ??
+    dropoffEta.minutes ??
+    minutesInPretty(dropoffEta.pretty);
+  return arrivalText(dropoffEta.state, minutes, now);
+};
+
 module.exports = {
   IN_TRANSIT,
   isDropoffEta,
   keepDropoffEta,
   formatArrivalClock,
   getDropoffEtaText,
+  dropoffArrivalText,
 };

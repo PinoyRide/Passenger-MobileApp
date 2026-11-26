@@ -1,7 +1,8 @@
 import { AppButton, AppMap } from '@/Components';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  Alert,
+  ActivityIndicator,
+  BackHandler,
   Dimensions,
   Image,
   Keyboard,
@@ -22,6 +23,20 @@ import { openSettings } from 'react-native-permissions';
 import { Constants } from '@/Utils';
 import { addSavedPlace, updateSavedPlace } from '@/Redux/Slices/userSlice';
 import { useLocation } from '@/Hooks/useLocation';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { bottomSpace } from '@/Utils/bottomSpace';
+import appAlert from '@/Utils/appAlert';
+import useApiRequest from '@/Services/ApiV2';
+import {
+  distanceLabel,
+  nearOf,
+  placeFrom,
+  placeLine,
+} from '@/Utils/placeSession';
+import usePlaceSearch from '@/Hooks/usePlaceSearch';
+import PlaceSearchBar from '@/Components/PlaceSearch/PlaceSearchBar';
+import PlaceResultRow from '@/Components/PlaceSearch/PlaceResultRow';
+import { modern } from '@/Theme/modern';
 
 const getIconForType = type => {
   switch (type) {
@@ -37,8 +52,12 @@ const getIconForType = type => {
 };
 
 const SaveLocationScreen = () => {
-  const { colors } = useTheme();
-  const styles = getStyles({ colors });
+  // The navigation bar may cover the bottom of the screen: keep the bottom content clear of it
+  const { bottom: bottomInset } = useSafeAreaInsets();
+  const theme = useTheme();
+  const { colors } = theme;
+  const look = modern(theme);
+  const styles = getStyles({ colors, look });
   const navigation = useNavigation();
   const route = useRoute();
   const dispatch = useDispatch();
@@ -52,6 +71,38 @@ const SaveLocationScreen = () => {
   const [selectedAddress, setSelectedAddress] = useState('');
   const [label, setLabel] = useState('');
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
+
+  // Search for the place by name or address, or tap it on the map (the owner,
+  // 2026-11-23: "adding a location search bar in Add Saved Place for faster
+  // and more accurate address selection"). The suggestions while typing, then
+  // the place picked looked up alone: one Google session, as the booking
+  // search does (Utils/placeSession.js), asked 300 ms after the last key.
+  // The search itself is shared with the Rider's Home Address (A-328,
+  // Hooks/usePlaceSearch.js): any letter typed asks, with no limit, as before.
+  const searchRequest = useApiRequest();
+  const detailsRequest = useApiRequest();
+  const search = usePlaceSearch({
+    suggest: async (typed, token) => {
+      const near = nearOf(
+        location ? { lat: location.latitude, long: location.longitude } : null,
+      );
+      const { response, error, stale } = await searchRequest.request(
+        'GET',
+        Constants.API.PLACE_AUTOCOMPLETE(typed, token, near),
+      );
+      return { data: response?.data, failed: !!error, stale };
+    },
+    details: async (placeId, token) => {
+      const { response, error } = await detailsRequest.request(
+        'GET',
+        Constants.API.PLACE_DETAILS(placeId, token),
+      );
+      return { data: response?.data, failed: !!error };
+    },
+  });
+  const { query, status: searchStatus, suggestions } = search;
+  const [searchFocused, setSearchFocused] = useState(false);
+  const searchInputRef = useRef(null);
 
   // Default location (Manila)
   const defaultLocation = {
@@ -104,7 +155,7 @@ const SaveLocationScreen = () => {
   // Check permission on mount
   useEffect(() => {
     if (permissionStatus === 'blocked') {
-      Alert.alert(
+      appAlert(
         'Location Access Blocked',
         'Please enable location in Settings to save locations.',
         [
@@ -115,15 +166,65 @@ const SaveLocationScreen = () => {
           },
           { text: 'Open Settings', onPress: () => openSettings() },
         ],
+        { icon: 'map-marker-off-outline' },
       );
     } else if (permissionStatus === 'denied') {
-      Alert.alert(
+      appAlert(
         'Location Required',
         'Location access helps you save locations more easily.',
         [{ text: 'OK' }],
+        { icon: 'map-marker-off-outline' },
       );
     }
   }, [permissionStatus]);
+
+  const closeSearch = () => {
+    search.clear();
+    searchInputRef.current?.blur();
+    Keyboard.dismiss();
+  };
+
+  // the back button closes the search first
+  useEffect(() => {
+    if (!searchFocused) {
+      return undefined;
+    }
+    const back = BackHandler.addEventListener('hardwareBackPress', () => {
+      closeSearch();
+      return true;
+    });
+    return () => back.remove();
+  }, [searchFocused]);
+
+  const pickSuggestion = async item => {
+    // null: an earlier tap is still being looked up
+    const picked = await search.pick(item);
+    if (!picked) {
+      return;
+    }
+    const place = picked.failed ? null : placeFrom(picked.data, item);
+    if (!place) {
+      appAlert(
+        'Place not found',
+        'Unable to get that place. Please try again.',
+      );
+      return;
+    }
+    setSelectedLocation({ latitude: place.lat, longitude: place.long });
+    setSelectedAddress(placeLine(place));
+    closeSearch();
+  };
+
+  const pickCurrentLocation = () => {
+    if (!location) {
+      return;
+    }
+    closeSearch();
+    handleMapPress({
+      latitude: location.latitude,
+      longitude: location.longitude,
+    });
+  };
 
   const handleMapPress = async ({ latitude, longitude }) => {
     setSelectedLocation({ latitude, longitude });
@@ -133,7 +234,7 @@ const SaveLocationScreen = () => {
   const reverseGeocode = async (latitude, longitude) => {
     try {
       const response = await fetch(
-        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${Constants.GOOGLE_MAP_API_KEY}`,
+        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${Constants.GOOGLE_ROUTES_API_KEY}`,
       );
       const data = await response.json();
 
@@ -152,7 +253,7 @@ const SaveLocationScreen = () => {
   const handleSave = () => {
     // Validate label
     if (!label.trim()) {
-      Alert.alert(
+      appAlert(
         'Label Required',
         'Please enter a label for this location (e.g., Home, Office, Gym).',
         [{ text: 'OK' }],
@@ -162,10 +263,11 @@ const SaveLocationScreen = () => {
 
     // ✅ Validate that user actually selected a location on the map
     if (!selectedLocation || !selectedAddress) {
-      Alert.alert(
+      appAlert(
         'Location Required',
-        'Please tap on the map to select a location before saving.',
+        'Search for the place, or tap it on the map, before saving.',
         [{ text: 'OK' }],
+        { icon: 'map-marker-off-outline' },
       );
       return;
     }
@@ -182,7 +284,7 @@ const SaveLocationScreen = () => {
       );
 
       if (isCoordinates) {
-        Alert.alert(
+        appAlert(
           'Invalid Location',
           'Unable to get address for this location. Please try selecting a different location or check your internet connection.',
           [{ text: 'OK' }],
@@ -235,8 +337,62 @@ const SaveLocationScreen = () => {
             <View style={styles.backButton} />
           </View>
 
+          <PlaceSearchBar
+            inputRef={searchInputRef}
+            value={query}
+            onChangeText={search.onQuery}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
+            placeholder="Search for a place or address"
+            showCancel={searchFocused}
+            onCancel={closeSearch}
+          />
+
+          {searchFocused ? (
+            <ScrollView
+              style={styles.results}
+              contentContainerStyle={styles.resultsContent}
+              keyboardShouldPersistTaps="handled">
+              {!query.trim() && location ? (
+                <PlaceResultRow
+                  icon="crosshairs-gps"
+                  title="Use my current location"
+                  onPress={pickCurrentLocation}
+                />
+              ) : null}
+              {!query.trim() ? (
+                <Text style={styles.searchHint}>
+                  Type the name of a place, a building or a street.
+                </Text>
+              ) : null}
+              {query.trim() && searchStatus === 'searching' ? (
+                <ActivityIndicator
+                  style={styles.searchSpinner}
+                  color={look.accent}
+                />
+              ) : null}
+              {/* the same words for no place and no answer, as before */}
+              {query.trim() &&
+              (searchStatus === 'empty' || searchStatus === 'failed') ? (
+                <Text style={styles.searchHint}>
+                  No places found. Try another name, or tap the map.
+                </Text>
+              ) : null}
+              {suggestions.map(item => (
+                <PlaceResultRow
+                  key={item.place_id}
+                  icon="map-marker-outline"
+                  title={item.display_name || item.description}
+                  subtitle={item.address}
+                  distance={distanceLabel(item.distance_km)}
+                  onPress={() => pickSuggestion(item)}
+                />
+              ))}
+            </ScrollView>
+          ) : null}
+
           {/* ✅ Hide map when keyboard is visible to save space */}
-          {!isKeyboardVisible && (
+          {!searchFocused && !isKeyboardVisible && (
             <View style={styles.mapWrapper}>
               <AppMap
                 initialLat={existingPlace?.lat || currentLocation.lat}
@@ -255,7 +411,7 @@ const SaveLocationScreen = () => {
                 <View style={styles.mapOverlay}>
                   <View style={styles.instructionBubble}>
                     <Text style={styles.instructionText}>
-                      📍 Tap anywhere on the map to select a location
+                      Search above, or tap the map
                     </Text>
                   </View>
                 </View>
@@ -263,80 +419,85 @@ const SaveLocationScreen = () => {
             </View>
           )}
 
-          <View
-            style={[
-              styles.bottomPanel,
-              isKeyboardVisible && styles.bottomPanelExpanded,
-            ]}>
-            <ScrollView
-              contentContainerStyle={styles.scrollContent}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled">
-              <View style={styles.inputSection}>
-                <Text style={styles.inputLabel}>Label *</Text>
-                <View style={styles.inputRow}>
-                  <Image
-                    source={getIconForType(
-                      locationType || existingPlace?.type || 'other',
-                    )}
-                    style={styles.inputIcon}
-                    resizeMode="contain"
-                  />
-                  <TextInput
-                    value={label}
-                    onChangeText={setLabel}
-                    placeholder="e.g., Home, Office, Gym"
-                    style={styles.inputText}
-                    placeholderTextColor={colors.grey3}
-                    returnKeyType="done"
-                    blurOnSubmit={true}
-                  />
+          {searchFocused ? null : (
+            <View
+              style={[
+                styles.bottomPanel,
+                isKeyboardVisible && styles.bottomPanelExpanded,
+              ]}>
+              <ScrollView
+                contentContainerStyle={[
+                  styles.scrollContent,
+                  { paddingBottom: bottomSpace(bottomInset, 20) },
+                ]}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled">
+                <View style={styles.inputSection}>
+                  <Text style={styles.inputLabel}>Label *</Text>
+                  <View style={styles.inputRow}>
+                    <Image
+                      source={getIconForType(
+                        locationType || existingPlace?.type || 'other',
+                      )}
+                      style={styles.inputIcon}
+                      resizeMode="contain"
+                    />
+                    <TextInput
+                      value={label}
+                      onChangeText={setLabel}
+                      placeholder="e.g., Home, Office, Gym"
+                      style={styles.inputText}
+                      placeholderTextColor={colors.grey3}
+                      returnKeyType="done"
+                      blurOnSubmit={true}
+                    />
+                  </View>
                 </View>
-              </View>
 
-              <View style={styles.addressContainer}>
-                <Text style={styles.inputLabel}>Selected Location *</Text>
-                <View
-                  style={[
-                    styles.addressRow,
-                    !selectedAddress && styles.addressRowEmpty,
-                  ]}>
-                  <Image
-                    source={require('@/Assets/Common/Location/Location.png')}
-                    style={styles.addressIcon}
-                    resizeMode="contain"
-                  />
-                  <Text
+                <View style={styles.addressContainer}>
+                  <Text style={styles.inputLabel}>Selected Location *</Text>
+                  <View
                     style={[
-                      styles.addressText,
-                      !selectedAddress && styles.addressTextPlaceholder,
-                    ]}
-                    numberOfLines={2}>
-                    {selectedAddress || 'Tap map to select location'}
-                  </Text>
+                      styles.addressRow,
+                      !selectedAddress && styles.addressRowEmpty,
+                    ]}>
+                    <Image
+                      source={require('@/Assets/Common/Location/Location.png')}
+                      style={styles.addressIcon}
+                      resizeMode="contain"
+                    />
+                    <Text
+                      style={[
+                        styles.addressText,
+                        !selectedAddress && styles.addressTextPlaceholder,
+                      ]}
+                      numberOfLines={2}>
+                      {selectedAddress || 'Search or tap the map'}
+                    </Text>
+                  </View>
                 </View>
-              </View>
 
-              {/* ✅ Show hint when keyboard is visible */}
-              {isKeyboardVisible && !selectedLocation && (
-                <View style={styles.keyboardHint}>
-                  <Text style={styles.keyboardHintText}>
-                    💡 Close keyboard to select location on map
-                  </Text>
-                </View>
-              )}
+                {/* ✅ Show hint when keyboard is visible */}
+                {isKeyboardVisible && !selectedLocation && (
+                  <View style={styles.keyboardHint}>
+                    <Text style={styles.keyboardHintText}>
+                      💡 Close keyboard to select location on map
+                    </Text>
+                  </View>
+                )}
 
-              <AppButton
-                title="Save Location"
-                onPress={handleSave}
-                isBold
-                // ✅ Disable button if required fields are empty
-                disabled={
-                  !label.trim() || !selectedLocation || !selectedAddress
-                }
-              />
-            </ScrollView>
-          </View>
+                <AppButton
+                  title="Save Location"
+                  onPress={handleSave}
+                  isBold
+                  // ✅ Disable button if required fields are empty
+                  disabled={
+                    !label.trim() || !selectedLocation || !selectedAddress
+                  }
+                />
+              </ScrollView>
+            </View>
+          )}
         </View>
       </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
@@ -347,11 +508,29 @@ export default SaveLocationScreen;
 
 const { width } = Dimensions.get('window');
 
-const getStyles = ({ colors }) =>
+const getStyles = ({ colors, look }) =>
   StyleSheet.create({
+    results: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    resultsContent: {
+      paddingHorizontal: 16,
+      paddingBottom: 24,
+    },
+    searchHint: {
+      paddingVertical: 14,
+      fontFamily: 'Poppins Regular',
+      fontSize: 13,
+      lineHeight: 19,
+      color: look.muted,
+    },
+    searchSpinner: {
+      marginTop: 20,
+    },
     container: {
       flex: 1,
-      backgroundColor: '#fff',
+      backgroundColor: colors.background,
     },
     header: {
       flexDirection: 'row',
@@ -379,8 +558,9 @@ const getStyles = ({ colors }) =>
       fontWeight: '600',
       color: '#fff',
     },
+    // the map takes what the panel leaves
     mapWrapper: {
-      flex: 6,
+      flex: 1,
       width,
       position: 'relative',
     },
@@ -404,9 +584,14 @@ const getStyles = ({ colors }) =>
       fontSize: 14,
       textAlign: 'center',
     },
+    // As tall as what it holds, so Save Location always shows above
+    // Android's navigation bar (the owner, 2026-11-22: "fix this page it is
+    // overlapping"). A fixed 40% of the screen was shorter than the fields
+    // and the button, which ended under the bar. On a short screen it stops
+    // at 60% and scrolls, so some map stays.
     bottomPanel: {
-      flex: 4,
-      backgroundColor: '#fff',
+      maxHeight: '60%',
+      backgroundColor: colors.background,
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
       shadowColor: '#000',
@@ -419,6 +604,7 @@ const getStyles = ({ colors }) =>
     // ✅ Expand bottom panel when keyboard is visible
     bottomPanelExpanded: {
       flex: 1,
+      maxHeight: '100%',
     },
     scrollContent: {
       paddingBottom: 20,

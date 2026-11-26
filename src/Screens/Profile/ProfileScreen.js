@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useCallback } from 'react';
 import {
   BackHandler,
   Image,
@@ -11,9 +11,11 @@ import {
 import Container from '@/Components/Container/Container';
 import ProfileAvatar from '@/Components/ProfileAvatar/ProfileAvatar';
 import { useTheme } from 'react-native-paper';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { selectUserInfo } from '@/Redux/Slices/userSlice';
 import { useSelector } from 'react-redux';
+import { displayMobile, fullNameOf, titleCase } from '@/Utils/personName';
+import { genderOf } from '@/Utils/gender';
 
 const ProfileScreen = () => {
   const { colors } = useTheme();
@@ -21,100 +23,57 @@ const ProfileScreen = () => {
   const navigation = useNavigation();
   const userInfo = useSelector(selectUserInfo);
   const ekyc = userInfo?.ekyc_details;
+  // the gender the passenger chose (registration or Edit), and its badge on
+  // the photo (the owner, 2026-11-23: "display in profile also having a badge")
+  const gender = genderOf(userInfo?.gender);
 
-  // Intercept hardware back button
-  useEffect(() => {
-    const backHandler = BackHandler.addEventListener(
-      'hardwareBackPress',
-      () => {
-        navigation.goBack();
-        return true;
-      },
-    );
-    return () => backHandler.remove();
-  }, [navigation]);
+  // Back while this page is on screen only: registered for good, it also
+  // answered Back on Edit profile and removed this page from under it
+  // (overnight review 2026-11-23).
+  useFocusEffect(
+    useCallback(() => {
+      const backHandler = BackHandler.addEventListener(
+        'hardwareBackPress',
+        () => {
+          navigation.goBack();
+          return true;
+        },
+      );
+      return () => backHandler.remove();
+    }, [navigation]),
+  );
 
-  const toTitleCase = str => {
-    if (!str) {
-      return '';
-    }
-    return str
-      .toLowerCase()
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  };
-
-  const formatAddress = address => {
-    if (!address) {
-      return 'N/A';
-    }
-    // Remove leading dash/hyphen if present
-    return address.startsWith('-') ? address.slice(1).trim() : address.trim();
-  };
-
-  const formatMobile = mobile => {
-    if (!mobile) {
-      return 'N/A';
-    }
-    // Format as +63 • XXXXXXXXXX
-    if (mobile.startsWith('63')) {
-      return `+63 •  0${mobile.slice(2)}`;
-    }
-    if (mobile.startsWith('09')) {
-      return `+63 •  ${mobile}`;
-    }
-    return mobile;
-  };
-
+  // What the account holds, as the Account page and the edit form read it:
+  // the number it signs in with and the email given at registration or in
+  // Edit (the old TOP PH identity check's email, gender and address never
+  // reach the app, so those rows only ever said N/A; the owner, 2026-11-23:
+  // "check why it is N/A even when we have it").
   const fields = [
     {
       label: 'Name',
       value:
         [
-          toTitleCase(ekyc?.first_name || userInfo?.fname),
-          toTitleCase(ekyc?.middle_name || userInfo?.mname),
-          toTitleCase(ekyc?.last_name || userInfo?.lname),
+          titleCase(ekyc?.first_name || userInfo?.fname),
+          titleCase(ekyc?.middle_name || userInfo?.mname),
+          titleCase(ekyc?.last_name || userInfo?.lname),
         ]
           .filter(Boolean)
           .join(' ') || 'Not set yet',
     },
     {
       label: 'Mobile Number',
-      value: formatMobile(ekyc?.mobile_no || ekyc?.pretty_mobile_no),
+      // "+63 966 852 7271" (Utils/personName.js)
+      value:
+        displayMobile(userInfo?.mobile || ekyc?.mobile_no) || 'Not set yet',
     },
     {
       label: 'Email Address',
-      value: ekyc?.email_address || 'N/A',
+      value: userInfo?.email?.trim() || 'Not added yet',
     },
-    // {
-    //   label: 'Date of Birth',
-    //   value: ekyc?.date_of_birth || 'N/A',
-    // },
-    // {
-    //   label: 'Place of Birth',
-    //   value: ekyc?.place_of_birth || 'N/A',
-    // },
-    // {
-    //   label: 'Nationality',
-    //   value: ekyc?.nationality || 'N/A',
-    // },
     {
       label: 'Gender',
-      value: ekyc?.gender ? toTitleCase(ekyc.gender) : 'N/A',
+      value: gender?.label || 'Not set yet',
     },
-    {
-      label: 'Address',
-      value: formatAddress(ekyc?.current_address),
-    },
-    // {
-    //   label: 'Nature of Work',
-    //   value: ekyc?.nature_of_work || 'N/A',
-    // },
-    // {
-    //   label: 'Source of Fund',
-    //   value: ekyc?.source_of_fund || 'N/A',
-    // },
   ];
 
   return (
@@ -130,7 +89,13 @@ const ProfileScreen = () => {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Profile Photo */}
         <View style={styles.avatarContainer}>
-          <ProfileAvatar uri={userInfo?.selfie || ekyc?.selfie} size={90} />
+          <ProfileAvatar
+            uri={userInfo?.selfie || ekyc?.selfie}
+            name={fullNameOf(userInfo)}
+            size={90}
+            badge={gender?.icon}
+            badgeLabel={gender?.label}
+          />
           {/* <TouchableOpacity style={styles.cameraButton} onPress={() => {}}>
             <Image
               source={require('@/Assets/Common/Camera.png')}
@@ -145,7 +110,7 @@ const ProfileScreen = () => {
           onPress={() => navigation.navigate('CompleteProfileScreen')}>
           <Text style={styles.editButtonText}>
             {userInfo?.profile_complete
-              ? 'Edit name or photo'
+              ? 'Edit profile'
               : 'Complete your profile'}
           </Text>
         </TouchableOpacity>

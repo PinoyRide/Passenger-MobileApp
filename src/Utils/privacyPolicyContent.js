@@ -217,7 +217,7 @@ module.exports = {
         },
         {
           type: 'li',
-          text: 'Supabase (secure cloud storage for uploaded photos and documents) and Render (the servers and database that run the Services);',
+          text: 'Render (the servers, database and secure file storage that run the Services, including uploaded photos and documents);',
           indent: 1,
         },
         {

@@ -1,377 +1,475 @@
-import React, { useEffect } from 'react';
-import { deletePushToken } from '@/Services/Push/pushPlatform';
+import React, { useCallback, useState } from 'react';
 import {
-  Alert,
   BackHandler,
-  Image,
-  Platform,
+  Linking,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
+import Constants from 'expo-constants';
+import { useTheme } from 'react-native-paper';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useDispatch, useSelector } from 'react-redux';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Container from '@/Components/Container/Container';
 import ProfileAvatar from '@/Components/ProfileAvatar/ProfileAvatar';
-import { useTheme } from 'react-native-paper';
-import { CommonActions, useNavigation } from '@react-navigation/native';
+import { MenuGroup, MenuRow } from '@/Components/Menu/Menu';
+import SafetyGuideModal from '@/Components/SafetyGuide/SafetyGuideModal';
+import usePostRequest from '@/Services/Api';
+import useApiRequest from '@/Services/ApiV2';
+import { Constants as AppConstants, AppUtil } from '@/Utils';
+import { APP_BUILD } from '@/Utils/appBuild';
+import { displayVersion } from '@/Utils/displayVersion';
+import { displayMobile, fullNameOf } from '@/Utils/personName';
+import { genderOf } from '@/Utils/gender';
+import { modern } from '@/Theme/modern';
 import {
-  clearBookingState,
-  clearSavedPlaces,
-  clearUserInfo,
-  selectActiveBooking,
-  selectBookingStatus,
+  markPromosSeen,
+  selectSeenPromoIds,
   selectUserInfo,
 } from '@/Redux/Slices/userSlice';
-import { useDispatch, useSelector } from 'react-redux';
-import useApiRequest from '@/Services/ApiV2';
-import { AppUtil, Constants } from '@/Utils';
-import { checkIsOnline } from '@/Utils/Network';
+import appAlert from '@/Utils/appAlert';
+import { supportAlert } from '@/Utils/supportContact';
+import { walletOff } from '@/Utils/walletOff';
+import {
+  cashInTap,
+  lockedAlert,
+  lockedCardNote,
+  verifyParams,
+  walletLocked,
+} from '@/Utils/walletLock';
 
+// The Account page, opened by the profile button on the map, as the owner's
+// design draws it (2026-11-22): who you are, the wallet, the ride pages,
+// Settings and help, and help in an emergency. Log out is in Settings only
+// (the owner, 2026-11-23: "redundunt logout button, retain the one in
+// settings"), as in the Rider app.
 const SettingsScreen = () => {
-  const { colors } = useTheme();
-  const styles = getStyles({ colors });
+  const look = modern(useTheme());
+  const styles = getStyles(look);
   const navigation = useNavigation();
   const dispatch = useDispatch();
   const userInfo = useSelector(selectUserInfo);
-  const activeBooking = useSelector(selectActiveBooking);
-  const bookingStatus = useSelector(selectBookingStatus);
-  const { request: logoutRequest, loading: loggingOut } = useApiRequest();
-  const { request: deleteRequest, loading: deletingAccount } = useApiRequest();
+  const seenPromoIds = useSelector(selectSeenPromoIds);
+  const walletRequest = useApiRequest();
+  const promoRequest = usePostRequest();
+  const [balance, setBalance] = useState(
+    userInfo?.wallet_details?.avail_balance ?? null,
+  );
+  // locked until the ID check passes (WALLET-EKYC-LOCK, A-325): Cash in asks
+  // to verify first (Utils/walletLock.js). null until the wallet has been
+  // read: not known yet, so Cash in opens the Wallet page, which reads it
+  // (Q-UX-WALLET-LOCK-POLISH F5)
+  const [locked, setLocked] = useState(null);
+  const [promoIds, setPromoIds] = useState([]);
+  const [showSafetyGuide, setShowSafetyGuide] = useState(false);
+  // the Google Play build has no wallet (Utils/walletOff.js): no card, no
+  // Cash in, no Payment options, and no balance read
+  const noWallet = walletOff();
 
-  useEffect(() => {
-    AppUtil.debugDeep(userInfo);
-  });
+  // Back goes home while this page is the one on screen. Kept only while it
+  // is focused: registered for good, it also answered Back on the pages
+  // opened from here (History, Wallet, Settings), which then jumped home
+  // (overnight review 2026-11-23).
+  useFocusEffect(
+    useCallback(() => {
+      const backHandler = BackHandler.addEventListener(
+        'hardwareBackPress',
+        () => {
+          navigation.popToTop();
+          return true;
+        },
+      );
+      return () => backHandler.remove();
+    }, [navigation]),
+  );
 
-  useEffect(() => {
-    const backHandler = BackHandler.addEventListener(
-      'hardwareBackPress',
-      () => {
-        navigation.popToTop();
-        return true;
-      },
-    );
+  // the balance and the promos, read again each time the page shows
+  useFocusEffect(
+    useCallback(() => {
+      if (!userInfo?.id) {
+        return undefined;
+      }
+      let showing = true;
+      (async () => {
+        if (noWallet) {
+          return;
+        }
+        const { response } = await walletRequest.request(
+          'GET',
+          `${AppConstants.API.CUSTOMER_WALLET(userInfo.id)}?take=0`,
+        );
+        const amount = response?.data?.availBalance;
+        if (showing && amount !== undefined && amount !== null) {
+          setBalance(amount);
+        }
+        if (showing && response?.data) {
+          setLocked(walletLocked(response.data));
+        }
+      })();
+      (async () => {
+        const { response } = await promoRequest.makePostRequest(
+          AppConstants.ENDPOINT.GET_PROMO_LIST,
+          {},
+        );
+        const promos = response?.data?.promos;
+        if (showing && Array.isArray(promos)) {
+          setPromoIds(promos.map(promo => String(promo.id)));
+        }
+      })();
+      return () => {
+        showing = false;
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [userInfo?.id]),
+  );
 
-    return () => backHandler.remove();
-  }, [navigation]);
-
-  const toTitleCase = str =>
-    String(str || '')
-      .toLowerCase()
-      .split(' ')
-      .filter(Boolean)
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-
-  // A new account has no name or photo yet: say what to do instead of
-  // showing a blank name beside somebody else's picture.
   const profileComplete = !!userInfo?.profile_complete;
-  const displayName =
-    [
-      toTitleCase(userInfo?.ekyc_details?.first_name || userInfo?.fname),
-      toTitleCase(userInfo?.ekyc_details?.last_name || userInfo?.lname),
-    ]
-      .filter(Boolean)
-      .join(' ') || (profileComplete ? 'User' : 'Complete your profile');
+  const name = fullNameOf(userInfo);
   const photo = userInfo?.selfie || userInfo?.ekyc_details?.selfie || '';
+  const mobile = displayMobile(
+    userInfo?.mobile || userInfo?.ekyc_details?.mobile_no,
+  );
+  const balanceText = `₱${AppUtil.fn(balance ?? 0)}`;
+  // locked: one small line on the card (Q-UX-WALLET-LOCK-POLISH F7)
+  const cardNote = lockedCardNote(locked);
+  const newPromos = promoIds.filter(id => !seenPromoIds.includes(id)).length;
+  // shown as people count it (2.0.103 → 2.1.04): Utils/displayVersion.js
+  const version = displayVersion(Constants.expoConfig?.version ?? '');
 
-  const buttonList = [
-    {
-      id: 'booking_history',
-      label: 'Booking History',
-      onPress: () => navigation.navigate('BookingHistoryScreen'),
-    },
-    {
-      id: 'promo_and_referrals',
-      label: 'Promo & Referrals',
-      onPress: () => navigation.navigate('PromoReferralsScreen'),
-    },
-    {
-      id: 'payment_option',
-      label: 'Payment Option',
-      onPress: () => navigation.navigate('PaymentOptionScreen'),
-    },
-    {
-      id: 'wallet',
-      label: 'Wallet',
-      onPress: () => navigation.navigate('WalletScreen'),
-    },
-  ];
-
-  const handleBack = () => {
-    navigation.popToTop();
+  const openPromos = () => {
+    dispatch(markPromosSeen(promoIds));
+    navigation.navigate('PromoReferralsScreen');
   };
 
-  const performLogout = async () => {
-    const online = await checkIsOnline();
-    if (!online) {
-      Alert.alert(
-        'No Internet Connection',
-        'Logging out requires an internet connection. Please reconnect and try again.',
-      );
-      return;
-    }
-
-    const { response, error, offline } = await logoutRequest(
-      'POST',
-      Constants.API.CUSTOMER_LOGOUT(userInfo.id),
-    );
-
-    if (error || !response || response?.code !== 200) {
-      Alert.alert(
-        offline ? 'No Internet Connection' : 'Ongoing Booking',
-        error || response?.message || 'Failed to log out. Please try again.',
-      );
-      return;
-    }
-
-    await clearSessionAndGoToLanding();
-  };
-
-  const clearSessionAndGoToLanding = async () => {
-    // stop pushes to this phone (backend also clears the saved token)
-    await deletePushToken();
-    dispatch(clearUserInfo());
-    dispatch(clearBookingState());
-    dispatch(clearSavedPlaces());
-
-    navigation.dispatch(
-      CommonActions.reset({
-        index: 0,
-        routes: [{ name: 'LandingScreen' }],
-      }),
-    );
-  };
-
-  // Google Play requires apps that create accounts to let users delete them in the app.
-  const performDeleteAccount = async () => {
-    const online = await checkIsOnline();
-    if (!online) {
-      Alert.alert(
-        'No Internet Connection',
-        'Deleting your account requires an internet connection. Please reconnect and try again.',
-      );
-      return;
-    }
-
-    const { response, error } = await deleteRequest(
-      'DELETE',
-      Constants.API.CUSTOMER(userInfo.id),
-    );
-
-    if (error || !response || response?.code !== 200) {
-      Alert.alert(
-        'Unable to Delete Account',
-        error ||
-          response?.message ||
-          'Failed to delete your account. Please try again.',
-      );
-      return;
-    }
-
-    await clearSessionAndGoToLanding();
-    Alert.alert('Account Deleted', 'Your Pinoy Ride account has been deleted.');
-  };
-
-  const handleDeleteAccount = () => {
-    if (activeBooking?.id && [0, 1, 2, 5].includes(Number(bookingStatus))) {
-      Alert.alert(
-        'Active Booking',
-        'You have an active or scheduled booking. Please complete or cancel it before deleting your account.',
-      );
-      return;
-    }
-
-    const message =
-      'This permanently deletes your Pinoy Ride account. You will be logged out, your saved places ' +
-      'will be removed, and any remaining wallet balance can no longer be used. Completed trip and ' +
-      'payment records are kept as required for transactions. This cannot be undone.';
-
-    if (Platform.OS === 'web') {
-      // Alert.alert buttons are no-ops on react-native-web.
-      if (window.confirm(`Delete Account?\n\n${message}`)) {
-        performDeleteAccount();
-      }
-      return;
-    }
-    Alert.alert('Delete Account?', message, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: performDeleteAccount,
-      },
-    ]);
-  };
-
-  const handleLogout = async () => {
-    if (activeBooking?.id && [1, 2].includes(Number(bookingStatus))) {
-      Alert.alert(
-        'Ongoing Booking',
-        'You have an ongoing booking. Please complete your current booking first.',
-      );
-      return;
-    }
-    const online = await checkIsOnline();
-    if (!online) {
-      Alert.alert(
-        'No Internet Connection',
-        'Logging out requires an internet connection. Please reconnect and try again.',
-      );
-      return;
-    }
-    if (Platform.OS === 'web') {
-      // Alert.alert buttons are no-ops on react-native-web.
-      if (window.confirm('Are you sure you want to log out?')) {
-        performLogout();
-      }
-      return;
-    }
-    Alert.alert('Log Out', 'Are you sure you want to log out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Log Out',
-        style: 'destructive',
-        onPress: performLogout,
-      },
-    ]);
-  };
+  // the support contact, the same in both apps (Utils/supportContact.js;
+  // the owner, A-217; the public support email, A-285)
+  const showSupport = () => appAlert(...supportAlert(Linking.openURL));
 
   return (
-    <Container style={styles.container}>
-      <View>
-        <TouchableOpacity onPress={handleBack}>
-          <Image
-            source={require('@/Assets/Common/Back.png')}
-            style={styles.backIcon}
-            resizeMode="contain"
-          />
-        </TouchableOpacity>
+    <Container style={styles.container} background={look.page}>
+      <View style={styles.header}>
+        <Pressable
+          onPress={() => navigation.popToTop()}
+          hitSlop={8}
+          style={styles.back}
+          accessibilityRole="button"
+          accessibilityLabel="Back">
+          <Icon name="chevron-left" size={28} color={look.ink} />
+        </Pressable>
+        <Text style={styles.title} accessibilityRole="header">
+          Account
+        </Text>
+      </View>
 
-        <TouchableOpacity
-          style={styles.profileButton}
+      <ScrollView
+        style={styles.scrollArea}
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}>
+        {/* who you are: the card opens the profile, Edit the name and photo */}
+        <Pressable
           onPress={() =>
             navigation.navigate(
               profileComplete ? 'ProfileScreen' : 'CompleteProfileScreen',
             )
-          }>
-          <ProfileAvatar uri={photo} size={46} />
-          <View style={styles.profileTextContainer}>
-            <Text style={styles.name}>{displayName}</Text>
+          }
+          accessibilityRole="button"
+          accessibilityLabel={[name || 'Your profile', mobile]
+            .filter(Boolean)
+            .join(', ')}
+          style={({ pressed }) => [styles.profile, pressed && styles.pressed]}>
+          <ProfileAvatar
+            uri={photo}
+            name={name}
+            size={56}
+            badge={genderOf(userInfo?.gender)?.icon}
+            badgeLabel={genderOf(userInfo?.gender)?.label}
+          />
+          {/* a long name takes a second line, and the number stays on one
+              (QA RD-APP-01: names were cut and "7271" fell to a line of its
+              own on narrow phones) */}
+          <View style={styles.flex}>
+            <Text style={styles.name} numberOfLines={2}>
+              {name || 'Complete your profile'}
+            </Text>
+            {mobile ? (
+              <Text
+                style={styles.mobile}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                maxFontSizeMultiplier={1.3}>
+                {mobile}
+              </Text>
+            ) : null}
           </View>
-          <Text style={styles.profileLabel}>
-            {profileComplete ? 'Profile' : 'Set up'}
-          </Text>
-        </TouchableOpacity>
+          <Pressable
+            onPress={() => navigation.navigate('CompleteProfileScreen')}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={
+              profileComplete ? 'Edit your profile' : 'Set up your profile'
+            }
+            style={({ pressed }) => [styles.edit, pressed && styles.pressed]}>
+            <Text style={styles.editText}>
+              {profileComplete ? 'Edit' : 'Set up'}
+            </Text>
+          </Pressable>
+        </Pressable>
 
-        {buttonList.map(button => (
-          <TouchableOpacity
-            key={button.id}
-            style={styles.buttons}
-            onPress={button.onPress}>
-            <Text style={styles.label}>{button.label}</Text>
-          </TouchableOpacity>
-        ))}
-        <TouchableOpacity
-          style={[styles.buttons, styles.logoutButton]}
-          onPress={handleLogout}
-          disabled={loggingOut}>
-          <Text style={[styles.label, styles.logoutLabel]}>
-            {loggingOut ? 'Logging Out...' : 'Log Out'}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.deleteAccountButton}
-          onPress={handleDeleteAccount}
-          disabled={deletingAccount || loggingOut}>
-          <Text style={styles.deleteAccountLabel}>
-            {deletingAccount ? 'Deleting Account...' : 'Delete Account'}
-          </Text>
-        </TouchableOpacity>
-      </View>
+        {/* the wallet: the card opens the Wallet page, Cash in the top-up;
+            none in the Google Play build (Utils/walletOff.js) */}
+        {noWallet ? null : (
+          <Pressable
+            onPress={() => navigation.navigate('WalletScreen')}
+            accessibilityRole="button"
+            accessibilityLabel={`PinoyRide Wallet, ${balanceText}${
+              cardNote ? ', locked' : ''
+            }`}
+            style={({ pressed }) => [styles.wallet, pressed && styles.pressed]}>
+            <View style={styles.flex}>
+              <Text style={styles.walletLabel}>PINOYRIDE WALLET</Text>
+              <Text
+                style={styles.walletAmount}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                maxFontSizeMultiplier={1.2}>
+                {balanceText}
+              </Text>
+              {cardNote ? (
+                <View style={styles.lockRow}>
+                  <Icon name="lock-outline" size={13} color={look.onGoldSoft} />
+                  <Text style={styles.lockNote} numberOfLines={2}>
+                    {cardNote}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            <Pressable
+              onPress={() => {
+                const tap = cashInTap(locked);
+                if (tap === 'verify') {
+                  appAlert(
+                    ...lockedAlert(() =>
+                      navigation.navigate(...verifyParams()),
+                    ),
+                  );
+                } else if (tap === 'cash-in') {
+                  navigation.navigate('CashInScreen', {
+                    available_balance: balance ?? 0,
+                  });
+                } else {
+                  navigation.navigate('WalletScreen');
+                }
+              }}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel="Cash in"
+              style={({ pressed }) => [
+                styles.cashIn,
+                pressed && styles.pressed,
+              ]}>
+              <Icon name="plus" size={17} color={look.onGold} />
+              <Text style={styles.cashInText}>Cash in</Text>
+            </Pressable>
+          </Pressable>
+        )}
+
+        <MenuGroup label="Rides" style={styles.section}>
+          <MenuRow
+            icon="clock-outline"
+            title="Booking history"
+            onPress={() => navigation.navigate('BookingHistoryScreen')}
+          />
+          <MenuRow
+            icon="tag-outline"
+            title="Promos"
+            badge={newPromos > 0 ? `${newPromos} NEW` : undefined}
+            onPress={openPromos}
+          />
+          {noWallet ? null : (
+            <MenuRow
+              icon="credit-card-outline"
+              title="Payment options"
+              value="Wallet first"
+              onPress={() => navigation.navigate('PaymentOptionScreen')}
+            />
+          )}
+        </MenuGroup>
+
+        <MenuGroup label="Account" style={styles.section}>
+          <MenuRow
+            icon="cog-outline"
+            title="Settings"
+            note="Dark mode, log out, delete account"
+            tone="quiet"
+            onPress={() => navigation.navigate('AccountSettingsScreen')}
+          />
+          <MenuRow
+            icon="help-circle-outline"
+            title="Help & support"
+            tone="quiet"
+            onPress={showSupport}
+          />
+        </MenuGroup>
+
+        <MenuGroup style={styles.emergency}>
+          <MenuRow
+            icon="shield-alert-outline"
+            title="Emergency assistance"
+            note="Reach help while you are on a trip"
+            tone="danger"
+            onPress={() => setShowSafetyGuide(true)}
+          />
+        </MenuGroup>
+
+        <View style={styles.spacer} />
+        <Text style={styles.version}>
+          PinoyRide {version} · build {APP_BUILD}
+        </Text>
+      </ScrollView>
+
+      <SafetyGuideModal
+        visible={showSafetyGuide}
+        onClose={() => setShowSafetyGuide(false)}
+      />
     </Container>
   );
 };
 
 export default SettingsScreen;
 
-const getStyles = ({ colors }) =>
+const getStyles = look =>
   StyleSheet.create({
-    container: {
-      flex: 1,
-      paddingHorizontal: 15,
-    },
-    backIcon: {
-      width: 23,
-      height: 23,
-      marginBottom: 20,
-    },
-    profileButton: {
+    // Container keeps 20 at each side; the design's cards sit 16 from the edge
+    container: { flex: 1, paddingHorizontal: 0 },
+    header: {
+      height: 52,
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingVertical: 18,
-      paddingHorizontal: 20,
-      borderRadius: 10,
-      marginBottom: 17,
-      shadowColor: colors.shadow,
-      shadowOpacity: 0.1,
-      shadowRadius: 10,
-      elevation: 3,
-      backgroundColor: colors.onPrimary,
+      marginLeft: -14,
+      marginBottom: 6,
     },
-    profileTextContainer: {
-      flex: 1,
+    back: {
+      width: 44,
+      height: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    title: {
       marginLeft: 10,
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 20,
+      lineHeight: 26,
+      letterSpacing: -0.3,
+      color: look.ink,
     },
-    profileLabel: {
-      backgroundColor: colors.lightBlue,
-      color: colors.shadow,
-      paddingHorizontal: 10,
-      paddingVertical: 2,
-      borderRadius: 10,
-      fontSize: 10,
-      fontFamily: 'Poppins Regular',
-    },
+    // The scroll area itself reaches 4 past Container's 20. On its content the
+    // same margin pushed the cards' sides and the section labels' first
+    // letters out of the scroll area, which cut them off.
+    scrollArea: { marginHorizontal: -4 },
+    scroll: { flexGrow: 1, paddingBottom: 16 },
+    flex: { flex: 1 },
+    pressed: { opacity: 0.85 },
     profile: {
-      width: 46,
-      height: 46,
-      borderRadius: 23,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 14,
+      padding: 14,
+      borderRadius: look.radiusCard,
+      backgroundColor: look.card,
     },
     name: {
-      fontFamily: 'Poppins Medium',
-      fontWeight: 500,
-      fontSize: 14,
-      color: colors.grey3,
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 16,
+      lineHeight: 22,
+      letterSpacing: -0.2,
+      color: look.ink,
     },
-    buttons: {
-      height: 40,
+    mobile: {
+      marginTop: 1,
+      fontFamily: 'Poppins Regular',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.muted,
+    },
+    edit: {
+      height: 27,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      justifyContent: 'center',
+      backgroundColor: look.chip,
+    },
+    editText: {
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 13,
+      lineHeight: 17,
+      color: look.chipInk,
+    },
+    wallet: {
+      marginTop: 14,
+      minHeight: 82,
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 33,
-      borderRadius: 10,
-      marginVertical: 5,
-      shadowColor: colors.shadow,
-      shadowOpacity: 0.1,
-      shadowRadius: 10,
-      elevation: 3,
-      backgroundColor: colors.onPrimary,
-    },
-    label: {
-      fontFamily: 'Poppins Regular',
-      fontWeight: 400,
-      fontSize: 16,
-      color: colors.grey3,
-    },
-    deleteAccountButton: {
-      alignSelf: 'center',
-      marginTop: 24,
-      paddingVertical: 8,
+      gap: 12,
       paddingHorizontal: 16,
+      paddingVertical: 14,
+      borderRadius: look.radiusCard,
+      backgroundColor: look.gold,
     },
-    deleteAccountLabel: {
+    walletLabel: {
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 11.5,
+      lineHeight: 15,
+      letterSpacing: 1.2,
+      color: look.onGoldSoft,
+    },
+    walletAmount: {
+      marginTop: 4,
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 28,
+      lineHeight: 34,
+      letterSpacing: -0.6,
+      color: look.onGold,
+    },
+    lockRow: {
+      marginTop: 4,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+    },
+    lockNote: {
+      flexShrink: 1,
       fontFamily: 'Poppins Regular',
+      fontSize: 12,
+      lineHeight: 16,
+      color: look.onGoldSoft,
+    },
+    cashIn: {
+      height: 32,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 14,
+      borderRadius: 10,
+      backgroundColor: look.goldShade,
+    },
+    cashInText: {
+      fontFamily: 'Poppins SemiBold',
       fontSize: 14,
-      color: colors.error,
-      textDecorationLine: 'underline',
+      lineHeight: 18,
+      color: look.onGold,
+    },
+    section: { marginTop: 24 },
+    emergency: { marginTop: 22 },
+    spacer: { flex: 1, minHeight: 32 },
+    version: {
+      marginTop: 18,
+      textAlign: 'center',
+      fontFamily: 'Poppins Regular',
+      fontSize: 12,
+      lineHeight: 16,
+      color: look.faint,
     },
   });

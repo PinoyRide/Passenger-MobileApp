@@ -2,13 +2,13 @@ import React, { useState } from 'react';
 import {
   Image,
   Keyboard,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import KeyboardScroll from '@/Components/KeyboardScroll/KeyboardScroll';
 import Container from '@/Components/Container/Container';
 import { useTheme } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
@@ -107,7 +107,7 @@ const PersonalDetailsScreen = () => {
       </View>
 
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <ScrollView
+        <KeyboardScroll
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
@@ -191,7 +191,7 @@ const PersonalDetailsScreen = () => {
           <View style={styles.footer}>
             <AppButton title="Next" onPress={handleNext} isBold />
           </View>
-        </ScrollView>
+        </KeyboardScroll>
       </TouchableWithoutFeedback>
     </Container>
   );

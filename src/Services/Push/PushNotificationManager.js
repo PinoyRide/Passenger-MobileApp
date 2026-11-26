@@ -8,8 +8,12 @@ import useApiRequest from '@/Services/ApiV2';
 import { Constants } from '@/Utils';
 import { selectUserInfo } from '@/Redux/Slices/userSlice';
 import { navigationRef } from '@/Utils/NavigationService';
+import appAlert from '@/Utils/appAlert';
+import { CommonActions } from '@react-navigation/native';
+import { cashOutPushOnPage, walletRefreshOnScreen } from '@/Utils/cashOut';
 import LightTheme from '@/Theme/LightTheme';
 import {
+  PUSH_TYPES,
   emitBookingUpdate,
   formatPushBody,
   getPushRoute,
@@ -33,14 +37,41 @@ const PROMPT_SHOWN_KEY = 'push_permission_prompt_shown_v1';
 const HANDLED_IDS_KEY = 'push_handled_message_ids_v1';
 const HANDLED_IDS_MAX = 30;
 const BANNER_MS = 5000;
+// Shown in the box both apps use for money, not the banner (foreground)
+const MONEY_PUSHES = [
+  PUSH_TYPES.WALLET_CREDITED,
+  PUSH_TYPES.CASH_OUT_PAID,
+  PUSH_TYPES.CASH_OUT_FAILED,
+];
 // Routes where a logged-in user may be sent from a notification tap.
-const NOT_READY_ROUTES = ['Splash', 'OnboardingScreen', 'LandingScreen'];
+// A push tapped on these waits: the person is not in the app yet. The Terms
+// screen (asked to accept before going on) and Update Required were skipped
+// by a tapped push until the overnight review of 2026-11-23.
+const NOT_READY_ROUTES = [
+  'Splash',
+  'OnboardingScreen',
+  'LandingScreen',
+  'GeneralTermsScreen',
+  'UpdateRequiredScreen',
+];
 
 const colors = LightTheme.colors;
 const topInset = initialWindowMetrics?.insets?.top ?? 0;
 
 const currentRouteName = () =>
   navigationRef.isReady() ? navigationRef.getCurrentRoute()?.name : undefined;
+
+// The trip's chat is on screen for this booking: its messages show there.
+const chatOnScreen = bookingId => {
+  if (!navigationRef.isReady() || bookingId == null) {
+    return false;
+  }
+  const route = navigationRef.getCurrentRoute();
+  return (
+    route?.name === 'ChatScreen' &&
+    String(route?.params?.bookingId) === String(bookingId)
+  );
+};
 
 /**
  * Passenger push notifications (native only; renders nothing on web):
@@ -321,16 +352,67 @@ const PushNotificationManager = () => {
     }
     return onForegroundPush(msg => {
       const parsed = parsePushData(msg?.data);
+      // logcat: whether a push reached the open app at all (QA LAT-16)
+      console.info(
+        '[push] foreground',
+        msg?.data?.type || '-',
+        'booking',
+        parsed.bookingId,
+        'on',
+        currentRouteName(),
+      );
+      // a message for the chat on screen shows in it: no banner over it
+      if (
+        parsed.type === PUSH_TYPES.CHAT_MESSAGE &&
+        chatOnScreen(parsed.bookingId)
+      ) {
+        return;
+      }
       emitBookingUpdate(parsed);
+      // Home says "No Riders Available" itself: no banner over it
+      if (
+        parsed.type === PUSH_TYPES.NO_RIDER_FOUND &&
+        currentRouteName() === 'HomeScreen'
+      ) {
+        return;
+      }
       const body = formatPushBody(msg?.body, parsed);
       if (!msg?.title && !body) {
+        return;
+      }
+      // Money in or out (a top-up credited, a cash-out paid or returned): the
+      // Rider's box, which stays until it is answered, rather than a banner
+      // gone in 5 s (the owner, 2026-11-24: both apps show it the same way).
+      // A cash-out's result page on screen checks at once and, while it is
+      // still checking, says it itself: no box over it (after it stopped,
+      // 15 minutes on, the box shows: CSO-19).
+      if (MONEY_PUSHES.includes(parsed.type)) {
+        const current = navigationRef.isReady()
+          ? navigationRef.getCurrentRoute()
+          : null;
+        // the Wallet on screen reads again now, before View or Dismiss
+        // (WAL-11: it kept the old balance and lines)
+        const walletRefresh = walletRefreshOnScreen(current, msg?.data);
+        if (walletRefresh) {
+          navigationRef.dispatch({
+            ...CommonActions.setParams(walletRefresh),
+            source: current.key,
+          });
+        }
+        if (cashOutPushOnPage(current, msg?.data)) {
+          return;
+        }
+        appAlert(msg?.title || 'Pinoy Ride', body, [
+          { text: 'Dismiss', style: 'cancel' },
+          { text: 'View', onPress: () => handleTap(msg) },
+        ]);
         return;
       }
       setBanner({ ...msg, body });
       clearTimeout(bannerTimer.current);
       bannerTimer.current = setTimeout(() => setBanner(null), BANNER_MS);
     });
-  }, [customerId]);
+  }, [customerId, handleTap]);
 
   useEffect(() => () => clearTimeout(bannerTimer.current), []);
 

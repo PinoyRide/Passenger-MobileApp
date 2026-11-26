@@ -7,10 +7,19 @@
 // with code 200 for any 2xx.
 import { useRef, useState } from 'react';
 import axios from 'axios';
-import DeviceInfo from 'react-native-device-info';
 import { AppUtil, Constants } from '@/Utils';
 import { getCurrentRouteName, navigate } from '@/Utils/NavigationService';
 import { checkIsOnline } from '@/Utils/Network';
+import { signalSignedOut, signedOutReason } from '@/Utils/signedOut';
+import { UPDATING_MESSAGE, isServerDown } from '@/Utils/serverDown';
+import { sessionHeader, takeNewToken } from '@/Utils/sessionHeader';
+import { installedVersion } from '@/Utils/installedVersion';
+import { deviceIdHeader, waitForDeviceId } from '@/Utils/deviceIdHeader';
+import {
+  WALLET_OFF_MESSAGE,
+  appBuildHeader,
+  walletOffRefused,
+} from '@/Utils/walletOff';
 
 const REQUEST_TIMEOUT_MS = 15000;
 const OFFLINE_MESSAGE =
@@ -34,7 +43,11 @@ export function normalise(status, body) {
   return {
     status: ok ? 'success' : 'error',
     code: ok ? 200 : status,
-    message: ok ? 'Success' : errorMessageOf(body),
+    message: ok
+      ? 'Success'
+      : isServerDown(status, body)
+      ? UPDATING_MESSAGE
+      : errorMessageOf(body),
     data: body?.data ?? null,
   };
 }
@@ -78,6 +91,8 @@ const useApiRequest = () => {
     }
 
     try {
+      // the phone's id is read once before the first request (Utils/deviceIdHeader.js)
+      await waitForDeviceId();
       const res = await axios.request({
         method,
         url: Constants.BASE_URI + path,
@@ -91,10 +106,20 @@ const useApiRequest = () => {
               ? 'multipart/form-data'
               : 'application/json',
           'X-API-KEY': Constants.API_KEY,
-          'X-App-Version': DeviceInfo.getVersion(),
+          'X-App-Version': installedVersion(),
           'X-User-Type': 'customer',
+          // play or dev: the API refuses the money routes to the Play build
+          // (Utils/walletOff.js)
+          ...appBuildHeader(),
+          // which phone (Utils/deviceIdHeader.js): the same phone may sign in again
+          ...deviceIdHeader(),
+          // the passenger's sign-in token: customers/{id}/... answers only
+          // with it (Utils/sessionHeader.js)
+          ...sessionHeader(),
         },
       });
+      // a new sign-in token handed out behind the scenes, even on a stale answer
+      takeNewToken(res.headers);
 
       if (!isLatest()) {
         return { response: null, error: null, stale: true };
@@ -103,6 +128,21 @@ const useApiRequest = () => {
       if (res.status === 426) {
         goToUpdateRequired(res.data?.data);
         return { response: null, error: null, forceUpdate: true };
+      }
+
+      // Signed out by Pinoy Ride, or the account was deleted — from ANY
+      // endpoint (Utils/signedOut.js). The app signs out as Log Out does.
+      const signedOut = signedOutReason(res.status, res.data);
+      if (signedOut) {
+        signalSignedOut(signedOut);
+        return { response: null, error: null, signedOut: true };
+      }
+
+      // Not in this build (the Play build has no wallet): a calm word, and
+      // nobody is signed out (it is a 403, never a 401)
+      if (walletOffRefused(res.status, res.data)) {
+        setError(WALLET_OFF_MESSAGE);
+        return { response: null, error: WALLET_OFF_MESSAGE, walletOff: true };
       }
 
       const normalised = normalise(res.status, res.data);

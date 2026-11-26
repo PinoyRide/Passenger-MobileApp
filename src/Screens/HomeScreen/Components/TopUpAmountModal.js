@@ -69,7 +69,8 @@ const TopUpAmountModal = ({ visible, onClose, onError, onSuccess }) => {
     if (requestToPay.error) {
       console.warn('Request to pay error:', requestToPay.error);
       onClose();
-      onError?.(requestToPay.error);
+      // with its reason: the sheet tells the wallet lock (ekyc_required) apart
+      onError?.(requestToPay.error, requestToPay.reason);
       return;
     }
 
@@ -199,12 +200,15 @@ const getStyles = ({ colors }) =>
       left: 0,
       right: 0,
       bottom: 0,
-      justifyContent: 'center',
+      // at the top, not the centre: a Modal is a window the keyboard does
+      // not lift, and the amount box and Confirm must stay above it (A-326)
+      justifyContent: 'flex-start',
+      paddingTop: 56,
       alignItems: 'center',
       paddingHorizontal: 20,
     },
     modalContent: {
-      backgroundColor: colors.onPrimary,
+      backgroundColor: colors.card,
       borderRadius: 20,
       padding: 30,
       width: '100%',

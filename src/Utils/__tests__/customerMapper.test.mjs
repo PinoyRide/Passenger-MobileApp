@@ -33,7 +33,6 @@ const dto = {
     walletType: 'user-wallet',
     availBalance: 380.05,
   },
-  pinoyRideWallet: null,
 };
 
 test('maps the .NET customer to the snake_case fields the screens read', () => {
@@ -42,7 +41,8 @@ test('maps the .NET customer to the snake_case fields the screens read', () => {
   assert.equal(user.ekyc_details.first_name, 'JUAN');
   assert.equal(user.ekyc_details.selfie, 'https://x/s.jpg');
   assert.equal(user.wallet_details.avail_balance, 380.05);
-  assert.deepEqual(user.pr_wallet_details, {});
+  // one wallet per person since 2026-11-22: the Pinoy Ride Credit is gone
+  assert.equal(user.pr_wallet_details, undefined);
   assert.equal(user.customer_address[0].pretty_type, 'Home');
 });
 

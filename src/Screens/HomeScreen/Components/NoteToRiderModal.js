@@ -2,20 +2,27 @@ import React, { useEffect, useState } from 'react';
 import { ON_PRIMARY_BUTTON_TEXT } from '@/Theme';
 import {
   Keyboard,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
   StyleSheet,
   Text,
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
-import { AppButton, AppTextInput } from '@/Components';
+import AppButton from '@/Components/AppButton/AppButton';
+import AppTextInput from '@/Components/AppTextInput/AppTextInput';
+import TypingLayer from '@/Components/TypingLayer/TypingLayer';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { bottomSpace } from '@/Utils/bottomSpace';
 
+// A sheet over Home to type the note in: a layer of the screen, not a Modal
+// (Components/TypingLayer), so the keyboard lifts it and lowering the keyboard
+// does not close it (the owner, 2026-11-23).
 const NoteToRiderModal = ({ visible, onClose, onSave, initialNote = '' }) => {
-  const { colors } = useTheme();
-  const styles = getStyles({ colors });
+  // The navigation bar may cover the bottom of the screen: keep the bottom content clear of it
+  const { bottom: bottomInset } = useSafeAreaInsets();
+  const theme = useTheme();
+  const { colors } = theme;
+  const styles = getStyles({ colors, dark: theme.dark });
   const [note, setNote] = useState(initialNote);
 
   useEffect(() => {
@@ -34,61 +41,48 @@ const NoteToRiderModal = ({ visible, onClose, onSave, initialNote = '' }) => {
   };
 
   return (
-    <Modal
+    <TypingLayer
       visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={handleClose}
-      statusBarTranslucent>
-      <TouchableWithoutFeedback onPress={handleClose}>
-        <View style={styles.backdrop} />
+      onClose={handleClose}
+      onBackdrop={handleClose}
+      placement="bottom"
+      dim="rgba(0,0,0,0.3)">
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View
+          style={[
+            styles.modalContainer,
+            { paddingBottom: bottomSpace(bottomInset, 40) },
+          ]}>
+          <Text style={styles.title}>Note To Rider</Text>
+
+          <AppTextInput
+            value={note}
+            onChangeText={setNote}
+            placeholder="Message"
+            inputMode="comment"
+            multiline
+          />
+
+          <AppButton
+            title="Send"
+            textColor={ON_PRIMARY_BUTTON_TEXT}
+            onPress={handleSave}
+            isBold
+            buttonColor={colors.primary}
+          />
+        </View>
       </TouchableWithoutFeedback>
-
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardContainer}>
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View style={styles.modalContainer}>
-            <Text style={styles.title}>Note To Rider</Text>
-
-            <AppTextInput
-              value={note}
-              onChangeText={setNote}
-              placeholder="Message"
-              inputMode="comment"
-              multiline
-            />
-
-            <AppButton
-              title="Send"
-              textColor={ON_PRIMARY_BUTTON_TEXT}
-              onPress={handleSave}
-              isBold
-              buttonColor={colors.primary}
-            />
-          </View>
-        </TouchableWithoutFeedback>
-      </KeyboardAvoidingView>
-    </Modal>
+    </TypingLayer>
   );
 };
 
 export default NoteToRiderModal;
 
-const getStyles = ({ colors }) =>
+const getStyles = ({ colors, dark }) =>
   StyleSheet.create({
-    backdrop: {
-      flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.3)',
-    },
-    keyboardContainer: {
-      position: 'absolute',
-      bottom: 0,
-      left: 0,
-      right: 0,
-    },
+    // the Figma grey sheet; the page colour in the dark look (Settings > Dark mode)
     modalContainer: {
-      backgroundColor: '#D9D9D9',
+      backgroundColor: dark ? colors.background : '#D9D9D9',
       padding: 20,
       paddingBottom: 40,
     },

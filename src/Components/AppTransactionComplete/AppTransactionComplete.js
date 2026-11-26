@@ -4,9 +4,16 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import React, { useEffect } from 'react';
 import { BackHandler, Image, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import useCashOutResult from '@/Hooks/useCashOutResult';
+import { cashOutResultText } from '@/Utils/cashOut';
+import { modern } from '@/Theme/modern';
+import { walletOff } from '@/Utils/walletOff';
 
 const AppTransactionComplete = () => {
-  const { colors } = useTheme();
+  const theme = useTheme();
+  const { colors } = theme;
+  const look = modern(theme);
   const styles = getStyles({ colors });
   const navigation = useNavigation();
   const route = useRoute();
@@ -19,6 +26,18 @@ const AppTransactionComplete = () => {
   const formattedAmount = route?.params?.referenceData?.amount
     ? `₱${parseFloat(route?.params?.referenceData.amount).toFixed(2)}`
     : '₱0.00';
+
+  // A cash-out's page follows it until it is paid out or has failed and come
+  // back, the same as the Rider's (useCashOutResult, shared)
+  const referenceData = route?.params?.referenceData;
+  const isCashOut = referenceData?.transactionType === 'CASHOUT';
+  const cashOut = useCashOutResult(
+    referenceData?.transactionId,
+    referenceData?.status,
+    isCashOut,
+  );
+  const cashOutText = cashOutResultText(cashOut, formattedAmount);
+  const cashOutFailed = isCashOut && cashOut === 'failed';
 
   useEffect(() => {
     AppUtil.debugDeep(route?.params);
@@ -44,6 +63,8 @@ const AppTransactionComplete = () => {
     }
   };
 
+  const noWallet = walletOff();
+
   const handleViewWallet = () => {
     navigation.reset({
       index: 0,
@@ -62,23 +83,34 @@ const AppTransactionComplete = () => {
   return (
     <Container style={styles.container}>
       <View style={styles.contents}>
-        <Image
-          source={require('@/Assets/Common/Success_Image.png')}
-          style={styles.image}
-          resizeMode="contain"
-        />
+        {cashOutFailed ? (
+          <View
+            style={[styles.image, styles.mark, { backgroundColor: look.tile }]}>
+            <Icon name="cash-refund" size={56} color={look.inkSoft} />
+          </View>
+        ) : (
+          <Image
+            source={require('@/Assets/Common/Success_Image.png')}
+            style={styles.image}
+            resizeMode="contain"
+          />
+        )}
         {/* Display dynamic amount */}
         <Text style={styles.amount}>{formattedAmount}</Text>
 
         {/* Dynamic title based on payment method */}
-        <Text style={styles.title}>
-          {route?.params?.referenceData?.paymentMethod === 'QRPH'
+        <Text style={styles.title} accessibilityLiveRegion="polite">
+          {referenceData?.paymentMethod === 'QRPH'
             ? 'QRPH Payment Successful!'
+            : isCashOut
+            ? cashOutText.title
             : 'Cash-out request sent!'}
         </Text>
 
         <Text style={styles.subtitle}>
-          Your transaction has been completed successfully.
+          {isCashOut
+            ? cashOutText.note
+            : 'Your transaction has been completed successfully.'}
         </Text>
 
         {/*  Optional: Display transaction ID */}
@@ -90,20 +122,24 @@ const AppTransactionComplete = () => {
       </View>
 
       <View style={{ paddingBottom: 24 }}>
-        <AppButton
-          title="View Wallet"
-          onPress={handleViewWallet}
-          isBold
-          noSpacing
-          featureStyle={{ marginBottom: 10 }}
-        />
+        {/* none in the Google Play build, which has no wallet
+            (Utils/walletOff.js): the way back is then the one button */}
+        {noWallet ? null : (
+          <AppButton
+            title="View Wallet"
+            onPress={handleViewWallet}
+            isBold
+            noSpacing
+            featureStyle={{ marginBottom: 10 }}
+          />
+        )}
         <AppButton
           title={getDoneButtonText()}
           onPress={handleDone}
           isBold
           noSpacing
-          mode="outlined"
-          featureStyle={{ backgroundColor: colors.onPrimary }}
+          mode={noWallet ? undefined : 'outlined'}
+          featureStyle={noWallet ? undefined : { backgroundColor: colors.card }}
         />
       </View>
     </Container>
@@ -123,13 +159,21 @@ const getStyles = ({ colors }) =>
       justifyContent: 'center',
       alignItems: 'center',
     },
+    // The picture has a white square behind it: round, it is a white disc
+    // in the dark look instead of a box (the drawing and its tick lie inside).
     image: {
       width: 122,
       height: 122,
+      borderRadius: 61,
       marginBottom: 24,
     },
+    // a cash-out that came back: money returning, in place of the picture
+    mark: {
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     amount: {
-      fontFamily: 'Poppins Bold',
+      fontFamily: 'Poppins SemiBold',
       fontSize: 20,
       color: colors.primary,
       textAlign: 'center',

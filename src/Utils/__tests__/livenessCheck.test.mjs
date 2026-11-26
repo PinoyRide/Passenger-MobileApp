@@ -7,8 +7,12 @@ const {
   faceProblem,
   advance,
   isGoodPortrait,
-  pickPictureSize,
   stepsPassed,
+  stepsFor,
+  STEPS,
+  BLINK_STEPS,
+  PORTRAIT_HOLD,
+  PICTURE_SIZE,
   MAX_MISSES,
   STEP_TIMEOUT_MS,
 } = mod;
@@ -52,6 +56,33 @@ test('either side may come first, but the second turn must be the other side', (
   const same = run([...straightTwice, [face(25)], [face(30)], [face(24)]]);
   assert.equal(same.state.step, 'otherTurn');
   assert.equal(same.done, false);
+  // and the person is told at once, not left turning the same way
+  assert.equal(same.problem, 'same_side');
+});
+
+test('no sample that shows a face is left without an answer', () => {
+  // asked to look straight, but turned
+  let r = run([[face(14)]]);
+  assert.equal(r.problem, 'turned');
+  assert.equal(r.state.step, 'straight');
+  // looking straight: no complaint, even before the step is passed
+  r = run([[face(3)]]);
+  assert.equal(r.problem, null);
+  // asked to turn: waiting for it is not a problem, turning too far is
+  r = run([...straightTwice, [face(4)]]);
+  assert.equal(r.problem, null);
+  r = run([...straightTwice, [face(70)]]);
+  assert.equal(r.problem, 'turned_too_far');
+  r = run([...straightTwice, [face(20)], [face(-70)]]);
+  assert.equal(r.problem, 'turned_too_far');
+  // on the way back to the middle between the two turns: just waiting
+  r = run([...straightTwice, [face(20)], [face(5)]]);
+  assert.equal(r.problem, null);
+  assert.equal(r.state.step, 'otherTurn');
+  // asked to look straight again, still turned
+  r = run([...straightTwice, [face(20)], [face(-20)], [face(-18)]]);
+  assert.equal(r.problem, 'turned');
+  assert.equal(r.state.step, 'finish');
 });
 
 test('a still photo never gets past the first turn', () => {
@@ -163,14 +194,82 @@ test('the final picture must show one well-placed face looking at the camera', (
   assert.equal(faceProblem([face(0)]), null);
 });
 
-test('picks a picture size near 1280 on the long side', () => {
-  assert.equal(
-    pickPictureSize(['4000x3000', '1920x1080', '1280x720', '640x480']),
-    '1280x720',
+// Riders (the owner, 2026-11-23: "For the rider, the picture validation add a
+// blink your eyes or any more strict validation that they are the user").
+const rider = () => start(0, { blink: true });
+const turns = [...straightTwice, [face(22)], [face(-20)]];
+const shut = [face(0, { eyesOpen: 0.01 })];
+
+test('riders also shut their eyes and open them again, then the photo', () => {
+  let r = run(turns, rider());
+  assert.equal(r.state.step, 'blink');
+  assert.equal(stepsPassed(r.state), 3);
+  r = run([...turns, shut, [face(1)], [face(0)], [face(2)]], rider());
+  assert.equal(r.done, true);
+  assert.equal(stepsPassed(r.state), BLINK_STEPS.length);
+});
+
+test('eyes that never shut, or never open again, do not pass the blink', () => {
+  const open = Array.from({ length: 8 }, () => [face(0)]);
+  assert.equal(run([...turns, ...open], rider()).state.step, 'blink');
+  const closed = Array.from({ length: 8 }, () => shut);
+  assert.equal(run([...turns, ...closed], rider()).state.step, 'blink');
+});
+
+test('open again is measured against the eyes themselves', () => {
+  // eyes seen at most 0.2 open (narrow, glasses): 0.13 is open again
+  const narrow = (yaw, eyesOpen = 0.2) => [face(yaw, { eyesOpen })];
+  const r = run(
+    [
+      narrow(2),
+      narrow(-3),
+      narrow(22),
+      narrow(-20),
+      narrow(0, 0.02),
+      narrow(0, 0.13),
+    ],
+    rider(),
   );
-  assert.equal(pickPictureSize(['4000x3000', '1600x1200', '320x240']), '1600x1200');
-  assert.equal(pickPictureSize(['1440x1080', '1088x1088']), '1440x1080');
-  // nothing usable: leave the camera's default
-  assert.equal(pickPictureSize(['320x240', 'Photo']), undefined);
-  assert.equal(pickPictureSize(undefined), undefined);
+  assert.equal(r.state.step, 'finish');
+  // wide eyes (0.9) at 0.3 are still opening
+  const half = run([...turns, shut, [face(0, { eyesOpen: 0.3 })]], rider());
+  assert.equal(half.state.step, 'blink');
+});
+
+test('the eyes are not read on a face turned away', () => {
+  const r = run([...turns, [face(25, { eyesOpen: 0.01 })]], rider());
+  assert.equal(r.problem, 'turned');
+  assert.equal(r.state.eyesShut, false);
+});
+
+test("after the blink the rider's photo waits for a settled face", () => {
+  const blinked = run([...turns, shut, [face(0)]], rider());
+  assert.equal(blinked.state.step, 'finish');
+  let r = blinked;
+  for (let i = 1; i < PORTRAIT_HOLD; i += 1) {
+    r = run([[face(1)]], r.state, 10000 + i * 1000);
+    assert.equal(r.done, false);
+  }
+  r = run([[face(2)]], r.state, 20000);
+  assert.equal(r.done, true);
+});
+
+test('starting over keeps the blink; passengers keep four steps', () => {
+  const lost = Array.from({ length: MAX_MISSES }, () => []);
+  const r = run([...straightTwice, [face(20)], ...lost], rider());
+  assert.equal(r.problem, 'restarted');
+  assert.deepEqual(r.state.steps, BLINK_STEPS);
+  assert.deepEqual(start(0).steps, STEPS);
+  assert.deepEqual(stepsFor(), STEPS);
+  assert.deepEqual(stepsFor({ blink: true }), BLINK_STEPS);
+});
+
+test('the camera is asked for a modest picture, as width x height', () => {
+  const match = /^(\d+)x(\d+)$/.exec(PICTURE_SIZE);
+  assert.ok(match, PICTURE_SIZE);
+  const [long, short] = [Number(match[1]), Number(match[2])];
+  // wide first, as cameras state their sizes; big enough for a clear
+  // profile photo, small enough to take and scan several times a second
+  assert.ok(long > short);
+  assert.ok(long >= 960 && long <= 1600, PICTURE_SIZE);
 });

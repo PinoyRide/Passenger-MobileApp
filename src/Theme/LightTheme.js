@@ -3,12 +3,13 @@ import {
   MD3LightTheme as PaperDefaultTheme,
   configureFonts,
 } from 'react-native-paper';
+import { GOLD, ON_GOLD } from './modern';
 
-// Text on yellow (primary) buttons: dark brown, per client (was white).
-export const ON_PRIMARY_BUTTON_TEXT = '#372A00';
+// Words on yellow (primary) buttons: near-black, as on every gold (A-184).
+export const ON_PRIMARY_BUTTON_TEXT = ON_GOLD;
 
 const fontConfig = {
-  fontFamily: 'Avenir LT Std 65 Medium',
+  fontFamily: 'Poppins Regular',
 };
 
 const custom = {
@@ -16,7 +17,7 @@ const custom = {
     ...configureFonts({ config: fontConfig }),
     titleLarge: {
       ...PaperDefaultTheme.fonts.titleLarge,
-      fontFamily: 'Avenir LT Std 65 Medium',
+      fontFamily: 'Poppins Regular',
     },
   },
 };
@@ -27,7 +28,8 @@ const LightTheme = {
   colors: {
     ...NavigationDefaultTheme.colors,
     ...PaperDefaultTheme.colors,
-    primary: '#FEC107', //brand color yellow
+    primary: GOLD, // the one brand gold (modern.js)
+    onYellow: ON_GOLD, // words and icons on the gold
     primaryLight: '#E4DDF1', // purple light
     primaryDark: '#3E114C',
     primaryLight2: '#F8F4FF', // very light purple
@@ -48,6 +50,10 @@ const LightTheme = {
     onErrorContainer: 'rgb(65, 0, 2)',
     background: '#FFFFFF',
     onBackground: '#323232',
+    // a card on the page (modern.js `card`); DarkTheme.js darkens it
+    card: '#FFFFFF',
+    // words on the page; DarkTheme.js lightens them
+    text: 'rgb(28, 28, 30)',
 
     surface: 'rgb(255, 251, 255)',
     onSurface: 'rgb(28, 27, 30)',
@@ -72,7 +78,7 @@ const LightTheme = {
     onSurfaceDisabled: 'rgba(28, 27, 30, 0.38)',
     backdrop: 'rgba(50, 47, 55, 0.4)',
 
-    brand: '#FEC107',
+    brand: GOLD,
     brandLight: '#FFDF80',
     onBrand: 'rgb(255, 255, 255)',
     brandContainer: 'black',

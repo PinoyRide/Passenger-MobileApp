@@ -26,8 +26,8 @@ class MainApplication : Application(), ReactApplication {
       object : DefaultReactNativeHost(this) {
         override fun getPackages(): List<ReactPackage> =
             PackageList(this).packages.apply {
-              // Packages that cannot be autolinked yet can be added manually here, for example:
-              // add(MyReactNativePackage())
+              // The app's own restart into a downloaded update (AppRestart.kt)
+              add(AppRestartPackage())
             }
 
           override fun getJSMainModuleName(): String = ".expo/.virtual-metro-entry"
@@ -43,6 +43,10 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
+    // The restart's own short-lived process (AppRestart.kt) needs none of the app
+    if (RestartActivity.isRestartProcess()) {
+      return
+    }
     createNotificationChannels()
     DefaultNewArchitectureEntryPoint.releaseLevel = try {
       ReleaseLevel.valueOf(BuildConfig.REACT_NATIVE_RELEASE_LEVEL.uppercase())

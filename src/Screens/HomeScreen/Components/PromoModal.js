@@ -4,16 +4,18 @@ import React, { useEffect, useState } from 'react';
 import { ON_PRIMARY_BUTTON_TEXT } from '@/Theme';
 import {
   ActivityIndicator,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import TypingLayer from '@/Components/TypingLayer/TypingLayer';
 import { useTheme } from 'react-native-paper';
+import { modern } from '@/Theme/modern';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { bottomSpace } from '@/Utils/bottomSpace';
 
 const PromoModal = ({
   visible,
@@ -23,8 +25,11 @@ const PromoModal = ({
   availablePromos = [],
   isLoading = false,
 }) => {
-  const { colors } = useTheme();
-  const styles = getStyles({ colors });
+  // The navigation bar may cover the bottom of the screen: keep the bottom content clear of it
+  const { bottom: bottomInset } = useSafeAreaInsets();
+  const theme = useTheme();
+  const { colors } = theme;
+  const styles = getStyles({ colors, dark: theme.dark, look: modern(theme) });
 
   const [promoCode, setPromoCode] = useState('');
   const [checkedPromo, setCheckedPromo] = useState(null);
@@ -93,17 +98,20 @@ const PromoModal = ({
     }
   }, [visible]);
 
+  // A layer of Home, not a Modal (Components/TypingLayer): the keyboard lifts
+  // the sheet with the promo code in it, and lowering the keyboard does not
+  // close it (the owner, 2026-11-23).
   return (
-    <Modal
+    <TypingLayer
       visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}>
-      <TouchableWithoutFeedback onPress={onClose}>
-        <View style={styles.backdrop} />
-      </TouchableWithoutFeedback>
-
-      <View style={styles.modalContainer}>
+      onClose={onClose}
+      onBackdrop={onClose}
+      placement="bottom">
+      <View
+        style={[
+          styles.modalContainer,
+          { paddingBottom: bottomSpace(bottomInset, 34) },
+        ]}>
         <Text style={styles.title}>Select Promo</Text>
 
         <View style={styles.inputWrapper}>
@@ -227,24 +235,19 @@ const PromoModal = ({
           </TouchableOpacity>
         )}
       </View>
-    </Modal>
+    </TypingLayer>
   );
 };
 
 export default PromoModal;
 
-const getStyles = ({ colors }) =>
-  StyleSheet.create({
-    backdrop: {
-      flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.5)',
-    },
+// The Figma colours in the light look; the shared look's (Theme/modern.js) in
+// the dark one (Settings > Dark mode).
+const getStyles = ({ colors, dark, look }) => {
+  const pick = (light, darkValue) => (dark ? darkValue : light);
+  return StyleSheet.create({
     modalContainer: {
-      position: 'absolute',
-      bottom: 0,
-      left: 0,
-      right: 0,
-      backgroundColor: '#D9D9D9',
+      backgroundColor: pick('#D9D9D9', look.surface),
       paddingHorizontal: 20,
       paddingTop: 24,
       paddingBottom: 34,
@@ -254,7 +257,7 @@ const getStyles = ({ colors }) =>
       fontFamily: 'Poppins Medium',
       fontSize: 22,
       marginBottom: 20,
-      color: '#000',
+      color: pick('#000', look.ink),
     },
     inputWrapper: {
       marginBottom: 16,
@@ -266,15 +269,15 @@ const getStyles = ({ colors }) =>
     },
     input: {
       flex: 1,
-      backgroundColor: '#FFFFFF',
+      backgroundColor: pick('#FFFFFF', look.card),
       borderRadius: 8,
       paddingHorizontal: 16,
       paddingVertical: 14,
       fontSize: 15,
       fontFamily: 'Poppins Regular',
-      color: '#000',
+      color: pick('#000', look.ink),
       borderWidth: 1,
-      borderColor: '#E0E0E0',
+      borderColor: pick('#E0E0E0', look.hairline),
     },
     checkButton: {
       height: 50,
@@ -309,20 +312,20 @@ const getStyles = ({ colors }) =>
     checkingText: {
       fontSize: 13,
       fontFamily: 'Poppins Regular',
-      color: '#666',
+      color: pick('#666', look.muted),
     },
     errorContainer: {
       marginTop: 8,
       padding: 10,
-      backgroundColor: '#FFEBEE',
+      backgroundColor: pick('#FFEBEE', look.redSoft),
       borderRadius: 6,
       borderLeftWidth: 3,
-      borderLeftColor: '#DC3545',
+      borderLeftColor: pick('#DC3545', look.danger),
     },
     errorText: {
       fontSize: 13,
       fontFamily: 'Poppins Regular',
-      color: '#DC3545',
+      color: pick('#DC3545', look.danger),
     },
     successContainer: {
       marginTop: 8,
@@ -333,10 +336,10 @@ const getStyles = ({ colors }) =>
     successTitle: {
       fontSize: 14,
       fontFamily: 'Poppins Medium',
-      color: '#4CAF50',
+      color: pick('#4CAF50', look.success),
     },
     promoDetailsCard: {
-      backgroundColor: '#FFFFFF',
+      backgroundColor: pick('#FFFFFF', look.card),
       padding: 12,
       borderRadius: 8,
       borderWidth: 1.5,
@@ -352,22 +355,22 @@ const getStyles = ({ colors }) =>
       fontFamily: 'Poppins Medium',
       fontSize: 16,
       marginBottom: 12,
-      color: '#000',
+      color: pick('#000', look.ink),
     },
     promoList: {
       maxHeight: 250,
     },
     promoOption: {
-      backgroundColor: '#FFFFFF',
+      backgroundColor: pick('#FFFFFF', look.card),
       paddingHorizontal: 16,
       paddingVertical: 14,
       borderRadius: 8,
       marginBottom: 10,
       borderWidth: 1,
-      borderColor: '#E0E0E0',
+      borderColor: pick('#E0E0E0', look.hairline),
     },
     promoSelected: {
-      backgroundColor: '#FFF9E6',
+      backgroundColor: pick('#FFF9E6', look.chip),
       borderColor: colors.primary || '#FEC107',
       borderWidth: 1.5,
     },
@@ -396,7 +399,7 @@ const getStyles = ({ colors }) =>
     promoTitle: {
       fontSize: 14,
       fontFamily: 'Poppins Medium',
-      color: '#000',
+      color: pick('#000', look.ink),
       lineHeight: 20,
       marginBottom: 6,
     },
@@ -406,7 +409,7 @@ const getStyles = ({ colors }) =>
     promoDetailText: {
       fontSize: 12,
       fontFamily: 'Poppins Regular',
-      color: '#666',
+      color: pick('#666', look.muted),
     },
     removeButton: {
       marginTop: 16,
@@ -427,7 +430,7 @@ const getStyles = ({ colors }) =>
       marginTop: 12,
       fontSize: 14,
       fontFamily: 'Poppins Regular',
-      color: '#666',
+      color: pick('#666', look.muted),
     },
     emptyContainer: {
       paddingVertical: 40,
@@ -437,6 +440,7 @@ const getStyles = ({ colors }) =>
     emptyText: {
       fontSize: 14,
       fontFamily: 'Poppins Regular',
-      color: '#666',
+      color: pick('#666', look.muted),
     },
   });
+};

@@ -1,23 +1,20 @@
 import React from 'react';
-import {
-  Alert,
-  Platform,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-} from 'react-native';
+import { Platform, StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { Icon } from 'react-native-paper';
 import {
   EMERGENCY_NUMBER,
   dialEmergency,
 } from '@/Components/EmergencyCall/emergencyCall';
+import appAlert from '@/Utils/appAlert';
 
 export { EMERGENCY_NUMBER };
 
 const CONFIRM_TITLE = 'Call Emergency?';
 const CONFIRM_MESSAGE = `This will call ${EMERGENCY_NUMBER} (Philippine emergency hotline).`;
 
-// Figma frame 51: red pill, top-right over the map, while in transit.
+// Figma frame 51: red pill, top-right over the map, while in transit. The same
+// file in both apps (sharedUi.test.mjs): the rider has it over the map for the
+// whole trip.
 const EmergencyButton = ({ style }) => {
   const onPress = () => {
     if (Platform.OS === 'web') {
@@ -26,14 +23,19 @@ const EmergencyButton = ({ style }) => {
       }
       return;
     }
-    Alert.alert(CONFIRM_TITLE, CONFIRM_MESSAGE, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: `Call ${EMERGENCY_NUMBER}`,
-        style: 'destructive',
-        onPress: dialEmergency,
-      },
-    ]);
+    appAlert(
+      CONFIRM_TITLE,
+      CONFIRM_MESSAGE,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: `Call ${EMERGENCY_NUMBER}`,
+          style: 'destructive',
+          onPress: dialEmergency,
+        },
+      ],
+      { icon: 'phone' },
+    );
   };
 
   return (

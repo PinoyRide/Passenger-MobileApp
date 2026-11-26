@@ -1,4 +1,5 @@
 import { createSlice } from '@reduxjs/toolkit';
+import { isNewer } from '@/Utils/sessionSwap';
 
 // Matches ADVANCE_MAX_OPEN_PER_CUSTOMER on the backend.
 const ADVANCE_PARK_LIMIT = 3;
@@ -62,7 +63,17 @@ const normalizeRiderDetails = rd => {
 const initialState = {
   userInfo: null,
   hasShownLoginSuccess: false,
+  // The passenger's sign-in token from customers/login: a cash-out needs it
+  // (X-Customer-Session). Kept apart from userInfo, which profile updates
+  // replace.
+  sessionToken: null,
+  // When the stored token was made by a swap (Unix ms; null for the one from
+  // signing in): a token handed out later is stored only over an older one
+  // (Utils/sessionSwap.js).
+  sessionTokenAt: null,
   savedPlaces: [], // Array of saved locations
+  // the drop-offs and pick-ups of recent trips (recentPlaces.js)
+  recentPlaces: [],
 
   // ✅ NEW: Customer booking state (persisted across app restarts)
   activeBooking: null,
@@ -81,6 +92,9 @@ const initialState = {
   parkedAdvanceBookings: [],
   // Completed bookings the passenger already rated or skipped (no re-prompt).
   ratedBookingIds: [],
+  // Promos the passenger has seen on Promo & referrals: the Account page
+  // counts the others as "NEW".
+  seenPromoIds: [],
 };
 
 const userSlice = createSlice({
@@ -95,15 +109,38 @@ const userSlice = createSlice({
         state.acknowledgedScheduledIds = [];
         state.minimizedAdvanceBookingIds = [];
         state.parkedAdvanceBookings = [];
+        state.seenPromoIds = [];
+        state.sessionToken = null;
+        state.sessionTokenAt = null;
       }
       state.userInfo = action.payload;
     },
+    setSessionToken: (state, action) => {
+      state.sessionToken = action.payload || null;
+      state.sessionTokenAt = null;
+    },
+    // A new token the API handed out behind the scenes (F-2 part 2): kept only
+    // while signed in, and only over an older one.
+    swapSessionToken: (state, action) => {
+      const { token, at } = action.payload || {};
+      if (!token || !state.sessionToken || !state.userInfo) {
+        return;
+      }
+      if (!isNewer(at, state.sessionTokenAt)) {
+        return;
+      }
+      state.sessionToken = token;
+      state.sessionTokenAt = at;
+    },
     clearUserInfo: state => {
       state.userInfo = null;
+      state.sessionToken = null;
+      state.sessionTokenAt = null;
       state.ratedBookingIds = [];
       state.acknowledgedScheduledIds = [];
       state.minimizedAdvanceBookingIds = [];
       state.parkedAdvanceBookings = [];
+      state.recentPlaces = [];
     },
     setHasShownLoginSuccess: (state, action) => {
       state.hasShownLoginSuccess = action.payload;
@@ -146,6 +183,9 @@ const userSlice = createSlice({
     },
     clearSavedPlaces: state => {
       state.savedPlaces = [];
+    },
+    setRecentPlaces: (state, action) => {
+      state.recentPlaces = Array.isArray(action.payload) ? action.payload : [];
     },
 
     // ✅ NEW: Customer Booking Actions
@@ -262,6 +302,16 @@ const userSlice = createSlice({
       }
       state.ratedBookingIds = list.slice(-50);
     },
+    markPromosSeen: (state, action) => {
+      const list = (state.seenPromoIds || []).slice();
+      (action.payload || []).forEach(raw => {
+        const id = String(raw ?? '');
+        if (id && !list.includes(id)) {
+          list.push(id);
+        }
+      });
+      state.seenPromoIds = list.slice(-200);
+    },
     // A rider cancel re-pools the trip under a NEW booking id (old one is
     // cancelled with replaced_by). Swap every saved reference to the new id.
     replaceBookingId: (state, action) => {
@@ -323,17 +373,21 @@ const userSlice = createSlice({
 
 export const {
   setUserInfo,
+  setSessionToken,
+  swapSessionToken,
   clearUserInfo,
   setHasShownLoginSuccess,
   addSavedPlace,
   updateSavedPlace,
   removeSavedPlace,
   clearSavedPlaces,
+  setRecentPlaces,
   // ✅ NEW: Booking actions
   setActiveBooking,
   setBookingStatus,
   setRiderDetails,
   addRatedBookingId,
+  markPromosSeen,
   setPickupLocation,
   setDropoffLocation,
   setSelectedService,
@@ -353,9 +407,11 @@ export const {
 
 // Existing selectors
 export const selectUserInfo = state => state.user.userInfo;
+export const selectSessionToken = state => state.user.sessionToken;
 export const selectHasShownLoginSuccess = state =>
   state.user.hasShownLoginSuccess;
 export const selectSavedPlaces = state => state.user.savedPlaces;
+export const selectRecentPlaces = state => state.user.recentPlaces || [];
 
 // ✅ NEW: Booking selectors
 export const selectActiveBooking = state => state.user.activeBooking;
@@ -378,3 +434,4 @@ export const selectParkedAdvanceBookings = state =>
 export default userSlice.reducer;
 
 export const selectRatedBookingIds = state => state.user.ratedBookingIds || [];
+export const selectSeenPromoIds = state => state.user.seenPromoIds || [];

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-
-export const NO_RIDERS_TIMEOUT_MS = 5 * 60 * 1000;
+import { searchEndsMs } from '@/Utils/searchReach';
 
 const parseTime = value => {
   if (!value) {
@@ -11,10 +10,11 @@ const parseTime = value => {
 };
 
 /**
- * True once an unaccepted booking has waited 5 min since the server's
- * creation (or last re-pool) time. Survives reloads because the base time
- * comes from the booking itself. `restart(serverTime?)` resets the clock
- * after Try Again.
+ * True once an unaccepted booking has waited out its widening search since
+ * the server's creation (or last re-pool) time: 25 min, or the booking's own
+ * search_ends_after_minutes (Utils/searchReach.js; it was 5 min before the
+ * search widened). Survives reloads because the base time comes from the
+ * booking itself. `restart(serverTime?)` resets the clock after Try Again.
  */
 // date_created "YYYY-MM-DD" + time_created "hh:mm AM" (Manila local, minute precision).
 const parseCreatedParts = (date, time) => {
@@ -42,6 +42,7 @@ const useNoRidersTimer = ({ booking, waiting, serverOffsetMs = 0 }) => {
   const localBaseRef = useRef({ id: null, restartedAt: null, firstSeen: null });
 
   const bookingId = booking?.id ?? null;
+  const timeoutMs = searchEndsMs(booking);
   if (localBaseRef.current.id !== bookingId) {
     localBaseRef.current = {
       id: bookingId,
@@ -73,15 +74,14 @@ const useNoRidersTimer = ({ booking, waiting, serverOffsetMs = 0 }) => {
     if (base == null) {
       localBaseRef.current.firstSeen = start;
     }
-    const remaining =
-      start + NO_RIDERS_TIMEOUT_MS - (Date.now() + serverOffsetMs);
+    const remaining = start + timeoutMs - (Date.now() + serverOffsetMs);
     if (remaining <= 0) {
       setExpired(true);
       return undefined;
     }
     const id = setTimeout(() => setExpired(true), remaining);
     return () => clearTimeout(id);
-  }, [waiting, bookingId, base, serverOffsetMs]);
+  }, [waiting, bookingId, base, serverOffsetMs, timeoutMs]);
 
   const restart = serverTime => {
     localBaseRef.current.restartedAt =
@@ -89,7 +89,8 @@ const useNoRidersTimer = ({ booking, waiting, serverOffsetMs = 0 }) => {
     setExpired(false);
   };
 
-  return { expired: waiting && expired, restart };
+  // `startedAt`: when this search began (server time, ms), for the radar
+  return { expired: waiting && expired, restart, startedAt: base };
 };
 
 export default useNoRidersTimer;

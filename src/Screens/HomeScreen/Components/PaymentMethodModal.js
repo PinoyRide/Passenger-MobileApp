@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Image,
   Modal,
@@ -9,23 +9,104 @@ import {
   View,
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
-import { AlertBox } from '@/Components';
+import { useSelector } from 'react-redux';
+import { AlertBox, AppButton } from '@/Components';
 import TopUpAmountModal from './TopUpAmountModal';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { bottomSpace } from '@/Utils/bottomSpace';
+import { useNavigation } from '@react-navigation/native';
+import useApiRequest from '@/Services/ApiV2';
+import { AppUtil, Constants } from '@/Utils';
+import { selectUserInfo } from '@/Redux/Slices/userSlice';
+import { walletOff } from '@/Utils/walletOff';
+import appAlert from '@/Utils/appAlert';
+import {
+  LOCKED_MESSAGE,
+  isLockedRefusal,
+  lockedAlert,
+  verifyParams,
+  walletLocked,
+} from '@/Utils/walletLock';
 
+// Cash, or the Pinoy Ride Wallet with its balance (back at the owner's request,
+// 2026-11-22; hidden since the TOP PH days). The server checks the balance when
+// the ride is booked and takes the fare when the trip ends. Advance bookings
+// stay cash (the app switches them to cash). Top up opens the top-up page,
+// which works once PayCools is switched on. The Google Play build has no
+// wallet (Utils/walletOff.js): Cash only, no balance read, no top-up. While
+// the wallet is locked until the ID check passes (`locked` in the wallet
+// answer, WALLET-EKYC-LOCK, A-325), the wallet and Top up say "Verify your ID
+// to use your wallet." with Verify ID (Utils/walletLock.js).
 const PaymentMethodModal = ({
   visible,
   onClose,
   onSelect,
   selectedPayment = 'cash',
+  cashOnly = false,
 }) => {
+  // The navigation bar may cover the bottom of the screen: keep the bottom content clear of it
+  const { bottom: bottomInset } = useSafeAreaInsets();
   const { colors } = useTheme();
   const styles = getStyles({ colors });
+  const userInfo = useSelector(selectUserInfo);
+  const navigation = useNavigation();
+  const getWallet = useApiRequest();
 
-  const [showTopUpModal, setShowTopUpModal] = React.useState(false);
-  const [alertMessage, setAlertMessage] = React.useState('');
-  const [showAlert, setShowAlert] = React.useState(false);
+  const [showTopUpModal, setShowTopUpModal] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+  const [showAlert, setShowAlert] = useState(false);
+  const [balance, setBalance] = useState(null);
+  const [locked, setLocked] = useState(false);
+  const noWallet = walletOff();
 
-  const handleTopUpError = errorMessage => {
+  // the wallet's balance and whether it is locked, read again each time the
+  // sheet opens (the wallet answer, without its transactions)
+  useEffect(() => {
+    if (noWallet || !visible || !userInfo?.id) {
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { response } = await getWallet.request(
+        'GET',
+        `${Constants.API.CUSTOMER_WALLET(userInfo.id)}?take=0`,
+      );
+      const wallet = response?.data;
+      if (cancelled || !wallet) {
+        return;
+      }
+      setLocked(walletLocked(wallet));
+      if (wallet.availBalance !== undefined && wallet.availBalance !== null) {
+        setBalance(wallet.availBalance);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, userInfo?.id]);
+
+  let walletNote = 'Balance …';
+  if (cashOnly) {
+    walletNote = 'Advance bookings are paid in cash';
+  } else if (locked) {
+    walletNote = LOCKED_MESSAGE;
+  } else if (balance !== null) {
+    walletNote = `Balance ₱${AppUtil.fn(balance)}`;
+  }
+
+  // "Verify your ID to use your wallet.": the sheet closes, Verify ID starts
+  // the check on the Wallet page
+  const askToVerify = () => {
+    onClose();
+    appAlert(...lockedAlert(() => navigation.navigate(...verifyParams())));
+  };
+
+  const handleTopUpError = (errorMessage, reason) => {
+    if (isLockedRefusal(reason)) {
+      askToVerify();
+      return;
+    }
     setAlertMessage(errorMessage);
     setShowAlert(true);
   };
@@ -55,7 +136,11 @@ const PaymentMethodModal = ({
           <View style={styles.backdrop} />
         </TouchableWithoutFeedback>
 
-        <View style={styles.modalContainer}>
+        <View
+          style={[
+            styles.modalContainer,
+            { paddingBottom: bottomSpace(bottomInset, 20) },
+          ]}>
           <Text style={styles.title}>Select Payment</Text>
 
           {/* cash option */}
@@ -81,39 +166,63 @@ const PaymentMethodModal = ({
             )}
           </TouchableOpacity>
 
-          {/* wallet option */}
-          {/* <TouchableOpacity
-            style={[
-              styles.option,
-              selectedPayment === 'wallet' && styles.optionSelected,
-            ]}
-            onPress={() => {
-              onSelect?.('wallet');
-              onClose();
-            }}>
-            <Image
-              source={require('@/Assets/Common/HomeScreen/PaymentMethodModal/Wallet.png')}
-              style={styles.icon}
-            />
-            <Text style={styles.optionText}>Pinoy Ride Wallet</Text>
-            {selectedPayment === 'wallet' && (
-              <View style={styles.radioCircle}>
-                <View style={styles.radioInner} />
+          {/* wallet option: none in the Google Play build */}
+          {noWallet ? null : (
+            <TouchableOpacity
+              disabled={cashOnly}
+              accessibilityState={{
+                disabled: cashOnly,
+                selected: selectedPayment === 'wallet',
+              }}
+              style={[
+                styles.option,
+                selectedPayment === 'wallet' && styles.optionSelected,
+                cashOnly && styles.optionDisabled,
+              ]}
+              onPress={() => {
+                if (locked) {
+                  askToVerify();
+                  return;
+                }
+                onSelect?.('wallet');
+                onClose();
+              }}>
+              <Image
+                source={require('@/Assets/Common/HomeScreen/PaymentMethodModal/Wallet.png')}
+                style={styles.icon}
+              />
+              <View style={styles.optionBody}>
+                <Text style={styles.optionName}>Pinoy Ride Wallet</Text>
+                <Text style={styles.optionNote}>{walletNote}</Text>
               </View>
-            )}
-          </TouchableOpacity> */}
+              {selectedPayment === 'wallet' && (
+                <View style={styles.radioCircle}>
+                  <View style={styles.radioInner} />
+                </View>
+              )}
+            </TouchableOpacity>
+          )}
 
-          {/* <AppButton title="Top Up" onPress={handleNext} isBold /> */}
+          {noWallet ? null : (
+            <AppButton
+              title="Top up the wallet"
+              mode="outlined"
+              noSpacing
+              onPress={() => (locked ? askToVerify() : setShowTopUpModal(true))}
+            />
+          )}
         </View>
       </Modal>
 
       {/* top up amount modal */}
-      <TopUpAmountModal
-        visible={showTopUpModal}
-        onClose={() => setShowTopUpModal(false)}
-        onError={handleTopUpError}
-        onSuccess={handleTopUpSuccess}
-      />
+      {noWallet ? null : (
+        <TopUpAmountModal
+          visible={showTopUpModal}
+          onClose={() => setShowTopUpModal(false)}
+          onError={handleTopUpError}
+          onSuccess={handleTopUpSuccess}
+        />
+      )}
     </>
   );
 };
@@ -143,7 +252,7 @@ const getStyles = ({ colors }) =>
     option: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: colors.onPrimary,
+      backgroundColor: colors.card,
       padding: 12,
       borderRadius: 5,
       marginBottom: 12,
@@ -163,6 +272,23 @@ const getStyles = ({ colors }) =>
       fontFamily: 'Poppins Regular',
       color: colors.text,
     },
+    optionDisabled: {
+      opacity: 0.5,
+    },
+    optionBody: {
+      flex: 1,
+    },
+    optionName: {
+      fontSize: 15,
+      fontFamily: 'Poppins Regular',
+      color: colors.text,
+    },
+    optionNote: {
+      fontSize: 12,
+      lineHeight: 16,
+      fontFamily: 'Poppins Regular',
+      color: colors.grey4 ?? colors.text,
+    },
     radioCircle: {
       width: 16,
       height: 16,
@@ -180,7 +306,7 @@ const getStyles = ({ colors }) =>
     },
     manageText: {
       fontSize: 16,
-      fontFamily: 'Poppins Light',
+      fontFamily: 'Poppins Regular',
       color: colors.primary,
       textAlign: 'center',
       marginTop: 12,

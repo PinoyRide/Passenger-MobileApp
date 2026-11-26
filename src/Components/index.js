@@ -4,7 +4,6 @@ export { default as AppTextError } from './AppTextError/AppTextError';
 export { default as AppButton } from './AppButton/AppButton';
 export { default as OTPInput } from './OTP/OTPInput';
 export { default as SuccessAlertBox } from './AlertBox/SuccessAlertBox';
-export { default as RiderFoundAlertBox } from './AlertBox/RiderFoundAlertBox';
 export { default as AdvanceBookingAcceptedModal } from './AlertBox/AdvanceBookingAcceptedModal';
 export { default as AlertBox } from './AlertBox/AlertBox';
 export { default as AppMap } from './AppMap/AppMap';

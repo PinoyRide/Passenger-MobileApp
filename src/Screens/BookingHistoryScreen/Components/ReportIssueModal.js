@@ -4,30 +4,51 @@ import {
   ActivityIndicator,
   Image,
   Keyboard,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import TypingLayer from '@/Components/TypingLayer/TypingLayer';
 
-const ReportIssueModal = ({ visible, onClose, onSubmit, loading }) => {
+// `initialMessage`: what the box opens with, for the person to add to (the
+// rating page's "My trip ended 5 km from my drop-off."). A layer of the screen
+// that draws it, not a Modal (Components/TypingLayer): the keyboard lifts the
+// whole card, and lowering the keyboard no longer closes it (the owner,
+// 2026-11-23).
+const ReportIssueModal = ({
+  visible,
+  onClose,
+  onSubmit,
+  loading,
+  initialMessage = '',
+}) => {
   const { colors } = useTheme();
   const styles = getStyles({ colors });
   const [message, setMessage] = useState('');
+  // the picture steps aside while the keyboard is up, so the card fits above it
+  const [typing, setTyping] = useState(false);
 
-  // Clear message whenever modal is hidden (after success or close)
+  // Opens with initialMessage; cleared whenever hidden (after success or close)
   useEffect(() => {
-    if (!visible) {
-      setMessage('');
-    }
-  }, [visible]);
+    setMessage(visible ? initialMessage : '');
+  }, [visible, initialMessage]);
+
+  useEffect(() => {
+    const shown = Keyboard.addListener('keyboardDidShow', () =>
+      setTyping(true),
+    );
+    const hidden = Keyboard.addListener('keyboardDidHide', () =>
+      setTyping(false),
+    );
+    return () => {
+      shown.remove();
+      hidden.remove();
+    };
+  }, []);
 
   const handleSend = () => {
     if (!message.trim()) {
@@ -37,65 +58,55 @@ const ReportIssueModal = ({ visible, onClose, onSubmit, loading }) => {
   };
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}>
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.overlay}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={{
-              width: '100%',
-              alignItems: 'center',
-              paddingHorizontal: 30,
-            }}>
-            <TouchableWithoutFeedback>
-              <View style={styles.container}>
-                {/* Close Button */}
-                <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-                  <Icon name="close" size={20} color={colors.grey4} />
-                </TouchableOpacity>
+    <TypingLayer visible={visible} onClose={onClose} placement="center">
+      <View style={styles.overlay} pointerEvents="box-none">
+        <View style={styles.container}>
+          {/* Close Button */}
+          <TouchableOpacity
+            style={styles.closeButton}
+            onPress={onClose}
+            accessibilityRole="button"
+            accessibilityLabel="Close">
+            <Icon name="close" size={20} color={colors.grey4} />
+          </TouchableOpacity>
 
-                <Image
-                  source={require('@/Assets/Common/BookingDetails/ReportIssue.png')}
-                  style={styles.icon}
-                  resizeMode="contain"
-                />
+          {typing ? null : (
+            <Image
+              source={require('@/Assets/Common/BookingDetails/ReportIssue.png')}
+              style={styles.icon}
+              resizeMode="contain"
+            />
+          )}
 
-                <Text style={styles.title}>Report an Issue</Text>
+          <Text style={styles.title}>Report an Issue</Text>
 
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Message"
-                  placeholderTextColor={colors.grey4}
-                  autoCorrect={false}
-                  multiline
-                  value={message}
-                  onChangeText={setMessage}
-                  textAlignVertical="top"
-                />
+          <TextInput
+            style={styles.textInput}
+            placeholder="Message"
+            placeholderTextColor={colors.grey4}
+            autoCorrect={false}
+            multiline
+            value={message}
+            onChangeText={setMessage}
+            textAlignVertical="top"
+          />
 
-                <TouchableOpacity
-                  style={[
-                    styles.sendButton,
-                    (!message.trim() || loading) && styles.sendButtonDisabled,
-                  ]}
-                  onPress={handleSend}
-                  disabled={!message.trim() || loading}>
-                  {loading ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={styles.sendText}>Send</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </TouchableWithoutFeedback>
-          </KeyboardAvoidingView>
+          <TouchableOpacity
+            style={[
+              styles.sendButton,
+              (!message.trim() || loading) && styles.sendButtonDisabled,
+            ]}
+            onPress={handleSend}
+            disabled={!message.trim() || loading}>
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.sendText}>Send</Text>
+            )}
+          </TouchableOpacity>
         </View>
-      </TouchableWithoutFeedback>
-    </Modal>
+      </View>
+    </TypingLayer>
   );
 };
 
@@ -104,14 +115,13 @@ export default ReportIssueModal;
 const getStyles = ({ colors }) =>
   StyleSheet.create({
     overlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.5)',
-      justifyContent: 'center',
+      width: '100%',
       alignItems: 'center',
+      paddingHorizontal: 30,
     },
     container: {
       width: '100%',
-      backgroundColor: colors.onPrimary,
+      backgroundColor: colors.card,
       borderRadius: 20,
       paddingTop: 16,
       paddingBottom: 30,
@@ -131,7 +141,7 @@ const getStyles = ({ colors }) =>
     title: {
       fontFamily: 'Poppins SemiBold',
       fontSize: 18,
-      color: colors.shadow,
+      color: colors.text,
       marginBottom: 20,
     },
     textInput: {
@@ -142,7 +152,7 @@ const getStyles = ({ colors }) =>
       padding: 14,
       fontFamily: 'Poppins Regular',
       fontSize: 13,
-      color: colors.shadow,
+      color: colors.text,
       marginBottom: 24,
       shadowColor: colors.shadow,
       shadowOpacity: 0.08,

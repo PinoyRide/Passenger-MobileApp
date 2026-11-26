@@ -1,0 +1,4 @@
+<resources>
+  <!-- Dark icons on the system bars while the window is light (values-night/bools.xml: light icons on the dark one) -->
+  <bool name="launch_light_bars">true</bool>
+</resources>

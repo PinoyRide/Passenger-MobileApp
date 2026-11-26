@@ -1,39 +1,36 @@
 require File.join(File.dirname(`node --print "require.resolve('expo/package.json')"`), "scripts/autolinking")
-
-def node_require(script)
-  require Pod::Executable.execute_command('node', ['-p',
-    "require.resolve(
-      '#{script}',
-      {paths: [process.argv[1]]},
-    )", __dir__]).strip
-end
-
-# React Native + Permissions setup
-node_require('react-native/scripts/react_native_pods.rb')
-node_require('react-native-permissions/scripts/setup.rb')
+require File.join(File.dirname(`node --print "require.resolve('react-native/package.json')"`), "scripts/react_native_pods")
+# @generated begin require - expo prebuild (DO NOT MODIFY) sync-0b3d11245f758d271ec25750612913aa85ad0f45
+require File.join(File.dirname(`node --print "require.resolve('react-native-permissions/package.json')"`), "scripts/setup")
+# @generated end require
 
 require 'json'
 podfile_properties = JSON.parse(File.read(File.join(__dir__, 'Podfile.properties.json'))) rescue {}
 
-ENV['RCT_NEW_ARCH_ENABLED'] = podfile_properties['newArchEnabled'] == 'true' ? '1' : '0'
-ENV['EX_DEV_CLIENT_NETWORK_INSPECTOR'] = podfile_properties['EX_DEV_CLIENT_NETWORK_INSPECTOR']
+def ccache_enabled?(podfile_properties)
+  # Environment variable takes precedence
+  return ENV['USE_CCACHE'] == '1' if ENV['USE_CCACHE']
+  
+  # Fall back to Podfile properties
+  podfile_properties['apple.ccacheEnabled'] == 'true'
+end
 
+ENV['RCT_NEW_ARCH_ENABLED'] ||= '0' if podfile_properties['newArchEnabled'] == 'false'
+ENV['EX_DEV_CLIENT_NETWORK_INSPECTOR'] ||= podfile_properties['EX_DEV_CLIENT_NETWORK_INSPECTOR']
+ENV['RCT_USE_RN_DEP'] ||= '1' if podfile_properties['ios.buildReactNativeFromSource'] != 'true' && podfile_properties['newArchEnabled'] != 'false'
+ENV['RCT_USE_PREBUILT_RNCORE'] ||= '1' if podfile_properties['ios.buildReactNativeFromSource'] != 'true' && podfile_properties['newArchEnabled'] != 'false'
 platform :ios, podfile_properties['ios.deploymentTarget'] || '15.1'
-# use_modular_headers! 
-install! 'cocoapods',
-  :deterministic_uuids => false
 
 prepare_react_native_project!
-
+# @generated begin setup - expo prebuild (DO NOT MODIFY) sync-efbb090606c2109fba92582e6fced99b02263b89
 setup_permissions([
   'Camera',
-  'LocationAccuracy',
-  'LocationAlways',
   'LocationWhenInUse',
   'Notifications',
 ])
+# @generated end setup
 
-target 'pinoyride' do
+target 'PinoyRide' do
   use_expo_modules!
 
   if ENV['EXPO_USE_COMMUNITY_AUTOLINKING'] == '1'
@@ -43,7 +40,8 @@ target 'pinoyride' do
       'node',
       '--no-warnings',
       '--eval',
-      'require(require.resolve(\'expo-modules-autolinking\', { paths: [require.resolve(\'expo/package.json\')] }))(process.argv.slice(1))',
+      'require(\'expo/bin/autolinking\')',
+      'expo-modules-autolinking',
       'react-native-config',
       '--json',
       '--platform',
@@ -51,15 +49,10 @@ target 'pinoyride' do
     ]
   end
 
+# @generated begin react-native-maps - expo prebuild (DO NOT MODIFY) sync-e9cc66c360abe50bc66d89fffb3c55b034d7d369
+  pod 'react-native-google-maps', path: File.dirname(`node --print "require.resolve('react-native-maps/package.json')"`)
+# @generated end react-native-maps
   config = use_native_modules!(config_command)
-
-  # Firebase iOS SDK (RNFirebase push) needs modular headers; keeps Maps/FB SDK linkage as-is.
-  pod 'FirebaseCore', :modular_headers => true
-  pod 'GoogleUtilities', :modular_headers => true
-  pod 'FirebaseCoreInternal', :modular_headers => true
-  pod 'FirebaseInstallations', :modular_headers => true
-  pod 'GoogleDataTransport', :modular_headers => true
-  pod 'nanopb', :modular_headers => true
 
   use_frameworks! :linkage => podfile_properties['ios.useFrameworks'].to_sym if podfile_properties['ios.useFrameworks']
   use_frameworks! :linkage => ENV['USE_FRAMEWORKS'].to_sym if ENV['USE_FRAMEWORKS']
@@ -72,53 +65,26 @@ target 'pinoyride' do
     :privacy_file_aggregation_enabled => podfile_properties['apple.privacyManifestAggregationEnabled'] != 'false',
   )
 
-  rn_maps_path = '../node_modules/react-native-maps'
-  pod 'react-native-google-maps', :path => rn_maps_path
-  # this is from node_modules/react-native-maps/react-native-google-maps.podspec
-  pod 'GoogleMaps', '7.4.0'
-  pod 'Google-Maps-iOS-Utils', '4.2.2'
-
   post_install do |installer|
     react_native_post_install(
       installer,
       config[:reactNativePath],
       :mac_catalyst_enabled => false,
-      :ccache_enabled => podfile_properties['apple.ccacheEnabled'] == 'true',
+      :ccache_enabled => ccache_enabled?(podfile_properties),
     )
-
-    # Remove unused Facebook SDK subspecs
+# @generated begin pinoyride-pods-for-xcode-27 - expo prebuild (DO NOT MODIFY) sync-d0c0af52fc21ce8ab348e07b9f9d8e8d0325745a
+    app_ios = podfile_properties['ios.deploymentTarget'] || '15.1'
     installer.pods_project.targets.each do |target|
-      if target.name == 'react-native-fbsdk-next'
-        target.build_configurations.each do |config|
-          config.build_settings['OTHER_SWIFT_FLAGS'] ||= ['$(inherited)']
+      target.build_configurations.each do |build|
+        pod_ios = build.build_settings['IPHONEOS_DEPLOYMENT_TARGET']
+        if pod_ios && Gem::Version.new(pod_ios) < Gem::Version.new(app_ios)
+          build.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = app_ios
+        end
+        if target.name == 'fmt'
+          build.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
         end
       end
     end
-
-    # Ensure only required Facebook pods are used
-    installer.pod_targets.each do |pod_target|
-      if pod_target.name == 'FBSDKCoreKit'
-        new_specs = pod_target.specs.reject { |s| s.name =~ /FBSDKShareKit|FBSDKGamingServicesKit/ }
-        pod_target.instance_variable_set(:@specs, new_specs.dup) # dup ensures it's not frozen
-      end
-    end
-  
-    # This is necessary for Xcode 14+, because it signs resource bundles by default
-    # when building for devices.
-    installer.target_installation_results.pod_target_installation_results
-      .each do |pod_name, target_installation_result|
-      target_installation_result.resource_bundle_targets.each do |resource_bundle_target|
-        resource_bundle_target.build_configurations.each do |config|
-          config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
-        end
-      end
-    end
-  
-    # 🚑 Fix non-modular include error for Facebook SDK and other pods
-    installer.pods_project.targets.each do |target|
-      target.build_configurations.each do |config|
-        config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
-      end
-    end
+# @generated end pinoyride-pods-for-xcode-27
   end
 end

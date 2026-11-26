@@ -3,19 +3,20 @@ import {
   ActivityIndicator,
   Image,
   Keyboard,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import KeyboardScroll from '@/Components/KeyboardScroll/KeyboardScroll';
 import Container from '@/Components/Container/Container';
 import { useTheme } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { AlertBox, AppButton, AppTextInput } from '@/Components';
 import usePostRequest from '@/Services/Api';
 import { AppUtil, Constants } from '@/Utils';
+import { walletOff } from '@/Utils/walletOff';
 
 const RegisterScreen = () => {
   const { colors } = useTheme();
@@ -82,6 +83,12 @@ const RegisterScreen = () => {
     }
 
     setErrorMessage('');
+    // the Google Play build has no wallet, and no identity check
+    // (Utils/walletOff.js): registering is the form
+    if (walletOff()) {
+      navigation.navigate('RegisterFormScreen');
+      return;
+    }
     fetchEKYCUrl(mobileNumber);
   };
 
@@ -117,7 +124,7 @@ const RegisterScreen = () => {
         </View>
 
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <ScrollView
+          <KeyboardScroll
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}>
@@ -143,7 +150,7 @@ const RegisterScreen = () => {
                 disabled={isLoading}
               />
             </View>
-          </ScrollView>
+          </KeyboardScroll>
         </TouchableWithoutFeedback>
       </Container>
     </>
@@ -185,7 +192,7 @@ const getStyles = ({ colors }) =>
     headerTitle: {
       fontSize: 16,
       fontFamily: 'Poppins Medium',
-      color: colors.shadow,
+      color: colors.text,
     },
     scrollContent: {
       flexGrow: 1,

@@ -1,15 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
   Image,
   Keyboard,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import KeyboardScroll from '@/Components/KeyboardScroll/KeyboardScroll';
 import { useTheme } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { AlertBox, Container, OTPInput } from '@/Components';
@@ -17,9 +16,17 @@ import useApiRequest from '@/Services/ApiV2';
 import { toStoredUser } from '@/Utils/customerMapper';
 import { signedInRoutes } from '@/Utils/consent';
 import { Constants } from '@/Utils';
-import DeviceInfo from 'react-native-device-info';
+import { handedCode } from '@/Utils/handedCode';
+import { SMS, codeRefused, sentTo } from '@/Utils/codeChannel';
+import { afterRegistering } from '@/Utils/registerForm';
+import { installedVersion } from '@/Utils/installedVersion';
 import { useDispatch, useSelector } from 'react-redux';
-import { selectUserInfo, setUserInfo } from '@/Redux/Slices/userSlice';
+import {
+  selectUserInfo,
+  setSessionToken,
+  setUserInfo,
+} from '@/Redux/Slices/userSlice';
+import appAlert from '@/Utils/appAlert';
 
 // The backend's message for an unregistered number ("Customer with this mobile number does not exist").
 const NOT_REGISTERED_ERROR_PATTERN = /does not exist/i;
@@ -29,13 +36,23 @@ const OTPScreen = () => {
   const styles = getStyles({ colors });
   const navigation = useNavigation();
   const route = useRoute();
-  const { mobileNumber, otpSent, mode, consent } = route.params;
+  const { mobileNumber, otpSent, mode, consent, registration, emailHint } =
+    route.params;
   const isRegister = mode === 'register';
+  // How the login code was sent: a text, or an email (chosen on LoginScreen).
+  // A registration code is always texted.
+  const channel = (!isRegister && route.params.channel) || SMS;
 
   const getOtpCode = useApiRequest();
   const loginUser = useApiRequest();
 
   const [, setOtpCode] = useState('');
+  // A code the backend handed over instead of texting it (a test environment
+  // without working SMS): filled in and submitted for the person.
+  const [codeFromBackend, setCodeFromBackend] = useState(
+    route.params.handedCode ?? null,
+  );
+  const [alertTitle, setAlertTitle] = useState('Error');
   const [alertMessage, setAlertMessage] = useState('');
   const [showAlert, setShowAlert] = useState(false);
 
@@ -56,6 +73,10 @@ const OTPScreen = () => {
       {
         mobileNo: number,
         userType: 'customer',
+        // a registration code is asked for with the whole form, as the form
+        // screen asked for the first one (without it, "Request a new OTP"
+        // was always refused: overnight review 2026-11-23)
+        ...(isRegister ? registration : { channel }),
       },
     );
 
@@ -63,7 +84,7 @@ const OTPScreen = () => {
   useEffect(() => {
     if (getOtpCode.error) {
       if (NOT_REGISTERED_ERROR_PATTERN.test(getOtpCode.error)) {
-        Alert.alert(
+        appAlert(
           'Account Not Found',
           'No account was found for this mobile number. Please check the number or sign up.',
           [
@@ -76,8 +97,14 @@ const OTPScreen = () => {
         return;
       }
 
+      setAlertTitle('Error');
       setAlertMessage(getOtpCode.error);
       setShowAlert(true);
+      return;
+    }
+    const handed = handedCode(getOtpCode.response?.data);
+    if (handed) {
+      setCodeFromBackend(handed);
     }
   }, [getOtpCode.response, getOtpCode.error]);
 
@@ -92,30 +119,41 @@ const OTPScreen = () => {
       {
         mobileNo: mobileNumber,
         otpCode: code,
-        appVersion: DeviceInfo.getVersion(),
-        // registering: the Terms and Privacy Policy acceptance is recorded with the account
-        ...(isRegister ? consent : {}),
+        appVersion: installedVersion(),
+        // registering: the Terms and Privacy Policy acceptance is recorded with the account,
+        // with the form's names and email; the passenger then logs in (signIn: false)
+        ...(isRegister ? { ...consent, ...registration, signIn: false } : {}),
       },
     );
 
   useEffect(() => {
     if (loginUser.error) {
-      setAlertMessage(
-        /invalid otp/i.test(loginUser.error)
-          ? 'Invalid OTP, please try again.'
-          : loginUser.error,
-      );
+      // an expired or used-up code says so, and points at "Request a new OTP"
+      const refused = codeRefused(loginUser.error);
+      if (refused.newCodeNeeded) {
+        // the keyboard covered the link, and taps on it typed the dead code in again
+        Keyboard.dismiss();
+      }
+      setAlertTitle(refused.title);
+      setAlertMessage(refused.message);
       setShowAlert(true);
+      return;
+    }
+    if (isRegister && loginUser.response?.data) {
+      // The account is made: log in with it, the number filled in
+      navigation.reset(afterRegistering(mobileNumber));
       return;
     }
     if (loginUser.response?.code === 200 && loginUser.response.data) {
       dispatch(setUserInfo(toStoredUser(loginUser.response.data)));
+      // the sign-in token a cash-out needs (answered only by customers/login)
+      dispatch(setSessionToken(loginUser.response.data.sessionToken));
     }
   }, [loginUser.response, loginUser.error]);
 
-  // Redirect after login / registration. An account that has not accepted the current Terms and
-  // Privacy Policy is asked first. An incomplete profile (name + selfie) goes straight to
-  // CompleteProfileScreen, with Home underneath so Back still works; booking stays blocked until it is done.
+  // Redirect after login. An account that has not accepted the current Terms and Privacy Policy
+  // is asked first. An incomplete profile (no name: an account from before the form) goes to
+  // CompleteProfileScreen, with Home underneath so Back still works.
   useEffect(() => {
     if (!userInfo) {
       return;
@@ -136,6 +174,7 @@ const OTPScreen = () => {
     try {
       await fetchOtp(mobileNumber);
     } catch (error) {
+      setAlertTitle('Error');
       setAlertMessage(error || 'Failed to resend OTP.');
       setShowAlert(true);
     }
@@ -155,14 +194,16 @@ const OTPScreen = () => {
           />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>Get Started</Text>
+          <Text style={styles.headerTitle}>
+            {isRegister ? 'Register' : 'Get Started'}
+          </Text>
         </View>
       </View>
 
       {/* Alert */}
       {alertMessage ? (
         <AlertBox
-          title="Error"
+          title={alertTitle}
           message={alertMessage}
           visible={showAlert}
           setVisible={setShowAlert}
@@ -171,19 +212,25 @@ const OTPScreen = () => {
 
       {/* Scrollable Content with Keyboard Dismissal */}
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <ScrollView
+        <KeyboardScroll
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
           <View style={styles.pageContainer}>
             <Text style={styles.title}>Enter One-Time PIN</Text>
             <Text style={styles.subtitle}>
-              A One-Time PIN was sent to +63 ******{mobileNumber.slice(-4)}
+              {sentTo({
+                channel,
+                emailHint,
+                mobileNumber,
+                handed: !!codeFromBackend,
+              })}
             </Text>
             <OTPInput
               length={6}
               onOTPChange={setOtpCode}
               onOTPComplete={verifyOtp}
+              autoFillCode={codeFromBackend}
             />
 
             <View style={styles.imageContainer}>
@@ -209,7 +256,7 @@ const OTPScreen = () => {
               </TouchableOpacity>
             </View>
           </View>
-        </ScrollView>
+        </KeyboardScroll>
       </TouchableWithoutFeedback>
     </Container>
   );
@@ -251,7 +298,7 @@ const getStyles = ({ colors }) =>
     headerTitle: {
       fontSize: 16,
       fontFamily: 'Poppins Medium',
-      color: colors.shadow,
+      color: colors.text,
     },
     scrollContent: {
       flexGrow: 1,
@@ -262,6 +309,7 @@ const getStyles = ({ colors }) =>
       paddingVertical: 20,
     },
     title: {
+      color: colors.text,
       fontSize: 20,
       fontWeight: '400',
       marginBottom: 15,
@@ -289,7 +337,7 @@ const getStyles = ({ colors }) =>
     resendLabel: {
       fontFamily: 'Poppins Regular',
       fontSize: 16,
-      color: colors.shadow,
+      color: colors.text,
       marginBottom: 2,
     },
     resendLink: {
