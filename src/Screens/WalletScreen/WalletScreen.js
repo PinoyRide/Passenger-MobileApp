@@ -180,6 +180,7 @@ const WalletScreen = () => {
       </View>
 
       <ScrollView
+        style={styles.scrollArea}
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -331,7 +332,10 @@ const getStyles = look =>
       letterSpacing: -0.3,
       color: look.ink,
     },
-    scroll: { flexGrow: 1, marginHorizontal: -4, paddingBottom: 16 },
+    // the list itself is 4 wider at each side: a ScrollView cuts off whatever
+    // its content pushes past its edges (WALLET-CLIP)
+    scrollArea: { marginHorizontal: -4 },
+    scroll: { flexGrow: 1, paddingBottom: 16 },
     flex: { flex: 1 },
     pressed: { opacity: 0.85 },
     balanceCard: {
