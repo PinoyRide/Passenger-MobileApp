@@ -31,4 +31,29 @@ function updateNeededText(shownMinimum) {
   };
 }
 
-module.exports = { UPDATE_NEEDED, updateNeededText, minimumVersionLine };
+// One red line under the button when the download page does not open: the
+// link failed to open, or the API sent none (the older routes, Api.js and
+// ApiV2.js, name no link). The button can be tapped again.
+const OPEN_FAILED = 'Could not open the download page. Please try again.';
+
+// Opens the download link with `openURL` (Linking.openURL on the screen).
+// Gives null when it opened, OPEN_FAILED when it did not or there is no link.
+async function openUpdateLink(link, openURL) {
+  if (typeof link !== 'string' || !link.trim()) {
+    return OPEN_FAILED;
+  }
+  try {
+    await openURL(link.trim());
+    return null;
+  } catch (e) {
+    return OPEN_FAILED;
+  }
+}
+
+module.exports = {
+  UPDATE_NEEDED,
+  OPEN_FAILED,
+  updateNeededText,
+  minimumVersionLine,
+  openUpdateLink,
+};

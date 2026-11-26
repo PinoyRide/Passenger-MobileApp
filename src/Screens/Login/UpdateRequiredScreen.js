@@ -6,7 +6,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import AppButton from '@/Components/AppButton/AppButton';
 import { modern } from '@/Theme/modern';
 import { displayVersion } from '@/Utils/displayVersion';
-import { updateNeededText } from '@/Utils/updateNeededText';
+import { openUpdateLink, updateNeededText } from '@/Utils/updateNeededText';
 
 // Update needed (A-184, C-4): plain words, the gold icon patch, the app's one
 // gold button. Colours only from modern.js, so it turns with the look.
@@ -22,6 +22,8 @@ const UpdateRequiredScreen = ({ route }) => {
   const words = updateNeededText(displayVersion(minimumVersion));
 
   const [isProcessing, setIsProcessing] = useState(false);
+  // the red line under the button when the download page did not open
+  const [problem, setProblem] = useState(null);
 
   // Block the hardware back button — nowhere to go back to, the app is outdated.
   useFocusEffect(
@@ -38,16 +40,17 @@ const UpdateRequiredScreen = ({ route }) => {
   // Off to the download, still signed in (the owner, 2026-11-23: reduce
   // cost): installing the new APK keeps the app's data, so no new sign-in,
   // no paid code text. Should the sign-in be lost all the same, the backend
-  // lets a newer version take over the old session (LoginSession).
+  // lets a newer version take over the old session (LoginSession). With no
+  // link, or a link that does not open, one red line says so and the button
+  // can be tapped again.
   const handleUpdatePress = async () => {
     if (isProcessing) {
       return;
     }
     setIsProcessing(true);
+    setProblem(null);
     try {
-      if (updateLink) {
-        await Linking.openURL(updateLink);
-      }
+      setProblem(await openUpdateLink(updateLink, url => Linking.openURL(url)));
     } finally {
       setIsProcessing(false);
     }
@@ -77,6 +80,14 @@ const UpdateRequiredScreen = ({ route }) => {
           isBold
           noSpacing
         />
+        {problem ? (
+          <Text
+            style={styles.problem}
+            maxFontSizeMultiplier={1.3}
+            accessibilityLiveRegion="polite">
+            {problem}
+          </Text>
+        ) : null}
       </View>
     </View>
   );
@@ -128,5 +139,13 @@ const getStyles = look =>
     buttonRow: {
       alignSelf: 'stretch',
       marginTop: 24,
+    },
+    problem: {
+      fontSize: 13,
+      lineHeight: 18,
+      fontFamily: 'Poppins Regular',
+      color: look.red,
+      textAlign: 'center',
+      marginTop: 10,
     },
   });
