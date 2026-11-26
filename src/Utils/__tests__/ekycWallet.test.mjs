@@ -88,6 +88,53 @@ test('failed and incomplete show the reason in words and the tries left', () => 
   assert.doesNotMatch(raw.note, /tamper/);
 });
 
+// EKYC-HOTFIX (owner A-313): whether a start is offered is the server's
+// canStart, never a timer in the app.
+test('a check the server closed as not finished shows Try again and the tries left', () => {
+  const tile = ekycTile(
+    answer({
+      state: 'incomplete',
+      reason: 'not_finished',
+      triesLeftToday: 2,
+      reference: 'PRKY1',
+      canStart: true,
+    }),
+  );
+  assert.equal(tile.kind, 'failed');
+  assert.equal(tile.note, `${REASON_WORDS.not_finished} Tries left today: 2.`);
+  assert.equal(tile.tryAgain, true);
+  assert.equal(tile.canStart, true);
+  assert.doesNotMatch(tile.note, /tell you/);
+});
+
+test('canStart true on a check still reading checking or review offers Try again, never "we will tell you"', () => {
+  for (const state of ['checking', 'review']) {
+    const tile = ekycTile(
+      answer({ state, reason: null, triesLeftToday: 1, canStart: true }),
+    );
+    assert.equal(tile.kind, 'failed');
+    assert.equal(tile.tryAgain, true);
+    assert.equal(tile.canStart, true);
+    assert.match(tile.note, /Tries left today: 1\./);
+    assert.doesNotMatch(tile.note, /tell you|No need to try again/);
+  }
+});
+
+test('canStart false: no start offered, whatever the state', () => {
+  for (const state of ['none', 'failed', 'incomplete']) {
+    const tile = ekycTile(
+      answer({ state, reason: 'face', triesLeftToday: 2, canStart: false }),
+    );
+    assert.equal(tile.canStart, false);
+    assert.equal(tile.tryAgain, false);
+  }
+  // checking and review stay as they were when the server offers nothing
+  const review = ekycTile(
+    answer({ state: 'review', triesLeftToday: 2, canStart: false }),
+  );
+  assert.equal(review.kind, 'review');
+});
+
 test('no tries left today: nothing to start, and the wallet works as usual', () => {
   for (const state of ['none', 'failed', 'incomplete']) {
     const tile = ekycTile(answer({ state, reason: 'face', triesLeftToday: 0 }));

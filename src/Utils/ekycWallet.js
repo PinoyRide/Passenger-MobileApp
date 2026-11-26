@@ -40,6 +40,11 @@ const STARTABLE = ['none', 'failed', 'incomplete'];
 //   canStart      tapping the tile starts a check
 //   tryAgain      the "Try again" pill on the right
 // An answer without `ekyc` (an older API) is drawn as `none`.
+// Whether a start is offered is the server's `canStart` (EKYC-HOTFIX, owner
+// A-313): never a timer in the app. A check the server says may be started
+// again although it still reads checking or review is drawn as one that did
+// not go through, with Try again. An API without `canStart` keeps the rule by
+// state.
 function ekycTile(wallet) {
   if (!wallet || ekycPassed(wallet)) {
     return null;
@@ -49,7 +54,12 @@ function ekycTile(wallet) {
   const tries = Number.isInteger(ekyc.triesLeftToday)
     ? ekyc.triesLeftToday
     : null;
+  const serverSays =
+    typeof ekyc.canStart === 'boolean' ? ekyc.canStart : null;
 
+  if ((state === 'checking' || state === 'review') && serverSays === true) {
+    return failedTile(ekyc.reason, tries, true);
+  }
   if (STARTABLE.includes(state) && tries === 0) {
     return {
       kind: 'no_tries',
@@ -81,16 +91,7 @@ function ekycTile(wallet) {
       };
     case 'failed':
     case 'incomplete':
-      return {
-        kind: 'failed',
-        icon: 'alert-circle-outline',
-        title: "We couldn't confirm your ID",
-        note:
-          reasonWords(ekyc.reason) +
-          (tries === null ? '' : ` Tries left today: ${tries}.`),
-        canStart: true,
-        tryAgain: true,
-      };
+      return failedTile(ekyc.reason, tries, serverSays !== false);
     case 'blocked':
       return {
         kind: 'blocked',
@@ -106,10 +107,25 @@ function ekycTile(wallet) {
         icon: 'shield-check-outline',
         title: 'Activate your wallet',
         note: ACTIVATE_NOTE,
-        canStart: true,
+        canStart: serverSays !== false,
         tryAgain: false,
       };
   }
+}
+
+// A check that did not go through: the reason in words, the tries left, and
+// Try again when a start is offered.
+function failedTile(reason, tries, startable) {
+  return {
+    kind: 'failed',
+    icon: 'alert-circle-outline',
+    title: "We couldn't confirm your ID",
+    note:
+      reasonWords(reason) +
+      (tries === null ? '' : ` Tries left today: ${tries}.`),
+    canStart: startable,
+    tryAgain: startable,
+  };
 }
 
 // A refused start (§4.4), chosen by `data.reason`: [title, message] for
