@@ -5,29 +5,30 @@
 // Pure (no RN imports) so it runs under `node --test`. The same file in both
 // apps (sharedUi.test.mjs).
 //
-//   busyView          what the box shows: its caller's busy and errorText, or,
-//                     once the busy spell has run out, the error state
+//   busyView          what the box shows: the spinner while the caller is
+//                     busy, the error line once the spell has run out
 //   startBusyTimeout  the 15-second countdown of one busy spell
+//
+// The time-out never lets the filled button be tapped again: it stays held
+// while the caller says busy, so its answer cannot run twice with the first
+// still on its way (a second cancel, a second "Send"). The caller ends the
+// spell by clearing busy, and a new spell, busy turning on again, starts a
+// new countdown (Utils/alertShape.js boxState holds the button).
 
 const BUSY_TIMEOUT_MS = 15 * 1000;
 
 // the error line of a box whose caller gave none for the time-out
 const BUSY_TIMEOUT_TEXT = 'No answer yet. Check your signal and try again.';
 
-// `timedOut`: this busy spell ran past BUSY_TIMEOUT_MS. Then the spinner goes,
-// the filled button can be tapped again, and the error line says why (the
-// caller's errorText, if it gave one, or BUSY_TIMEOUT_TEXT). Not busy, the
-// time-out no longer counts: the caller has answered.
-const busyView = ({ busy, errorText, timedOut } = {}) => {
-  if (busy && timedOut) {
-    return {
-      busy: false,
-      errorText: errorText || BUSY_TIMEOUT_TEXT,
-      timedOut: true,
-    };
-  }
-  return { busy: Boolean(busy), errorText: errorText || '', timedOut: false };
-};
+// `timedOut`: the box's last busy spell ran past BUSY_TIMEOUT_MS. The AlertBox
+// keeps it until busy turns on again, a button is tapped or the box closes,
+// whatever the caller does with busy meanwhile. Then the spinner gives way to
+// the error line: the caller's errorText, if it gives one, or
+// BUSY_TIMEOUT_TEXT.
+const busyView = ({ busy, errorText, timedOut } = {}) => ({
+  spinner: Boolean(busy) && !timedOut,
+  errorText: errorText || (timedOut ? BUSY_TIMEOUT_TEXT : ''),
+});
 
 const realClock = {
   setTimeout: (fn, ms) => setTimeout(fn, ms),

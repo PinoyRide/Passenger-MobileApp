@@ -21,6 +21,8 @@
 // busy, keepOpen and field are not taken here: a box that waits on work, or
 // takes words, is drawn by its own screen with <AlertBox> (boxState below).
 
+const { busyView } = require('./busyTimeout');
+
 // the points worth drawing: an object with words; the icon is optional
 const tidyPoints = points =>
   Array.isArray(points)
@@ -80,46 +82,72 @@ const isNotice = ({ onConfirm, secondaryText, dismissable } = {}) =>
   !onConfirm && !secondaryText && dismissable !== false;
 
 // What an AlertBox drawn with these props does (A-184, design/A-184/SPEC.md
-// section 4). Takes AlertBox's own props, or alertShape's box; with none of
-// the new ones it is the box as it always was.
-//   busy      the filled button shows a spinner and cannot be tapped; the
-//             quiet one can, at full strength (it is the safe answer, "Keep
-//             booking"), and Back does what it does (nothing, when the box
-//             is not dismissable). The box never closes by
-//             itself while busy (Utils/busyTimeout.js ends a spell that hangs).
-//   keepOpen  a tap runs the answer but leaves the box open: its caller
-//             closes it or changes it
-//   field     { label, placeholder, value, onChangeText, required }: words
-//             typed in the box; a required field left blank holds the filled
-//             button
+// section 4). Takes AlertBox's own props and its `timedOut` (the last busy
+// spell ran past 15 s, Utils/busyTimeout.js), or alertShape's box; with none
+// of the new ones it is the box as it always was.
+//   busy      the filled button shows a spinner and cannot be tapped, for as
+//             long as the caller says busy: after 15 s with no answer the
+//             spinner gives way to the error line, but the button stays held,
+//             so its answer never runs twice. The caller ends the spell by
+//             clearing busy. The quiet answer can be tapped at full strength
+//             all along (the safe one, "Keep booking"), and Back does what it
+//             does. A busy box never closes by itself.
+//             Nobody is trapped: a busy box that is not dismissable and has
+//             no quiet answer closes on Back once the spell has run out,
+//             unless the caller takes the time-out itself (onBusyTimeout).
+//   keepOpen  the filled button runs its answer and leaves the box to its
+//             caller, who closes it or changes it. The quiet answer and Back
+//             still close it.
+//   field     { label, placeholder, hint, value, onChangeText, required }:
+//             words typed in the box. A required one left blank holds the
+//             filled button, and a hint under it says why (`hint`, or
+//             FIELD_HINT), shown for as long as it is blank.
 // Returns:
 //   spinner         the filled button shows a spinner for its words
+//   errorText       the red line under the message ('' for none)
 //   confirmEnabled  the filled button can be tapped
-//   closeOnAnswer   a button closes the box before running its answer
+//   closeOnConfirm  the filled button closes the box before its answer runs
+//                   (the quiet answer and Back always close it)
 //   back            what Back does: 'secondary' (the quiet answer), 'close'
 //                   or 'none'
 //   autoClose       'read' (a notice, once read), 'ask' (a question, after
 //                   three minutes) or 'never' (Hooks/useAutoClose)
+//   fieldHint       the words under a blank required field ('' for none)
+const FIELD_HINT = 'Write what happened to send it';
+
 const boxState = (props = {}) => {
-  const { busy, keepOpen, field, secondaryText, dismissable } = props;
+  const {
+    busy,
+    timedOut,
+    onBusyTimeout,
+    keepOpen,
+    field,
+    secondaryText,
+    dismissable,
+    errorText,
+  } = props;
+  const view = busyView({ busy, errorText, timedOut });
   const blank =
     Boolean(field && field.required) &&
     String(field.value == null ? '' : field.value).trim() === '';
-  let back = dismissable === false ? 'none' : 'close';
-  if (busy && secondaryText && back !== 'none') {
-    back = 'secondary';
+  let back = busy && secondaryText ? 'secondary' : 'close';
+  if (dismissable === false) {
+    const stuck = busy && timedOut && !secondaryText && !onBusyTimeout;
+    back = stuck ? 'close' : 'none';
   }
   let autoClose = isNotice(props) ? 'read' : 'ask';
   if (busy) {
     autoClose = 'never';
   }
   return {
-    spinner: Boolean(busy),
+    spinner: view.spinner,
+    errorText: view.errorText,
     confirmEnabled: !busy && !blank,
-    closeOnAnswer: !keepOpen,
+    closeOnConfirm: !keepOpen,
     back,
     autoClose,
+    fieldHint: blank ? String(field.hint || FIELD_HINT) : '',
   };
 };
 
-module.exports = { alertShape, isNotice, boxState };
+module.exports = { alertShape, isNotice, boxState, FIELD_HINT };

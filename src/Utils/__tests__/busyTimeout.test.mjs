@@ -37,28 +37,18 @@ test('15 seconds', () => {
 });
 
 test('busy and not yet run out: the spinner, and the caller error line if any', () => {
-  assert.deepEqual(busyView({ busy: true }), {
-    busy: true,
-    errorText: '',
-    timedOut: false,
-  });
-  assert.deepEqual(busyView({}), {
-    busy: false,
-    errorText: '',
-    timedOut: false,
-  });
+  assert.deepEqual(busyView({ busy: true }), { spinner: true, errorText: '' });
+  assert.deepEqual(busyView({}), { spinner: false, errorText: '' });
   assert.deepEqual(busyView({ busy: false, errorText: 'Try again.' }), {
-    busy: false,
+    spinner: false,
     errorText: 'Try again.',
-    timedOut: false,
   });
 });
 
-test('run out: the spinner goes and the error line says why', () => {
+test('run out: the spinner gives way to the error line, which says why', () => {
   assert.deepEqual(busyView({ busy: true, timedOut: true }), {
-    busy: false,
+    spinner: false,
     errorText: BUSY_TIMEOUT_TEXT,
-    timedOut: true,
   });
   // the caller's own words win
   assert.equal(
@@ -69,11 +59,10 @@ test('run out: the spinner goes and the error line says why', () => {
     }).errorText,
     "We couldn't check the fee.",
   );
-  // once the caller has answered (busy off), the time-out no longer counts
+  // the words stay after the caller clears busy (UX review A-184-B #2)
   assert.deepEqual(busyView({ busy: false, timedOut: true }), {
-    busy: false,
-    errorText: '',
-    timedOut: false,
+    spinner: false,
+    errorText: BUSY_TIMEOUT_TEXT,
   });
 });
 
