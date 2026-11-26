@@ -4,7 +4,7 @@
     "slug": "pinoy-ride",
     "owner": "gabriel1337",
     "scheme": "pinoyride",
-    "version": "2.0.132",
+    "version": "2.0.133",
     "plugins": [
       "expo-font",
       [
@@ -68,7 +68,7 @@
     "ios": {
       "bundleIdentifier": "com.pinoyride.customer",
       "newArchEnabled": false,
-      "buildNumber": "140",
+      "buildNumber": "141",
       "supportsTablet": false,
       "icon": "./assets/ios-icon-1024.png",
       "googleServicesFile": "./GoogleService-Info.plist",
