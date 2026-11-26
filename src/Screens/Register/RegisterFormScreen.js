@@ -2,13 +2,13 @@ import React, { useState } from 'react';
 import {
   Image,
   Keyboard,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import KeyboardScroll from '@/Components/KeyboardScroll/KeyboardScroll';
 import { useTheme } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { AlertBox, AppButton, AppTextInput, Container } from '@/Components';
@@ -137,7 +137,7 @@ const RegisterFormScreen = () => {
       </View>
 
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <ScrollView
+        <KeyboardScroll
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
@@ -223,7 +223,7 @@ const RegisterFormScreen = () => {
               disabled={sendCode.loading}
             />
           </View>
-        </ScrollView>
+        </KeyboardScroll>
       </TouchableWithoutFeedback>
     </Container>
   );

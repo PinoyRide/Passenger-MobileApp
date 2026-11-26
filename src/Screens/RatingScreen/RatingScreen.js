@@ -1,12 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import {
-  Linking,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import KeyboardScroll from '@/Components/KeyboardScroll/KeyboardScroll';
 import { useTheme } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -235,7 +229,7 @@ const RatingScreen = () => {
           </Pressable>
         </View>
 
-        <ScrollView
+        <KeyboardScroll
           style={styles.flex}
           contentContainerStyle={styles.body}
           keyboardShouldPersistTaps="handled"
@@ -378,7 +372,7 @@ const RatingScreen = () => {
           </View>
 
           <View style={styles.spacer} />
-        </ScrollView>
+        </KeyboardScroll>
 
         <View style={styles.footer}>
           <AppButton

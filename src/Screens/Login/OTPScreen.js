@@ -2,13 +2,13 @@ import React, { useEffect, useState } from 'react';
 import {
   Image,
   Keyboard,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import KeyboardScroll from '@/Components/KeyboardScroll/KeyboardScroll';
 import { useTheme } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { AlertBox, Container, OTPInput } from '@/Components';
@@ -212,7 +212,7 @@ const OTPScreen = () => {
 
       {/* Scrollable Content with Keyboard Dismissal */}
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <ScrollView
+        <KeyboardScroll
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
@@ -256,7 +256,7 @@ const OTPScreen = () => {
               </TouchableOpacity>
             </View>
           </View>
-        </ScrollView>
+        </KeyboardScroll>
       </TouchableWithoutFeedback>
     </Container>
   );

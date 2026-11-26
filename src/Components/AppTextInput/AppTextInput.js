@@ -1,8 +1,16 @@
-import React, { useState } from 'react';
+import React, {
+  forwardRef,
+  useContext,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { modern } from '@/Theme/modern';
 import AppTextError from '../AppTextError/AppTextError';
+import { KeyboardRoom } from '../KeyboardScroll/KeyboardScroll';
+import { ERROR_LINE } from '@/Utils/keyboardRoom';
 
 // Format phone number with dashes: 927-339-4743
 const formatPhoneDisplay = number => {
@@ -63,24 +71,33 @@ const localPhoneDigits = number => {
   return digits.slice(0, 10);
 };
 
-const AppTextInput = ({
-  label,
-  value,
-  onChangeText,
-  onBlur,
-  placeholder,
-  inputMode = 'text', // 'text' | 'phone' | 'amount' | 'comment' | 'numeric'
-  error,
-  labelColor,
-  onValidationChange,
-  editable = true, // Add editable prop with default value true
-  containerStyle,
-  inputStyle,
-  autoCapitalize, // undefined keeps RN's default for existing callers
-  // a comment box that starts at its minHeight and grows as it is typed,
-  // instead of four lines from the start
-  grow = false,
-}) => {
+const AppTextInput = forwardRef(function AppTextInput(
+  {
+    label,
+    value,
+    onChangeText,
+    onBlur,
+    placeholder,
+    inputMode = 'text', // 'text' | 'email' | 'phone' | 'amount' | 'comment' | 'numeric'
+    error,
+    labelColor,
+    onValidationChange,
+    editable = true, // Add editable prop with default value true
+    containerStyle,
+    inputStyle,
+    autoCapitalize, // undefined keeps RN's default for existing callers
+    // a comment box that starts at its minHeight and grows as it is typed,
+    // instead of four lines from the start
+    grow = false,
+    // the keyboard's Next / Done (A-326 rule 4), passed to the TextInput
+    onFocus,
+    returnKeyType,
+    onSubmitEditing,
+    submitBehavior,
+    autoComplete,
+  },
+  ref,
+) {
   const theme = useTheme();
   const { colors } = theme;
   const look = modern(theme);
@@ -89,6 +106,15 @@ const AppTextInput = ({
   const isAmount = inputMode === 'amount';
   const isComment = inputMode === 'comment';
   const isNumeric = inputMode === 'numeric';
+  const isEmail = inputMode === 'email';
+
+  // In a KeyboardScroll, the field tells it it took the focus, so its whole
+  // block (label, box, error line) is brought above the keyboard (A-326).
+  // The ref is the TextInput's: focus(), blur(), for Next on the keyboard.
+  const room = useContext(KeyboardRoom);
+  const blockRef = useRef(null);
+  const inputRef = useRef(null);
+  useImperativeHandle(ref, () => inputRef.current, []);
 
   const [isFocused, setIsFocused] = useState(false);
   const [phoneError, setPhoneError] = useState(null);
@@ -168,8 +194,25 @@ const AppTextInput = ({
     }
   };
 
-  const handleAmountFocus = () => {
+  // the error line under the box, or the room kept for one
+  const reportFocus = shownError => {
+    room?.focus({
+      block: blockRef.current,
+      input: inputRef.current,
+      reserve: shownError ? 0 : ERROR_LINE,
+    });
+  };
+
+  const handleFocus = e => {
+    reportFocus(error);
+    if (onFocus) {
+      onFocus(e);
+    }
+  };
+
+  const handleAmountFocus = e => {
     setIsFocused(true);
+    handleFocus(e);
 
     // Remove formatting when user focuses (remove commas)
     if (value) {
@@ -235,8 +278,9 @@ const AppTextInput = ({
     }
   };
 
-  const handlePhoneFocus = () => {
+  const handlePhoneFocus = e => {
     setPhoneError(null);
+    handleFocus(e);
   };
 
   // Display value: show raw while typing, formatted when not focused
@@ -259,11 +303,14 @@ const AppTextInput = ({
     if (isPhone) {
       return 'phone-pad';
     }
+    if (isEmail) {
+      return 'email-address';
+    }
     return 'default';
   };
 
   return (
-    <View style={[styles.container, containerStyle]}>
+    <View ref={blockRef} style={[styles.container, containerStyle]}>
       {label && (
         <Text style={[styles.label, labelColor && { color: labelColor }]}>
           {label}
@@ -285,6 +332,7 @@ const AppTextInput = ({
 
           {/* Phone Input - Auto-formatted display */}
           <TextInput
+            ref={inputRef}
             value={formatPhoneDisplay(displayPhone)}
             onChangeText={handlePhoneChange}
             onBlur={handlePhoneBlur}
@@ -294,14 +342,18 @@ const AppTextInput = ({
             style={styles.phoneInput}
             keyboardType="phone-pad"
             editable={editable}
+            returnKeyType={returnKeyType}
+            onSubmitEditing={onSubmitEditing}
+            submitBehavior={submitBehavior}
           />
         </View>
       ) : (
         <TextInput
+          ref={inputRef}
           value={displayValue}
           onChangeText={isAmount ? handleAmountChange : onChangeText}
           onBlur={isAmount ? handleAmountBlur : onBlur}
-          onFocus={isAmount ? handleAmountFocus : undefined}
+          onFocus={isAmount ? handleAmountFocus : handleFocus}
           placeholder={placeholder}
           placeholderTextColor={colors.onSurfaceVariant}
           style={[
@@ -315,7 +367,11 @@ const AppTextInput = ({
           numberOfLines={isComment ? (grow ? undefined : 4) : 1}
           textAlignVertical={isComment ? 'top' : 'center'}
           editable={editable}
-          autoCapitalize={autoCapitalize}
+          autoCapitalize={autoCapitalize ?? (isEmail ? 'none' : undefined)}
+          autoComplete={autoComplete ?? (isEmail ? 'email' : undefined)}
+          returnKeyType={returnKeyType}
+          onSubmitEditing={onSubmitEditing}
+          submitBehavior={submitBehavior}
         />
       )}
 
@@ -324,7 +380,7 @@ const AppTextInput = ({
       )}
     </View>
   );
-};
+});
 
 export default AppTextInput;
 

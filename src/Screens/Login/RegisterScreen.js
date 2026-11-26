@@ -3,13 +3,13 @@ import {
   ActivityIndicator,
   Image,
   Keyboard,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import KeyboardScroll from '@/Components/KeyboardScroll/KeyboardScroll';
 import Container from '@/Components/Container/Container';
 import { useTheme } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
@@ -124,7 +124,7 @@ const RegisterScreen = () => {
         </View>
 
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <ScrollView
+          <KeyboardScroll
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}>
@@ -150,7 +150,7 @@ const RegisterScreen = () => {
                 disabled={isLoading}
               />
             </View>
-          </ScrollView>
+          </KeyboardScroll>
         </TouchableWithoutFeedback>
       </Container>
     </>

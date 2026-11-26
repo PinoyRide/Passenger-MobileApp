@@ -199,7 +199,10 @@ const getStyles = ({ colors }) =>
       left: 0,
       right: 0,
       bottom: 0,
-      justifyContent: 'center',
+      // at the top, not the centre: a Modal is a window the keyboard does
+      // not lift, and the amount box and Confirm must stay above it (A-326)
+      justifyContent: 'flex-start',
+      paddingTop: 56,
       alignItems: 'center',
       paddingHorizontal: 20,
     },

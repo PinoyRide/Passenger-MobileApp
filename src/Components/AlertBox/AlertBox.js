@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
@@ -82,6 +83,10 @@ const AlertBox = ({
 }) => {
   const look = modern(useTheme());
   const styles = getStyles(look);
+  // A box with a field sits at the top, at most 42% of the window, so the
+  // keyboard (which does not lift a Modal on Android) stays below it (A-326,
+  // design/A-326/KEYBOARD-RULE.md rule 5).
+  const { height: windowHeight } = useWindowDimensions();
 
   // the last busy spell ran past 15 s: kept until busy turns on again, a
   // button is tapped or the box closes
@@ -167,9 +172,13 @@ const AlertBox = ({
       statusBarTranslucent
       onRequestClose={handleBack}>
       <KeyboardAvoidingView
-        style={styles.overlay}
+        style={[styles.overlay, field ? styles.overlayTop : null]}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={styles.container}>
+        <View
+          style={[
+            styles.container,
+            field ? { maxHeight: Math.round(windowHeight * 0.42) } : null,
+          ]}>
           <ScrollView
             style={styles.scroll}
             bounces={false}
@@ -287,6 +296,10 @@ const getStyles = look =>
       paddingHorizontal: 28,
       // a box taller than the screen keeps 24 dp above and below it
       paddingVertical: 24,
+    },
+    overlayTop: {
+      justifyContent: 'flex-start',
+      paddingTop: 56,
     },
     // a card on the scrim, no shadow (C-6: shadows only over the map)
     container: {

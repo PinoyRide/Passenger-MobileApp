@@ -5,13 +5,13 @@ import {
   ImageBackground,
   Keyboard,
   Linking,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import KeyboardScroll from '@/Components/KeyboardScroll/KeyboardScroll';
 import { useTheme } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Formik } from 'formik';
@@ -190,7 +190,7 @@ const CashInScreen = () => {
 
           return (
             <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-              <ScrollView
+              <KeyboardScroll
                 contentContainerStyle={styles.scrollContent}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}>
@@ -302,7 +302,7 @@ const CashInScreen = () => {
                     />
                   )}
                 </View>
-              </ScrollView>
+              </KeyboardScroll>
             </TouchableWithoutFeedback>
           );
         }}

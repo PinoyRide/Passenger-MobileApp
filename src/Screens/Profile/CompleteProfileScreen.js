@@ -1,12 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import {
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import KeyboardScroll from '@/Components/KeyboardScroll/KeyboardScroll';
 import { useTheme } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
@@ -176,7 +170,7 @@ const CompleteProfileScreen = () => {
         </View>
       </View>
 
-      <ScrollView
+      <KeyboardScroll
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
@@ -268,7 +262,7 @@ const CompleteProfileScreen = () => {
           placeholder="Optional"
           inputMode="email"
         />
-      </ScrollView>
+      </KeyboardScroll>
 
       <View style={styles.footer}>
         <AppButton

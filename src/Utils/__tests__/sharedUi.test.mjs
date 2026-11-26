@@ -19,6 +19,10 @@ const SHARED = [
   'src/Components/AppButton/AppButton.js',
   'src/Components/AlertBox/AlertBox.js',
   'src/Components/AppTextInput/AppTextInput.js',
+  // a form keeps the field being typed in above the keyboard (A-326)
+  'src/Components/KeyboardScroll/KeyboardScroll.js',
+  'src/Utils/keyboardRoom.js',
+  'src/Utils/__tests__/keyboardRoom.test.mjs',
   'src/Components/OTP/OTPInput.js',
   // the code boxes are one field (QA SIN-08, 2026-11-25)
   'src/Utils/codeBoxes.js',

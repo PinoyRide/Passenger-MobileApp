@@ -6,12 +6,12 @@ import {
   Keyboard,
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import KeyboardScroll from '@/Components/KeyboardScroll/KeyboardScroll';
 import { useTheme } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
@@ -282,7 +282,7 @@ const CashOutScreen = ({ route }) => {
         </Text>
       </View>
 
-      <ScrollView
+      <KeyboardScroll
         style={styles.scrollArea}
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
@@ -441,7 +441,7 @@ const CashOutScreen = ({ route }) => {
             <Text style={styles.hint}>The minimum is {pesos(MINIMUM)}.</Text>
           </>
         )}
-      </ScrollView>
+      </KeyboardScroll>
 
       <View style={styles.footer}>
         {confirming ? (
