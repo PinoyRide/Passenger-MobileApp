@@ -1,5 +1,6 @@
 import { DeviceEventEmitter } from 'react-native';
 import { walletRoute } from '@/Utils/cashOut';
+import { walletOff } from '@/Utils/walletOff';
 
 // Shared payload (both apps): data{type, booking_id, is_advance, status,
 // eta_minutes}. FCM sends every data value as a string.
@@ -97,9 +98,10 @@ export function getPushRoute(parsed) {
     return null;
   }
   // money in or out: the wallet (no booking), with a fresh stamp so a
-  // Wallet already open reads again (WAL-11)
+  // Wallet already open reads again (WAL-11); Home in the Google Play build,
+  // which has no wallet screen (Utils/walletOff.js)
   if (WALLET_TYPES.includes(parsed.type)) {
-    return walletRoute();
+    return walletOff() ? { name: 'HomeScreen', params: {} } : walletRoute();
   }
   const id = parsed.bookingId;
   if (!id) {

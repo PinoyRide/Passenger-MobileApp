@@ -9,6 +9,11 @@ import { checkIsOnline } from '@/Utils/Network';
 import { signalSignedOut, signedOutReason } from '@/Utils/signedOut';
 import { UPDATING_MESSAGE, isServerDown, readable } from '@/Utils/serverDown';
 import { sessionHeader, takeNewToken } from '@/Utils/sessionHeader';
+import {
+  WALLET_OFF_MESSAGE,
+  appBuildHeader,
+  walletOffRefused,
+} from '@/Utils/walletOff';
 
 const REQUEST_TIMEOUT_MS = 15000;
 const OFFLINE_MESSAGE =
@@ -247,6 +252,9 @@ const usePostRequest = () => {
       let requestData;
       const headers = {
         'x-api-key': Constants.API_KEY,
+        // play or dev: the API refuses the money routes to the Play build
+        // (Utils/walletOff.js)
+        ...appBuildHeader(),
       };
       // the passenger's sign-in token: the API answers a request naming a
       // passenger only with it (Utils/sessionHeader.js)
@@ -311,6 +319,13 @@ const usePostRequest = () => {
         return { response: null, error: null, forceUpdate: true };
       }
 
+      // Not in this build (the Play build has no wallet): a calm word, and
+      // nobody is signed out
+      if (walletOffRefused(res.status, res.data)) {
+        setError(WALLET_OFF_MESSAGE);
+        return { response: null, error: WALLET_OFF_MESSAGE, walletOff: true };
+      }
+
       if (isOK(res)) {
         return { response: res.data, error: null };
       } else if (isNotOK(res)) {
@@ -344,6 +359,14 @@ const usePostRequest = () => {
       if (forceUpdate) {
         handleForceUpdate(forceUpdate);
         return { response: null, error: null, forceUpdate: true };
+      }
+
+      // Not in this build (the Play build has no wallet): a 403 makes axios
+      // throw. A calm word, and nobody is signed out.
+      if (walletOffRefused(err.response?.status, err.response?.data)) {
+        setIsOffline(false);
+        setError(WALLET_OFF_MESSAGE);
+        return { response: null, error: WALLET_OFF_MESSAGE, walletOff: true };
       }
 
       let message = '';

@@ -8,6 +8,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import useCashOutResult from '@/Hooks/useCashOutResult';
 import { cashOutResultText } from '@/Utils/cashOut';
 import { modern } from '@/Theme/modern';
+import { walletOff } from '@/Utils/walletOff';
 
 const AppTransactionComplete = () => {
   const theme = useTheme();
@@ -62,6 +63,8 @@ const AppTransactionComplete = () => {
     }
   };
 
+  const noWallet = walletOff();
+
   const handleViewWallet = () => {
     navigation.reset({
       index: 0,
@@ -81,7 +84,8 @@ const AppTransactionComplete = () => {
     <Container style={styles.container}>
       <View style={styles.contents}>
         {cashOutFailed ? (
-          <View style={[styles.image, styles.mark, { backgroundColor: look.tile }]}>
+          <View
+            style={[styles.image, styles.mark, { backgroundColor: look.tile }]}>
             <Icon name="cash-refund" size={56} color={look.inkSoft} />
           </View>
         ) : (
@@ -118,20 +122,24 @@ const AppTransactionComplete = () => {
       </View>
 
       <View style={{ paddingBottom: 24 }}>
-        <AppButton
-          title="View Wallet"
-          onPress={handleViewWallet}
-          isBold
-          noSpacing
-          featureStyle={{ marginBottom: 10 }}
-        />
+        {/* none in the Google Play build, which has no wallet
+            (Utils/walletOff.js): the way back is then the one button */}
+        {noWallet ? null : (
+          <AppButton
+            title="View Wallet"
+            onPress={handleViewWallet}
+            isBold
+            noSpacing
+            featureStyle={{ marginBottom: 10 }}
+          />
+        )}
         <AppButton
           title={getDoneButtonText()}
           onPress={handleDone}
           isBold
           noSpacing
-          mode="outlined"
-          featureStyle={{ backgroundColor: colors.card }}
+          mode={noWallet ? undefined : 'outlined'}
+          featureStyle={noWallet ? undefined : { backgroundColor: colors.card }}
         />
       </View>
     </Container>

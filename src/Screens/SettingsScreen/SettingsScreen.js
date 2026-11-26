@@ -32,6 +32,7 @@ import {
 } from '@/Redux/Slices/userSlice';
 import appAlert from '@/Utils/appAlert';
 import { supportAlert } from '@/Utils/supportContact';
+import { walletOff } from '@/Utils/walletOff';
 
 // The Account page, opened by the profile button on the map, as the owner's
 // design draws it (2026-11-22): who you are, the wallet, the ride pages,
@@ -52,6 +53,9 @@ const SettingsScreen = () => {
   );
   const [promoIds, setPromoIds] = useState([]);
   const [showSafetyGuide, setShowSafetyGuide] = useState(false);
+  // the Google Play build has no wallet (Utils/walletOff.js): no card, no
+  // Cash in, no Payment options, and no balance read
+  const noWallet = walletOff();
 
   // Back goes home while this page is the one on screen. Kept only while it
   // is focused: registered for good, it also answered Back on the pages
@@ -78,6 +82,9 @@ const SettingsScreen = () => {
       }
       let showing = true;
       (async () => {
+        if (noWallet) {
+          return;
+        }
         const { response } = await walletRequest.request(
           'GET',
           `${AppConstants.API.CUSTOMER_WALLET(userInfo.id)}?take=0`,
@@ -194,36 +201,42 @@ const SettingsScreen = () => {
           </Pressable>
         </Pressable>
 
-        {/* the wallet: the card opens the Wallet page, Cash in the top-up */}
-        <Pressable
-          onPress={() => navigation.navigate('WalletScreen')}
-          accessibilityRole="button"
-          accessibilityLabel={`PinoyRide Wallet, ${balanceText}`}
-          style={({ pressed }) => [styles.wallet, pressed && styles.pressed]}>
-          <View style={styles.flex}>
-            <Text style={styles.walletLabel}>PINOYRIDE WALLET</Text>
-            <Text
-              style={styles.walletAmount}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              maxFontSizeMultiplier={1.2}>
-              {balanceText}
-            </Text>
-          </View>
+        {/* the wallet: the card opens the Wallet page, Cash in the top-up;
+            none in the Google Play build (Utils/walletOff.js) */}
+        {noWallet ? null : (
           <Pressable
-            onPress={() =>
-              navigation.navigate('CashInScreen', {
-                available_balance: balance ?? 0,
-              })
-            }
-            hitSlop={6}
+            onPress={() => navigation.navigate('WalletScreen')}
             accessibilityRole="button"
-            accessibilityLabel="Cash in"
-            style={({ pressed }) => [styles.cashIn, pressed && styles.pressed]}>
-            <Icon name="plus" size={17} color={look.onGold} />
-            <Text style={styles.cashInText}>Cash in</Text>
+            accessibilityLabel={`PinoyRide Wallet, ${balanceText}`}
+            style={({ pressed }) => [styles.wallet, pressed && styles.pressed]}>
+            <View style={styles.flex}>
+              <Text style={styles.walletLabel}>PINOYRIDE WALLET</Text>
+              <Text
+                style={styles.walletAmount}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                maxFontSizeMultiplier={1.2}>
+                {balanceText}
+              </Text>
+            </View>
+            <Pressable
+              onPress={() =>
+                navigation.navigate('CashInScreen', {
+                  available_balance: balance ?? 0,
+                })
+              }
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel="Cash in"
+              style={({ pressed }) => [
+                styles.cashIn,
+                pressed && styles.pressed,
+              ]}>
+              <Icon name="plus" size={17} color={look.onGold} />
+              <Text style={styles.cashInText}>Cash in</Text>
+            </Pressable>
           </Pressable>
-        </Pressable>
+        )}
 
         <MenuGroup label="Rides" style={styles.section}>
           <MenuRow
@@ -237,12 +250,14 @@ const SettingsScreen = () => {
             badge={newPromos > 0 ? `${newPromos} NEW` : undefined}
             onPress={openPromos}
           />
-          <MenuRow
-            icon="credit-card-outline"
-            title="Payment options"
-            value="Wallet first"
-            onPress={() => navigation.navigate('PaymentOptionScreen')}
-          />
+          {noWallet ? null : (
+            <MenuRow
+              icon="credit-card-outline"
+              title="Payment options"
+              value="Wallet first"
+              onPress={() => navigation.navigate('PaymentOptionScreen')}
+            />
+          )}
         </MenuGroup>
 
         <MenuGroup label="Account" style={styles.section}>

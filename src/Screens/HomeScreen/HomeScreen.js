@@ -144,6 +144,7 @@ import useAdvanceBookingDiscovery from '@/Hooks/useAdvanceBookingDiscovery';
 import useParkedAdvanceBookingPoll from '@/Hooks/useParkedAdvanceBookingPoll';
 import appAlert, { isAlertAsked } from '@/Utils/appAlert';
 import { riderCancelAlert } from '@/Utils/riderCancelNotice';
+import { walletOff } from '@/Utils/walletOff';
 
 // Matches backend ADVANCE_MAX_OPEN_PER_CUSTOMER.
 const ADVANCE_MAX_OPEN = 3;
@@ -2298,7 +2299,8 @@ const HomeScreen = () => {
   // on cash otherwise (the owner, 2026-11-23: "starting on pinoy ride wallet if
   // there is enough balance"). A method the passenger picks on the sheet stands
   // for that trip; advance bookings stay cash. The server checks the balance
-  // again when the ride is booked.
+  // again when the ride is booked. The Google Play build has no wallet
+  // (Utils/walletOff.js): every trip is cash, and the balance is not read.
   const getWalletBalance = useApiRequest();
   const paymentChosenForRef = useRef(null); // the trip the passenger picked for
   const paymentStartedForRef = useRef(null); // the trip and fare it was set for
@@ -2321,6 +2323,11 @@ const HomeScreen = () => {
       paymentChosenForRef.current === trip ||
       paymentStartedForRef.current === started
     ) {
+      return undefined;
+    }
+    if (walletOff()) {
+      paymentStartedForRef.current = started;
+      setSelectedPayment(startingPayment({ cashOnly: true }));
       return undefined;
     }
     let cancelled = false;

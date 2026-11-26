@@ -14,6 +14,11 @@ import { signalSignedOut, signedOutReason } from '@/Utils/signedOut';
 import { UPDATING_MESSAGE, isServerDown } from '@/Utils/serverDown';
 import { sessionHeader, takeNewToken } from '@/Utils/sessionHeader';
 import { installedVersion } from '@/Utils/installedVersion';
+import {
+  WALLET_OFF_MESSAGE,
+  appBuildHeader,
+  walletOffRefused,
+} from '@/Utils/walletOff';
 
 const REQUEST_TIMEOUT_MS = 15000;
 const OFFLINE_MESSAGE =
@@ -100,6 +105,9 @@ const useApiRequest = () => {
           'X-API-KEY': Constants.API_KEY,
           'X-App-Version': installedVersion(),
           'X-User-Type': 'customer',
+          // play or dev: the API refuses the money routes to the Play build
+          // (Utils/walletOff.js)
+          ...appBuildHeader(),
           // the passenger's sign-in token: customers/{id}/... answers only
           // with it (Utils/sessionHeader.js)
           ...sessionHeader(),
@@ -123,6 +131,13 @@ const useApiRequest = () => {
       if (signedOut) {
         signalSignedOut(signedOut);
         return { response: null, error: null, signedOut: true };
+      }
+
+      // Not in this build (the Play build has no wallet): a calm word, and
+      // nobody is signed out (it is a 403, never a 401)
+      if (walletOffRefused(res.status, res.data)) {
+        setError(WALLET_OFF_MESSAGE);
+        return { response: null, error: WALLET_OFF_MESSAGE, walletOff: true };
       }
 
       const normalised = normalise(res.status, res.data);

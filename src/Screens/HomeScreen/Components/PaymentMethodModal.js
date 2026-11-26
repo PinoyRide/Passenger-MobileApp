@@ -18,12 +18,14 @@ import useApiRequest from '@/Services/ApiV2';
 import { toLegacyCustomer } from '@/Utils/customerMapper';
 import { AppUtil, Constants } from '@/Utils';
 import { selectUserInfo } from '@/Redux/Slices/userSlice';
+import { walletOff } from '@/Utils/walletOff';
 
 // Cash, or the Pinoy Ride Wallet with its balance (back at the owner's request,
 // 2026-11-22; hidden since the TOP PH days). The server checks the balance when
 // the ride is booked and takes the fare when the trip ends. Advance bookings
 // stay cash (the app switches them to cash). Top up opens the top-up page,
-// which works once PayCools is switched on.
+// which works once PayCools is switched on. The Google Play build has no
+// wallet (Utils/walletOff.js): Cash only, no balance read, no top-up.
 const PaymentMethodModal = ({
   visible,
   onClose,
@@ -42,10 +44,11 @@ const PaymentMethodModal = ({
   const [alertMessage, setAlertMessage] = useState('');
   const [showAlert, setShowAlert] = useState(false);
   const [balance, setBalance] = useState(null);
+  const noWallet = walletOff();
 
   // the wallet's balance, read again each time the sheet opens
   useEffect(() => {
-    if (!visible || !userInfo?.id) {
+    if (noWallet || !visible || !userInfo?.id) {
       return;
     }
     let cancelled = false;
@@ -132,53 +135,59 @@ const PaymentMethodModal = ({
             )}
           </TouchableOpacity>
 
-          {/* wallet option */}
-          <TouchableOpacity
-            disabled={cashOnly}
-            accessibilityState={{
-              disabled: cashOnly,
-              selected: selectedPayment === 'wallet',
-            }}
-            style={[
-              styles.option,
-              selectedPayment === 'wallet' && styles.optionSelected,
-              cashOnly && styles.optionDisabled,
-            ]}
-            onPress={() => {
-              onSelect?.('wallet');
-              onClose();
-            }}>
-            <Image
-              source={require('@/Assets/Common/HomeScreen/PaymentMethodModal/Wallet.png')}
-              style={styles.icon}
-            />
-            <View style={styles.optionBody}>
-              <Text style={styles.optionName}>Pinoy Ride Wallet</Text>
-              <Text style={styles.optionNote}>{walletNote}</Text>
-            </View>
-            {selectedPayment === 'wallet' && (
-              <View style={styles.radioCircle}>
-                <View style={styles.radioInner} />
+          {/* wallet option: none in the Google Play build */}
+          {noWallet ? null : (
+            <TouchableOpacity
+              disabled={cashOnly}
+              accessibilityState={{
+                disabled: cashOnly,
+                selected: selectedPayment === 'wallet',
+              }}
+              style={[
+                styles.option,
+                selectedPayment === 'wallet' && styles.optionSelected,
+                cashOnly && styles.optionDisabled,
+              ]}
+              onPress={() => {
+                onSelect?.('wallet');
+                onClose();
+              }}>
+              <Image
+                source={require('@/Assets/Common/HomeScreen/PaymentMethodModal/Wallet.png')}
+                style={styles.icon}
+              />
+              <View style={styles.optionBody}>
+                <Text style={styles.optionName}>Pinoy Ride Wallet</Text>
+                <Text style={styles.optionNote}>{walletNote}</Text>
               </View>
-            )}
-          </TouchableOpacity>
+              {selectedPayment === 'wallet' && (
+                <View style={styles.radioCircle}>
+                  <View style={styles.radioInner} />
+                </View>
+              )}
+            </TouchableOpacity>
+          )}
 
-          <AppButton
-            title="Top up the wallet"
-            mode="outlined"
-            noSpacing
-            onPress={() => setShowTopUpModal(true)}
-          />
+          {noWallet ? null : (
+            <AppButton
+              title="Top up the wallet"
+              mode="outlined"
+              noSpacing
+              onPress={() => setShowTopUpModal(true)}
+            />
+          )}
         </View>
       </Modal>
 
       {/* top up amount modal */}
-      <TopUpAmountModal
-        visible={showTopUpModal}
-        onClose={() => setShowTopUpModal(false)}
-        onError={handleTopUpError}
-        onSuccess={handleTopUpSuccess}
-      />
+      {noWallet ? null : (
+        <TopUpAmountModal
+          visible={showTopUpModal}
+          onClose={() => setShowTopUpModal(false)}
+          onError={handleTopUpError}
+          onSuccess={handleTopUpSuccess}
+        />
+      )}
     </>
   );
 };

@@ -105,6 +105,9 @@ const SHARED = [
   // the support contact: Help & support and Contact support (Q-WALLET-TEXT)
   'src/Utils/supportContact.js',
   'src/Utils/__tests__/supportContact.test.mjs',
+  // no wallet in the Google Play build (A-287, A-290; WALLET-OFF-BUILD)
+  'src/Utils/walletOff.js',
+  'src/Utils/__tests__/walletOff.test.mjs',
   // the payment-done picture (AppTransactionComplete)
   'src/Assets/Common/Success_Image.png',
   // the iOS project's config plugins (npx expo prebuild --platform ios)

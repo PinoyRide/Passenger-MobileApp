@@ -13,6 +13,7 @@ import {
   stillSendable,
   summarize,
 } from '@/Utils/crashSummary';
+import { appBuildHeader } from '@/Utils/walletOff';
 
 // Crash summaries (option J, A-211): the app tells the API what kind of
 // error happened and where in the code (src/Utils/crashSummary.js says
@@ -52,6 +53,7 @@ async function send(summary) {
       headers: {
         'Content-Type': 'application/json',
         'X-API-KEY': Constants.API_KEY,
+        ...appBuildHeader(),
       },
       body: JSON.stringify(summary),
     });
