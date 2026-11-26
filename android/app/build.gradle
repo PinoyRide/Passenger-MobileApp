@@ -72,6 +72,11 @@ gradle.taskGraph.whenReady { graph ->
     }
 }
 
+// Develop and Google Play builds come from this one tree (DEV-APP-ID, owner A-285/A-294). A Develop build is
+// com.pinoyride.customer.dev, named "Pinoy Ride DEV", so it installs beside the Play app and nobody mistakes the
+// two. Only a Google Play build (-PpinoyridePlay=true) keeps the real id com.pinoyride.customer.
+def playBuild = (findProperty('pinoyridePlay') ?: 'false').toString().toBoolean()
+
 android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
@@ -80,6 +85,10 @@ android {
     namespace 'com.pinoyride.customer'
     defaultConfig {
         applicationId 'com.pinoyride.customer'
+        if (!playBuild) {
+            applicationIdSuffix '.dev'
+        }
+        resValue 'string', 'app_label', playBuild ? 'Pinoy Ride' : 'Pinoy Ride DEV'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 131

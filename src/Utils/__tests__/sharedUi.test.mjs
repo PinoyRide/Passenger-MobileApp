@@ -45,6 +45,8 @@ const SHARED = [
   // a busy box's 15-second error state (A-184 piece b)
   'src/Utils/busyTimeout.js',
   'src/Utils/__tests__/busyTimeout.test.mjs',
+  // Develop builds are <id>.dev; only a Google Play build keeps the real id (DEV-APP-ID)
+  'src/Utils/__tests__/devAppId.test.mjs',
   'src/Components/ProfileAvatar/ProfileAvatar.js',
   'src/Components/GenderChoice/GenderChoice.js',
   'src/Utils/gender.js',
