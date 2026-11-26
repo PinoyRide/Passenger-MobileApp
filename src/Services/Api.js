@@ -87,7 +87,7 @@ const usePostRequest = () => {
     const requiredParams = {
       user_type: 'customer',
       customer_id: userInfo?.id,
-      app_version: '2.0.134',
+      app_version: '2.0.135',
     };
     const params = { ...requiredParams, ...obj };
 
