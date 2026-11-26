@@ -112,6 +112,9 @@ const SHARED = [
   // no wallet in the Google Play build (A-287, A-290; WALLET-OFF-BUILD)
   'src/Utils/walletOff.js',
   'src/Utils/__tests__/walletOff.test.mjs',
+  // Develop or Sandbox, from the installed app's id (A-342 / A-345)
+  'src/Utils/appEnvironment.js',
+  'src/Utils/__tests__/appEnvironment.test.mjs',
   // which phone a request comes from: the same phone may sign in again (A-316)
   'src/Utils/deviceIdHeader.js',
   'src/Utils/__tests__/deviceIdHeader.test.mjs',

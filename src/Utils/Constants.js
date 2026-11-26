@@ -1,3 +1,9 @@
+import {
+  apiBaseFor,
+  appEnvironment,
+  environmentLabel,
+} from './appEnvironment';
+
 const IS_DEV = true;
 
 const PROD_URL = '';
@@ -5,6 +11,11 @@ const PROD_URL = '';
 // PR CHECK: this is the only DEV_URL to commit — never a localhost/LAN URL.
 // Local only — iOS Simulator: 127.0.0.1 | Android Emulator: 10.0.2.2 | Physical device: Mac LAN IP
 const DEV_URL = 'https://pinoyride-api-dev.onrender.com/api/';
+
+// Develop or Sandbox, from the installed app's own id (Utils/appEnvironment.js):
+// an id ending ".sandbox" talks to the Sandbox API, everything else to DEV_URL.
+const ENVIRONMENT = appEnvironment();
+const ENVIRONMENT_LABEL = environmentLabel(ENVIRONMENT);
 
 const BASE_DEV = {
   API_OK: 1,
@@ -20,7 +31,7 @@ const BASE_DEV = {
   // (AndroidManifest.xml, app.json, ios Info.plist / AppDelegate).
   // Place search goes through our API (places/*), never from the phone.
   GOOGLE_ROUTES_API_KEY: 'AIzaSyCxUZeQ0319rUysToW_tsyWk-5SYvPEAVE',
-  BASE_URI: IS_DEV ? DEV_URL : PROD_URL,
+  BASE_URI: IS_DEV ? apiBaseFor(ENVIRONMENT, DEV_URL) : PROD_URL,
 
   // Endpoints served by the .NET backend (Services/ApiV2.js). BASE_URI points at the .NET API,
   // which forwards every route it has not ported yet (ENDPOINT below) to Django unchanged.
@@ -112,6 +123,12 @@ const BASE_DEV = {
 // "For the rider"; Utils/livenessCheck.js): a passenger's photo is optional.
 const FACE_CHECK_BLINK = false;
 
-const Constants = { ...BASE_DEV, IS_DEV, FACE_CHECK_BLINK };
+const Constants = {
+  ...BASE_DEV,
+  IS_DEV,
+  ENVIRONMENT,
+  ENVIRONMENT_LABEL,
+  FACE_CHECK_BLINK,
+};
 
 export default Constants;

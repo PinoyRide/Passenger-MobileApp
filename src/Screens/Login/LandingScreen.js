@@ -16,9 +16,11 @@ const LandingScreen = () => {
 
   // shown as people count it (2.0.103 → 2.1.04): Utils/displayVersion.js
   const appVersion = displayVersion(Constants.expoConfig?.version ?? '1.0.0');
-  // A build that talks to the Develop backend says so, to tell it apart
-  // from the store app.
-  const environment = AppConstants.IS_DEV ? ' · Develop' : '';
+  // A build that talks to a test backend says which one (Develop or
+  // Sandbox, Utils/appEnvironment.js), to tell it apart from the store app.
+  const environment = AppConstants.IS_DEV
+    ? ` · ${AppConstants.ENVIRONMENT_LABEL}`
+    : '';
   // When the app is running code it fetched after it was installed, the
   // commit that code was built from.
   const update = runningUpdateLabel();

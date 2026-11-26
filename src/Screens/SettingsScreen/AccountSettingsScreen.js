@@ -33,7 +33,9 @@ const AccountSettingsScreen = () => {
 
   // shown as people count it (2.0.103 → 2.1.04): Utils/displayVersion.js
   const appVersion = displayVersion(Constants.expoConfig?.version ?? '');
-  const environment = AppConstants.IS_DEV ? ' · Develop' : '';
+  const environment = AppConstants.IS_DEV
+    ? ` · ${AppConstants.ENVIRONMENT_LABEL}`
+    : '';
   const update = runningUpdateLabel();
 
   return (

@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
 // The Google Play build has no wallet (the owner, A-287 item 1 and A-290
-// item 3): the wallet is on only in a build whose package ends in ".dev".
+// item 3): the wallet is on only in a build whose package ends in ".dev", or
+// ".sandbox" (A-342 / A-345: Sandbox is an exact copy of Develop).
 // The same file in both apps (sharedUi.test.mjs).
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -30,6 +31,17 @@ test('the Develop ".dev" package names mean the wallet is on', () => {
   assert.equal(walletOffFor('com.pinoyride.rider.dev'), false);
 });
 
+test('the Sandbox ".sandbox" package names mean the wallet is on, as on Develop', () => {
+  const { walletOffFor, appBuildHeaderFor } = load();
+  assert.equal(walletOffFor('com.pinoyride.customer.sandbox'), false);
+  assert.equal(walletOffFor('com.pinoyride.rider.sandbox'), false);
+  // the API refuses money routes only to "play"; Sandbox says "dev" as Develop does
+  assert.deepEqual(
+    appBuildHeaderFor(walletOffFor('com.pinoyride.rider.sandbox')),
+    { 'X-App-Build': 'dev' },
+  );
+});
+
 test('anything unknown fails closed: the wallet is off', () => {
   const { walletOffFor } = load();
   for (const name of [
@@ -41,6 +53,9 @@ test('anything unknown fails closed: the wallet is off', () => {
     'com.pinoyride.customer.dev ',
     'com.pinoyride.rider.DEV',
     'com.pinoyride.rider.de',
+    'com.pinoyride.rider.sandboxx',
+    'com.pinoyride.rider.SANDBOX',
+    'com.pinoyride.customersandbox',
     42,
     {},
   ]) {
