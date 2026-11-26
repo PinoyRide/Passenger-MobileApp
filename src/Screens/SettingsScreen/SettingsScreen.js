@@ -33,7 +33,13 @@ import {
 import appAlert from '@/Utils/appAlert';
 import { supportAlert } from '@/Utils/supportContact';
 import { walletOff } from '@/Utils/walletOff';
-import { lockedAlert, verifyParams, walletLocked } from '@/Utils/walletLock';
+import {
+  cashInTap,
+  lockedAlert,
+  lockedCardNote,
+  verifyParams,
+  walletLocked,
+} from '@/Utils/walletLock';
 
 // The Account page, opened by the profile button on the map, as the owner's
 // design draws it (2026-11-22): who you are, the wallet, the ride pages,
@@ -53,8 +59,10 @@ const SettingsScreen = () => {
     userInfo?.wallet_details?.avail_balance ?? null,
   );
   // locked until the ID check passes (WALLET-EKYC-LOCK, A-325): Cash in asks
-  // to verify first (Utils/walletLock.js)
-  const [locked, setLocked] = useState(false);
+  // to verify first (Utils/walletLock.js). null until the wallet has been
+  // read: not known yet, so Cash in opens the Wallet page, which reads it
+  // (Q-UX-WALLET-LOCK-POLISH F5)
+  const [locked, setLocked] = useState(null);
   const [promoIds, setPromoIds] = useState([]);
   const [showSafetyGuide, setShowSafetyGuide] = useState(false);
   // the Google Play build has no wallet (Utils/walletOff.js): no card, no
@@ -125,6 +133,8 @@ const SettingsScreen = () => {
     userInfo?.mobile || userInfo?.ekyc_details?.mobile_no,
   );
   const balanceText = `₱${AppUtil.fn(balance ?? 0)}`;
+  // locked: one small line on the card (Q-UX-WALLET-LOCK-POLISH F7)
+  const cardNote = lockedCardNote(locked);
   const newPromos = promoIds.filter(id => !seenPromoIds.includes(id)).length;
   // shown as people count it (2.0.103 → 2.1.04): Utils/displayVersion.js
   const version = displayVersion(Constants.expoConfig?.version ?? '');
@@ -214,7 +224,9 @@ const SettingsScreen = () => {
           <Pressable
             onPress={() => navigation.navigate('WalletScreen')}
             accessibilityRole="button"
-            accessibilityLabel={`PinoyRide Wallet, ${balanceText}`}
+            accessibilityLabel={`PinoyRide Wallet, ${balanceText}${
+              cardNote ? ', locked' : ''
+            }`}
             style={({ pressed }) => [styles.wallet, pressed && styles.pressed]}>
             <View style={styles.flex}>
               <Text style={styles.walletLabel}>PINOYRIDE WALLET</Text>
@@ -225,19 +237,32 @@ const SettingsScreen = () => {
                 maxFontSizeMultiplier={1.2}>
                 {balanceText}
               </Text>
+              {cardNote ? (
+                <View style={styles.lockRow}>
+                  <Icon name="lock-outline" size={13} color={look.onGoldSoft} />
+                  <Text style={styles.lockNote} numberOfLines={2}>
+                    {cardNote}
+                  </Text>
+                </View>
+              ) : null}
             </View>
             <Pressable
-              onPress={() =>
-                locked
-                  ? appAlert(
-                      ...lockedAlert(() =>
-                        navigation.navigate(...verifyParams()),
-                      ),
-                    )
-                  : navigation.navigate('CashInScreen', {
-                      available_balance: balance ?? 0,
-                    })
-              }
+              onPress={() => {
+                const tap = cashInTap(locked);
+                if (tap === 'verify') {
+                  appAlert(
+                    ...lockedAlert(() =>
+                      navigation.navigate(...verifyParams()),
+                    ),
+                  );
+                } else if (tap === 'cash-in') {
+                  navigation.navigate('CashInScreen', {
+                    available_balance: balance ?? 0,
+                  });
+                } else {
+                  navigation.navigate('WalletScreen');
+                }
+              }}
               hitSlop={6}
               accessibilityRole="button"
               accessibilityLabel="Cash in"
@@ -407,6 +432,19 @@ const getStyles = look =>
       lineHeight: 34,
       letterSpacing: -0.6,
       color: look.onGold,
+    },
+    lockRow: {
+      marginTop: 4,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+    },
+    lockNote: {
+      flexShrink: 1,
+      fontFamily: 'Poppins Regular',
+      fontSize: 12,
+      lineHeight: 16,
+      color: look.onGoldSoft,
     },
     cashIn: {
       height: 32,

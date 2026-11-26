@@ -12,10 +12,21 @@ const {
   LOCKED_MESSAGE,
   LOCKED_BODY,
   VERIFY_LABEL,
+  LOCKED_MONEY_LINE,
+  LOCKED_CARD_NOTE,
+  EMPTY_NOTE,
+  LOCKED_EMPTY_NOTE,
   walletLocked,
   isLockedRefusal,
   lockedAlert,
   verifyParams,
+  balanceLabel,
+  lockedMoneyLine,
+  lockedCardNote,
+  emptyTransactionsNote,
+  actionLook,
+  cashInTap,
+  verifyOnArrival,
 } = lock;
 const {
   ACTIVATE_NOTE,
@@ -228,7 +239,10 @@ test('an active wallet offers no ID check, whatever else the answer says', () =>
     /const activate = async \(\) => \{[^}]{0,200}?if \(!canStartCheck\(walletRef\.current\)\) \{\s*return;\s*\}\s*setStarting\(true\);/,
   );
   assert.match(wallet, /const canStart = canStartCheck\(wallet\);/);
-  assert.match(wallet, /if \(canStartCheck\(wallet\)\) \{\s*activate\(\);/);
+  assert.match(
+    wallet,
+    /const next = verifyOnArrival\(canStartCheck\(wallet\), tile\);\s*if \(next === 'start'\) \{\s*activate\(\);/,
+  );
 });
 
 test('every money screen handles ekyc_required with the same box', () => {
@@ -298,4 +312,153 @@ test('a lock refusal is never a sign-out', () => {
   const signedOut = read('src/Utils/signedOut.js');
   assert.match(signedOut, /Number\(status\) !== 401/);
   assert.doesNotMatch(signedOut, /ekyc_required/);
+});
+
+// WALLET-LOCK-POLISH (Q-UX-WALLET-LOCK-POLISH F1-F7): the screens show the
+// lock before a tap, say the money is safe, and leave no dead end.
+
+test('the lock words: plain, and no refund promised yet', () => {
+  assert.equal(
+    LOCKED_MONEY_LINE,
+    'Your money is safe. Verify your ID to use it.',
+  );
+  assert.equal(LOCKED_CARD_NOTE, 'Locked until you verify your ID.');
+  // no route sends money back yet (WALLET-REFUND-ROUTE)
+  assert.doesNotMatch(LOCKED_MONEY_LINE, /refund|send it back|support/i);
+  // the box's words are unchanged
+  assert.equal(LOCKED_MESSAGE, 'Verify your ID to use your wallet.');
+  assert.match(LOCKED_BODY, /Money already in your wallet stays there\.$/);
+});
+
+test('the balance label: YOUR BALANCE while locked, AVAILABLE BALANCE otherwise', () => {
+  assert.equal(balanceLabel(true), 'YOUR BALANCE');
+  for (const locked of [false, null, undefined]) {
+    assert.equal(balanceLabel(locked), 'AVAILABLE BALANCE', String(locked));
+  }
+});
+
+test('the money line shows only while locked with money in the wallet', () => {
+  assert.equal(lockedMoneyLine(true, 941.32), LOCKED_MONEY_LINE);
+  assert.equal(lockedMoneyLine(true, '0.01'), LOCKED_MONEY_LINE);
+  for (const [locked, balance] of [
+    [true, 0],
+    [true, '0.00'],
+    [true, null],
+    [true, undefined],
+    [true, -5],
+    [true, 'abc'],
+    [false, 500],
+    [null, 500],
+    [undefined, 500],
+  ]) {
+    assert.equal(
+      lockedMoneyLine(locked, balance),
+      null,
+      `${locked} ${balance}`,
+    );
+  }
+});
+
+test('the Account card says locked only once the answer said so', () => {
+  assert.equal(lockedCardNote(true), LOCKED_CARD_NOTE);
+  for (const locked of [false, null, undefined]) {
+    assert.equal(lockedCardNote(locked), null, String(locked));
+  }
+});
+
+test('the Cash in / Cash out tiles look locked: a lock, no gold, quiet words', () => {
+  assert.deepEqual(actionLook({ icon: 'plus', gold: true }, true), {
+    icon: 'lock-outline',
+    gold: false,
+    muted: true,
+  });
+  assert.deepEqual(actionLook({ icon: 'bank-transfer-out' }, true), {
+    icon: 'lock-outline',
+    gold: false,
+    muted: true,
+  });
+  assert.deepEqual(actionLook({ icon: 'plus', gold: true }, false), {
+    icon: 'plus',
+    gold: true,
+    muted: false,
+  });
+  assert.deepEqual(actionLook({ icon: 'bank-transfer-out' }, false), {
+    icon: 'bank-transfer-out',
+    gold: false,
+    muted: false,
+  });
+});
+
+test('the Account card Cash in: box when locked, Cash in when not, the Wallet page before the read', () => {
+  assert.equal(cashInTap(true), 'verify');
+  assert.equal(cashInTap(false), 'cash-in');
+  // not read yet: never straight into Cash in
+  for (const locked of [null, undefined]) {
+    assert.equal(cashInTap(locked), 'wallet', String(locked));
+  }
+  const settings = read('src/Screens/SettingsScreen/SettingsScreen.js');
+  assert.match(settings, /const \[locked, setLocked\] = useState\(null\);/);
+  assert.match(settings, /const tap = cashInTap\(locked\);/);
+  assert.match(
+    settings,
+    /\} else \{\s*navigation\.navigate\('WalletScreen'\);\s*\}/,
+  );
+  assert.match(settings, /const cardNote = lockedCardNote\(locked\);/);
+  assert.match(settings, /name="lock-outline"/);
+});
+
+test('Verify ID landing on the Wallet page: starts the check, or says where it stands', () => {
+  const tile = { title: 'Checking your ID', note: 'This takes a few minutes.' };
+  assert.equal(verifyOnArrival(true, tile), 'start');
+  assert.equal(verifyOnArrival(true, null), 'start');
+  // the dead end: a check already being checked, in review, out of tries
+  assert.equal(verifyOnArrival(false, tile), 'tell');
+  // an active wallet has no tile: nothing to say
+  assert.equal(verifyOnArrival(false, null), 'none');
+  assert.equal(verifyOnArrival(false, {}), 'none');
+  // the Wallet page says it with the tile's own words, as a notice (two
+  // arguments: the box that closes itself)
+  const wallet = read('src/Screens/WalletScreen/WalletScreen.js');
+  assert.match(
+    wallet,
+    /\} else if \(next === 'tell'\) \{\s*appAlert\(tile\.title, tile\.note\);/,
+  );
+});
+
+test('the Wallet page: tiles, label and money line by the lock; taps before the read read it', () => {
+  const wallet = read('src/Screens/WalletScreen/WalletScreen.js');
+  assert.match(wallet, /\{balanceLabel\(locked\)\}/);
+  assert.doesNotMatch(wallet, />AVAILABLE BALANCE</);
+  assert.match(wallet, /const moneyLine = lockedMoneyLine\(locked, balance\);/);
+  assert.match(wallet, /const tileLook = actionLook\(action, locked\);/);
+  assert.match(wallet, /name=\{tileLook\.icon\}/);
+  assert.match(wallet, /tileLook\.muted && styles\.actionLabelLocked/);
+  assert.match(wallet, /actionLabelLocked: \{ color: look\.muted \}/);
+  // both taps: not read yet, read it and stop, before the lock check
+  const guard =
+    /if \(!wallet\) \{\s*loadRef\.current\(\);\s*return;\s*\}\s*if \(locked\) \{\s*askToVerify\(\);/g;
+  assert.equal(wallet.match(guard)?.length, 2);
+});
+
+test('the empty list does not blame the lock: a locked wallet still gets its rows', () => {
+  assert.equal(
+    emptyTransactionsNote(true),
+    'Your top-ups and ride payments will appear here.',
+  );
+  assert.equal(emptyTransactionsNote(true), LOCKED_EMPTY_NOTE);
+  for (const locked of [false, null, undefined]) {
+    assert.equal(emptyTransactionsNote(locked), EMPTY_NOTE, String(locked));
+  }
+  assert.match(
+    read('src/Screens/WalletScreen/TransactionRow.js'),
+    /\{emptyTransactionsNote\(locked\)\}/,
+  );
+  assert.match(
+    read('src/Screens/WalletScreen/WalletScreen.js'),
+    /<EmptyTransactions look=\{look\} locked=\{locked\} \/>/,
+  );
+  assert.match(
+    read('src/Screens/WalletScreen/WalletTransactionsScreen.js'),
+    /<EmptyTransactions look=\{look\} locked=\{locked\} \/>/,
+  );
 });

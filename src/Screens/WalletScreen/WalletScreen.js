@@ -38,7 +38,14 @@ import {
   ekycRefusal,
   ekycTile,
 } from '@/Utils/ekycWallet';
-import { lockedAlert, walletLocked } from '@/Utils/walletLock';
+import {
+  actionLook,
+  balanceLabel,
+  lockedAlert,
+  lockedMoneyLine,
+  verifyOnArrival,
+  walletLocked,
+} from '@/Utils/walletLock';
 
 // The Wallet page, as the owner's design draws it (2026-11-22): the balance
 // and whether the wallet is active, Cash in / Cash out, activating the
@@ -148,6 +155,8 @@ const WalletScreen = () => {
   // locked until the check passes: Cash in and Cash out ask to verify first
   const locked = walletLocked(wallet);
   const transactions = wallet?.transactions ?? [];
+  // locked with money in it: one line that the money is safe (F3)
+  const moneyLine = lockedMoneyLine(locked, balance);
 
   // While a check is being checked and the page is open, ask for its status
   // (every 5 s, for up to 2 min); once it is over, read the wallet again
@@ -220,7 +229,9 @@ const WalletScreen = () => {
 
   // Verify ID on another screen (Cash in, the booking sheet, Payment
   // options): opened with a new `verifyAt`, start the check once the wallet
-  // has been read, if one can be started (the tile says why not otherwise)
+  // has been read, if one can be started; otherwise say where the check
+  // stands in a notice that closes itself (the tap no longer lands on a page
+  // where nothing happens; Q-UX-WALLET-LOCK-POLISH F4)
   const verifyStamp = route.params?.verifyAt;
   const seenVerify = useRef(null);
   useEffect(() => {
@@ -228,8 +239,11 @@ const WalletScreen = () => {
       return;
     }
     seenVerify.current = verifyStamp;
-    if (canStartCheck(wallet)) {
+    const next = verifyOnArrival(canStartCheck(wallet), tile);
+    if (next === 'start') {
       activate();
+    } else if (next === 'tell') {
+      appAlert(tile.title, tile.note);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [verifyStamp, wallet]);
@@ -241,6 +255,12 @@ const WalletScreen = () => {
       icon: 'plus',
       gold: true,
       onPress: () => {
+        // not read yet: whether it is locked is not known, so read it
+        // (Q-UX-WALLET-LOCK-POLISH F5)
+        if (!wallet) {
+          loadRef.current();
+          return;
+        }
         if (locked) {
           askToVerify();
           return;
@@ -256,6 +276,10 @@ const WalletScreen = () => {
       label: 'Cash out',
       icon: 'bank-transfer-out',
       onPress: () => {
+        if (!wallet) {
+          loadRef.current();
+          return;
+        }
         if (locked) {
           askToVerify();
           return;
@@ -300,7 +324,7 @@ const WalletScreen = () => {
         <View style={styles.balanceCard}>
           <View style={styles.balanceTop}>
             <View style={styles.flex}>
-              <Text style={styles.balanceLabel}>AVAILABLE BALANCE</Text>
+              <Text style={styles.balanceLabel}>{balanceLabel(locked)}</Text>
               <Text
                 style={styles.balance}
                 numberOfLines={1}
@@ -308,6 +332,11 @@ const WalletScreen = () => {
                 maxFontSizeMultiplier={1.2}>
                 ₱{AppUtil.fn(balance)}
               </Text>
+              {moneyLine ? (
+                <Text style={styles.moneyLine} numberOfLines={2}>
+                  {moneyLine}
+                </Text>
+              ) : null}
             </View>
             <View style={styles.walletTile}>
               <Icon name="wallet-outline" size={21} color={look.onGold} />
@@ -324,27 +353,42 @@ const WalletScreen = () => {
         </View>
 
         <View style={styles.actions}>
-          {actions.map(action => (
-            <Pressable
-              key={action.id}
-              onPress={action.onPress}
-              accessibilityRole="button"
-              accessibilityLabel={action.label}
-              style={({ pressed }) => [
-                styles.action,
-                pressed && styles.pressed,
-              ]}>
-              <View
-                style={[styles.actionTile, action.gold && styles.actionGold]}>
-                <Icon
-                  name={action.icon}
-                  size={19}
-                  color={action.gold ? look.chipInk : look.inkSoft}
-                />
-              </View>
-              <Text style={styles.actionLabel}>{action.label}</Text>
-            </Pressable>
-          ))}
+          {actions.map(action => {
+            // locked: a lock, no gold, quiet words; a tap still asks to
+            // verify (Q-UX-WALLET-LOCK-POLISH F1)
+            const tileLook = actionLook(action, locked);
+            return (
+              <Pressable
+                key={action.id}
+                onPress={action.onPress}
+                accessibilityRole="button"
+                accessibilityLabel={action.label}
+                accessibilityHint={locked ? 'Verify your ID first' : undefined}
+                style={({ pressed }) => [
+                  styles.action,
+                  pressed && styles.pressed,
+                ]}>
+                <View
+                  style={[
+                    styles.actionTile,
+                    tileLook.gold && styles.actionGold,
+                  ]}>
+                  <Icon
+                    name={tileLook.icon}
+                    size={19}
+                    color={tileLook.gold ? look.chipInk : look.inkSoft}
+                  />
+                </View>
+                <Text
+                  style={[
+                    styles.actionLabel,
+                    tileLook.muted && styles.actionLabelLocked,
+                  ]}>
+                  {action.label}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
 
         {tile ? (
@@ -400,7 +444,9 @@ const WalletScreen = () => {
             TRANSACTIONS
           </Text>
           <Pressable
-            onPress={() => navigation.navigate('WalletTransactionsScreen')}
+            onPress={() =>
+              navigation.navigate('WalletTransactionsScreen', { locked })
+            }
             hitSlop={10}
             accessibilityRole="button"
             accessibilityLabel="See all transactions">
@@ -414,7 +460,7 @@ const WalletScreen = () => {
             transactions.length === 0 && styles.listCardEmpty,
           ]}>
           {transactions.length === 0 ? (
-            <EmptyTransactions look={look} />
+            <EmptyTransactions look={look} locked={locked} />
           ) : (
             transactions.map((item, index) => (
               <TransactionRow
@@ -486,6 +532,13 @@ const getStyles = look =>
       letterSpacing: -1,
       color: look.onGold,
     },
+    moneyLine: {
+      marginTop: 4,
+      fontFamily: 'Poppins Regular',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.onGoldSoft,
+    },
     walletTile: {
       width: 40,
       height: 40,
@@ -547,6 +600,7 @@ const getStyles = look =>
       lineHeight: 19,
       color: look.ink,
     },
+    actionLabelLocked: { color: look.muted },
     activate: {
       marginTop: 15,
       minHeight: 86,

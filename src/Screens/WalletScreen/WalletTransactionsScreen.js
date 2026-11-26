@@ -8,7 +8,7 @@ import {
   View,
 } from 'react-native';
 import { useTheme } from 'react-native-paper';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Container from '@/Components/Container/Container';
@@ -24,6 +24,8 @@ const WalletTransactionsScreen = () => {
   const look = modern(useTheme());
   const styles = getStyles(look);
   const navigation = useNavigation();
+  // whether the Wallet page said locked, for the empty list's note
+  const locked = useRoute().params?.locked === true;
   const userInfo = useSelector(selectUserInfo);
   const historyRequest = useApiRequest();
   const [items, setItems] = useState([]);
@@ -91,7 +93,7 @@ const WalletTransactionsScreen = () => {
         onEndReachedThreshold={0.4}
         ListEmptyComponent={
           loaded ? (
-            <EmptyTransactions look={look} />
+            <EmptyTransactions look={look} locked={locked} />
           ) : (
             <ActivityIndicator style={styles.loading} color={look.muted} />
           )

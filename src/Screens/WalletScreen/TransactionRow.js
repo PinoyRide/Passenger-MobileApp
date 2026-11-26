@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppUtil } from '@/Utils';
+import { emptyTransactionsNote } from '@/Utils/walletLock';
 
 // One line of the wallet's ledger, and what shows while there is none: the
 // Wallet page and its "See all" (WalletTransactionsScreen). `look` is
@@ -79,7 +80,10 @@ const TransactionRow = ({ item, look, divided }) => {
   );
 };
 
-export const EmptyTransactions = ({ look }) => (
+// `locked`: the wallet waits for the ID check. Its rows still come (the server
+// does not hold them back), so the note does not blame the lock for an empty
+// list (Q-UX-WALLET-LOCK-POLISH F6).
+export const EmptyTransactions = ({ look, locked }) => (
   <View style={styles.empty}>
     <View style={[styles.emptyTile, { backgroundColor: look.tile }]}>
       <Icon name="receipt-text-outline" size={24} color={look.muted} />
@@ -88,7 +92,7 @@ export const EmptyTransactions = ({ look }) => (
       No transactions yet
     </Text>
     <Text style={[styles.emptyNote, { color: look.muted }]}>
-      Your top-ups and ride payments will appear here once the wallet is active.
+      {emptyTransactionsNote(locked)}
     </Text>
   </View>
 );
