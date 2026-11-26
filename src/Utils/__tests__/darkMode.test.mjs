@@ -87,9 +87,9 @@ test('cards and pages are not painted colors.onPrimary (white in both looks)', (
 
 // White kept on purpose: these boxes carry their own dark words. Paths of
 // both apps (the file is shared); a path the app does not have is skipped.
-// (The start screen left the list when it took the phone's look, QA UPD-14.)
+// (The start screen left the list when it took the phone's look, QA UPD-14;
+// Update needed when it took modern.js, A-184 piece f.)
 const WHITE_ON_PURPOSE = new Set([
-  'src/Screens/Login/UpdateRequiredScreen.js',
   'src/Services/Push/PushNotificationManager.js',
   // a step dot on the black camera screen (Passenger, Rider)
   'src/Screens/Profile/LivenessSelfieScreen.js',

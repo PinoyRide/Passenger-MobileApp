@@ -1,25 +1,25 @@
 import React, { useCallback, useState } from 'react';
-import {
-  ActivityIndicator,
-  BackHandler,
-  Linking,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { BackHandler, Linking, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import AppButton from '@/Components/AppButton/AppButton';
+import { modern } from '@/Theme/modern';
 import { displayVersion } from '@/Utils/displayVersion';
+import { updateNeededText } from '@/Utils/updateNeededText';
 
+// Update needed (A-184, C-4): plain words, the gold icon patch, the app's one
+// gold button. Colours only from modern.js, so it turns with the look.
 const UpdateRequiredScreen = ({ route }) => {
   // The backend also names a "current version". It is not shown: the person
-  // is told they are on an older version, not which number. The minimum
-  // comes from the API as the real version (2.0.103) and is shown as people
-  // count it (2.1.04), as on every other screen: Utils/displayVersion.js.
+  // is told a newer version is needed, not which one they have. The minimum
+  // comes from the API as the real version (2.0.103) and is shown on a small
+  // line as people count it (v2.1.04): Utils/updateNeededText.js.
   const { updateLink, minimumVersion } = route.params || {};
-  const { colors } = useTheme();
-  const styles = getStyles({ colors });
+  const theme = useTheme();
+  const look = modern(theme);
+  const styles = getStyles(look);
+  const words = updateNeededText(displayVersion(minimumVersion));
 
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -55,67 +55,78 @@ const UpdateRequiredScreen = ({ route }) => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Update Required</Text>
-      <Text style={styles.message}>
-        You're using an older version, but the minimum supported version is now{' '}
-        {displayVersion(minimumVersion) || '—'}. Please update the app to
-        continue.
+      <View style={styles.iconPatch}>
+        <Icon name="cellphone-arrow-down" size={26} color={look.chipInk} />
+      </View>
+      <Text style={styles.title} maxFontSizeMultiplier={1.3}>
+        {words.title}
       </Text>
-      <TouchableOpacity
-        style={[styles.button, isProcessing && styles.buttonDisabled]}
-        onPress={handleUpdatePress}
-        disabled={isProcessing}>
-        {isProcessing ? (
-          <ActivityIndicator size="small" color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>Update Now</Text>
-        )}
-      </TouchableOpacity>
+      <Text style={styles.message} maxFontSizeMultiplier={1.3}>
+        {words.message}
+      </Text>
+      {words.versionLine ? (
+        <Text style={styles.versionLine} maxFontSizeMultiplier={1.3}>
+          {words.versionLine}
+        </Text>
+      ) : null}
+      <View style={styles.buttonRow}>
+        <AppButton
+          title={words.button}
+          onPress={handleUpdatePress}
+          disabled={isProcessing}
+          isBold
+          noSpacing
+        />
+      </View>
     </View>
   );
 };
 
 export default UpdateRequiredScreen;
 
-const getStyles = ({ colors }) =>
+const getStyles = look =>
   StyleSheet.create({
     container: {
       flex: 1,
       justifyContent: 'center',
       alignItems: 'center',
       paddingHorizontal: 24,
-      backgroundColor: '#fff',
+      backgroundColor: look.surface,
+    },
+    iconPatch: {
+      width: 52,
+      height: 52,
+      borderRadius: 26,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 16,
+      backgroundColor: look.chip,
     },
     title: {
-      fontSize: 24,
-      fontWeight: 'bold',
+      fontSize: 20,
+      lineHeight: 28,
       fontFamily: 'Poppins SemiBold',
-      color: colors.primary,
-      marginBottom: 12,
+      color: look.ink,
+      marginBottom: 8,
       textAlign: 'center',
     },
     message: {
       fontSize: 14,
+      lineHeight: 20,
       fontFamily: 'Poppins Regular',
-      color: '#333',
+      color: look.inkSoft,
       textAlign: 'center',
-      marginBottom: 24,
     },
-    button: {
-      backgroundColor: colors.primary,
-      paddingHorizontal: 24,
-      paddingVertical: 12,
-      borderRadius: 8,
-      minWidth: 140,
-      alignItems: 'center',
-      justifyContent: 'center',
+    versionLine: {
+      fontSize: 12,
+      lineHeight: 17,
+      fontFamily: 'Poppins Regular',
+      color: look.muted,
+      textAlign: 'center',
+      marginTop: 8,
     },
-    buttonDisabled: {
-      opacity: 0.6,
-    },
-    buttonText: {
-      fontSize: 14,
-      fontFamily: 'Poppins Medium',
-      color: '#fff',
+    buttonRow: {
+      alignSelf: 'stretch',
+      marginTop: 24,
     },
   });
