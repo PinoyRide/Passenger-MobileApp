@@ -107,7 +107,7 @@ const getStyles = look =>
     iconPatch: {
       width: 52,
       height: 52,
-      borderRadius: 26,
+      borderRadius: look.radiusTile,
       alignItems: 'center',
       justifyContent: 'center',
       marginBottom: 16,

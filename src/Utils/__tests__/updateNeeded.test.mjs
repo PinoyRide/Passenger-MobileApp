@@ -119,6 +119,11 @@ test('the screen uses AppButton, the chip patch and no fixed colours', () => {
   assert.match(screen, /<AppButton\b/);
   assert.match(screen, /look\.chip\b/);
   assert.match(screen, /look\.chipInk\b/);
+  // the patch's corners match the AlertBox patch (app designer, A-184)
+  assert.match(
+    screen,
+    /iconPatch:\s*\{[^}]*borderRadius:\s*look\.radiusTile\b/,
+  );
   assert.ok(!/#[0-9a-f]{3,8}\b/i.test(screen), 'a fixed colour is left');
   assert.ok(!/TouchableOpacity/.test(screen), 'a button of its own is left');
 });
