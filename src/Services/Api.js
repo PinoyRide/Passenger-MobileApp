@@ -332,7 +332,13 @@ const usePostRequest = () => {
         //  Extract error message properly
         const errorMessage = extractErrorMessage(res.data.message || res.data);
         setError(errorMessage);
-        return { response: null, error: errorMessage };
+        // the API's reason code, for a screen that picks its words by it
+        // (eKYC refusals: Utils/ekycWallet.js)
+        return {
+          response: null,
+          error: errorMessage,
+          reason: res.data?.data?.reason,
+        };
       } else {
         return { response: res.data, error: null };
       }
@@ -400,7 +406,13 @@ const usePostRequest = () => {
       // isOffline first, as above
       setIsOffline(offline);
       setError(message);
-      return { response: null, error: message, offline };
+      // a refusal (4xx) carries its reason code in data.reason, as above
+      return {
+        response: null,
+        error: message,
+        offline,
+        reason: err.response?.data?.data?.reason,
+      };
     } finally {
       if (isLatest()) {
         setLoading(false);

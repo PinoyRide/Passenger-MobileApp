@@ -37,19 +37,22 @@ test('no screen promises RideRewards', () => {
 });
 
 test('the Activate tile says the check is optional, on screen and to a screen reader', () => {
-  const wallet = read('src/Screens/WalletScreen/WalletScreen.js');
+  // the tile's words come from Utils/ekycWallet.js since EKYC-HOTFIX
+  const words = read('src/Utils/ekycWallet.js');
   assert.match(
-    wallet,
+    words,
     /const ACTIVATE_NOTE =\s*'Optional\. Check your ID once\. Your wallet works either way\.';/,
   );
-  assert.match(wallet, /accessibilityHint=\{ACTIVATE_NOTE\}/);
+  assert.match(words, /title: 'Activate your wallet',\s*note: ACTIVATE_NOTE,/);
+  const wallet = read('src/Screens/WalletScreen/WalletScreen.js');
+  assert.match(wallet, /accessibilityHint=\{tile\.note\}/);
   assert.match(
     wallet,
-    /<Text style=\{styles\.activateNote\}>\{ACTIVATE_NOTE\}<\/Text>/,
+    /<Text style=\{styles\.activateNote\}>\{tile\.note\}<\/Text>/,
   );
   assert.match(
     wallet,
-    /<Text style=\{styles\.activateTitle\}>Activate your wallet<\/Text>/,
+    /<Text style=\{styles\.activateTitle\}>\{tile\.title\}<\/Text>/,
   );
 });
 

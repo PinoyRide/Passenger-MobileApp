@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   Linking,
   Pressable,
   RefreshControl,
@@ -26,14 +27,16 @@ import { selectUserInfo } from '@/Redux/Slices/userSlice';
 import TransactionRow, { EmptyTransactions } from './TransactionRow';
 import appAlert from '@/Utils/appAlert';
 import { walletStampIsNew } from '@/Utils/cashOut';
-
-// The note under "Activate your wallet": that the identity check is optional
-// and nothing waits for it (a passed check only shows ACTIVE; cash in, pay
-// and cash out work without it). It used to promise "RideRewards", which do
-// not exist (Q-WALLET-TEXT: the team's wording O-2, chosen by the owner in
-// A-199 and shipped by A-217).
-const ACTIVATE_NOTE =
-  'Optional. Check your ID once. Your wallet works either way.';
+import {
+  OPEN_FAILED,
+  STATUS_POLL_FOR_MS,
+  STATUS_POLL_MS,
+  ekycCheckIsOver,
+  ekycJustPassed,
+  ekycPassed,
+  ekycRefusal,
+  ekycTile,
+} from '@/Utils/ekycWallet';
 
 // The Wallet page, as the owner's design draws it (2026-11-22): the balance
 // and whether the wallet is active, Cash in / Cash out, activating the
@@ -50,12 +53,15 @@ const WalletScreen = () => {
   const userInfo = useSelector(selectUserInfo);
   const walletRequest = useApiRequest();
   const ekycRequest = usePostRequest();
+  const statusRequest = usePostRequest();
   const [wallet, setWallet] = useState(null);
   const [starting, setStarting] = useState(false);
 
   // The page's read (in a ref, so the focus, the stamp and the pull always
   // call the latest one). `showing` is false once the page has gone.
   const showing = useRef(true);
+  // the last answer drawn, to tell when the wallet has just become active
+  const walletRef = useRef(null);
   const loadRef = useRef(async () => {});
   loadRef.current = async () => {
     if (!userInfo?.id) {
@@ -66,6 +72,12 @@ const WalletScreen = () => {
       AppConstants.API.CUSTOMER_WALLET(userInfo.id),
     );
     if (showing.current && response?.data) {
+      // the check passed while the page was open (back from the browser, or
+      // a review decided): said once, in a notice that closes itself
+      if (ekycJustPassed(walletRef.current, response.data)) {
+        appAlert('Your wallet is active');
+      }
+      walletRef.current = response.data;
       setWallet(response.data);
     }
   };
@@ -83,6 +95,18 @@ const WalletScreen = () => {
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [userInfo?.id]),
   );
+
+  // ... and when the app comes back to the front: the identity check runs in
+  // the browser, and coming back from it does not focus the page again
+  // (EKYC-HOTFIX: a passed check stayed NOT ACTIVATED until the page was left)
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', next => {
+      if (next === 'active' && showing.current) {
+        loadRef.current();
+      }
+    });
+    return () => subscription.remove();
+  }, []);
 
   // ... and when a money notification stamps it while it is already on
   // screen (View in its box, or the push itself): the page stays focused, so
@@ -111,32 +135,63 @@ const WalletScreen = () => {
     wallet?.availBalance ?? userInfo?.wallet_details?.avail_balance ?? 0;
   // what can be cashed out: money added by Pinoy Ride pays for rides only
   const cashable = wallet?.cashableBalance;
-  const active = Boolean(wallet?.active);
+  // ACTIVE once the identity check passed; the tile under the actions says
+  // where the check stands (the API's `ekyc`; Utils/ekycWallet.js)
+  const active = ekycPassed(wallet);
+  const tile = ekycTile(wallet);
   const transactions = wallet?.transactions ?? [];
+
+  // While a check is being checked and the page is open, ask for its status
+  // (every 5 s, for up to 2 min); once it is over, read the wallet again
+  const checkingReference =
+    tile?.kind === 'checking' ? wallet?.ekyc?.reference : null;
+  useEffect(() => {
+    if (!checkingReference) {
+      return undefined;
+    }
+    const until = Date.now() + STATUS_POLL_FOR_MS;
+    let asking = false;
+    const timer = setInterval(async () => {
+      if (Date.now() > until) {
+        clearInterval(timer);
+        return;
+      }
+      if (asking || !showing.current) {
+        return;
+      }
+      asking = true;
+      try {
+        const { response } = await statusRequest.makePostRequest(
+          AppConstants.ENDPOINT.EKYC_CHECK_STATUS,
+          { request_user_id: checkingReference },
+        );
+        if (ekycCheckIsOver(response?.data?.status)) {
+          clearInterval(timer);
+          await loadRef.current();
+        }
+      } finally {
+        asking = false;
+      }
+    }, STATUS_POLL_MS);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkingReference]);
 
   const activate = async () => {
     setStarting(true);
-    const { response, error } = await ekycRequest.makePostRequest(
+    const { response, error, reason } = await ekycRequest.makePostRequest(
       AppConstants.ENDPOINT.GET_EKYC_URL,
       {},
     );
     setStarting(false);
     const url = response?.data?.ekyc_url || response?.data?.zkyc_url;
     if (url) {
-      Linking.openURL(url).catch(() =>
-        appAlert(
-          'Activate your wallet',
-          'The identity check could not be opened. Please try again.',
-        ),
-      );
+      Linking.openURL(url).catch(() => appAlert(...OPEN_FAILED));
       return;
     }
-    appAlert(
-      'Activate your wallet',
-      error ||
-        response?.message ||
-        'Identity verification is not available yet. Please try again later.',
-    );
+    // the words by the refusal's reason; the tries left change, so read again
+    appAlert(...ekycRefusal(reason, error || response?.message));
+    loadRef.current();
   };
 
   const actions = [
@@ -242,32 +297,53 @@ const WalletScreen = () => {
           ))}
         </View>
 
-        {active ? null : (
+        {tile ? (
           <Pressable
-            onPress={activate}
-            disabled={starting}
-            accessibilityRole="button"
-            accessibilityLabel="Activate your wallet"
-            accessibilityHint={ACTIVATE_NOTE}
+            onPress={tile.canStart ? activate : undefined}
+            disabled={!tile.canStart || starting}
+            accessibilityRole={tile.canStart ? 'button' : 'text'}
+            accessibilityLabel={tile.title}
+            accessibilityHint={tile.note}
             accessibilityState={{ busy: starting }}
             style={({ pressed }) => [
               styles.activate,
-              pressed && styles.pressed,
+              tile.kind !== 'none' && styles.activateQuiet,
+              pressed && tile.canStart && styles.pressed,
             ]}>
-            <View style={styles.activateTile}>
-              <Icon name="shield-check-outline" size={20} color={look.onGold} />
+            <View
+              style={[
+                styles.activateTile,
+                tile.kind === 'checking' || tile.kind === 'review'
+                  ? styles.activateTileChip
+                  : tile.kind !== 'none' && styles.activateTileQuiet,
+              ]}>
+              <Icon
+                name={tile.icon}
+                size={20}
+                color={
+                  tile.kind === 'none'
+                    ? look.onGold
+                    : tile.kind === 'checking' || tile.kind === 'review'
+                    ? look.chipInk
+                    : look.inkSoft
+                }
+              />
             </View>
             <View style={styles.flex}>
-              <Text style={styles.activateTitle}>Activate your wallet</Text>
-              <Text style={styles.activateNote}>{ACTIVATE_NOTE}</Text>
+              <Text style={styles.activateTitle}>{tile.title}</Text>
+              <Text style={styles.activateNote}>{tile.note}</Text>
             </View>
             {starting ? (
               <ActivityIndicator color={look.muted} />
-            ) : (
+            ) : tile.tryAgain ? (
+              <View style={styles.tryAgain}>
+                <Text style={styles.tryAgainText}>Try again</Text>
+              </View>
+            ) : tile.canStart ? (
               <Icon name="chevron-right" size={20} color={look.faint} />
-            )}
+            ) : null}
           </Pressable>
-        )}
+        ) : null}
 
         <View style={styles.sectionRow}>
           <Text style={styles.sectionLabel} accessibilityRole="header">
@@ -440,6 +516,22 @@ const getStyles = look =>
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: look.gold,
+    },
+    activateQuiet: { borderColor: look.hairline },
+    activateTileChip: { backgroundColor: look.chip },
+    activateTileQuiet: { backgroundColor: look.tile },
+    tryAgain: {
+      height: 32,
+      paddingHorizontal: 12,
+      borderRadius: 16,
+      justifyContent: 'center',
+      backgroundColor: look.chip,
+    },
+    tryAgainText: {
+      fontFamily: 'Poppins SemiBold',
+      fontSize: 13,
+      lineHeight: 18,
+      color: look.chipInk,
     },
     activateTitle: {
       fontFamily: 'Poppins SemiBold',
