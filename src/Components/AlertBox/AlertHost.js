@@ -4,7 +4,7 @@ import useAutoClose, {
   NOTICE_AUTO_CLOSE_MS,
   NOTICE_READ_MS,
 } from '@/Hooks/useAutoClose';
-import { isNotice } from '@/Utils/alertShape';
+import { boxState } from '@/Utils/alertShape';
 import { closeAlert, subscribeAlerts } from '@/Utils/appAlert';
 
 // Draws what Utils/appAlert.js is asked to show, one box at a time. Mounted
@@ -28,10 +28,13 @@ const close = box => {
 };
 
 const Shown = ({ box }) => {
+  // a notice once read, a question after three minutes (Utils/alertShape.js
+  // boxState); an asked box is never busy, but the rule is the AlertBox's
+  const { autoClose } = boxState(box);
   useAutoClose(
-    true,
+    autoClose !== 'never',
     () => close(box),
-    isNotice(box) ? NOTICE_READ_MS : NOTICE_AUTO_CLOSE_MS,
+    autoClose === 'read' ? NOTICE_READ_MS : NOTICE_AUTO_CLOSE_MS,
   );
   const answer = run => () => {
     answered.add(box);
@@ -51,6 +54,8 @@ const Shown = ({ box }) => {
       message={box.message}
       icon={box.icon}
       note={box.note}
+      points={box.points}
+      errorText={box.errorText}
       dismissable={box.dismissable}
       confirmText={box.confirmText}
       onConfirm={answer(box.onConfirm)}

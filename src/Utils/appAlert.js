@@ -9,8 +9,9 @@ import { createAlertQueue } from '@/Utils/alertQueue';
 // the order asked (Utils/alertQueue.js), except a box asked with
 // options.priority, which goes in front. A chooser of three or more answers,
 // and a question asked while nothing is drawn to show it (a task in the
-// background), stay the platform's dialog. The same file in both apps
-// (sharedUi.test.mjs).
+// background), stay the platform's dialog. options also take the AlertBox's
+// icon, note, points (A-199's tips, [{ icon, text }]) and errorText
+// (Utils/alertShape.js). The same file in both apps (sharedUi.test.mjs).
 
 let lastId = 0;
 const hosts = new Set();

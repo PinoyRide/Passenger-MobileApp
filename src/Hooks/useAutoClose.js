@@ -15,6 +15,9 @@ import { startOnScreenTimer } from '@/Utils/onScreenTimer';
 //                         this always stays in my screen"). Utils/alertShape.js
 //                         (isNotice) tells the two apart; AlertBox and
 //                         AlertHost apply it.
+// A busy box (a spinner on its filled button) never closes by itself while
+// busy: it waits for its answer, or for its 15-second error state
+// (Utils/alertShape.js boxState, Utils/busyTimeout.js).
 // Only time on screen counts (Utils/onScreenTimer.js): a box raised while the
 // app is minimized waits for the person to come back (QA NTF-10).
 export const NOTICE_AUTO_CLOSE_MS = 3 * 60 * 1000;

@@ -42,6 +42,9 @@ const SHARED = [
   'src/Components/AlertBox/AlertHost.js',
   'src/Utils/__tests__/alertShape.test.mjs',
   'src/Utils/__tests__/alertsInOneLook.test.mjs',
+  // a busy box's 15-second error state (A-184 piece b)
+  'src/Utils/busyTimeout.js',
+  'src/Utils/__tests__/busyTimeout.test.mjs',
   'src/Components/ProfileAvatar/ProfileAvatar.js',
   'src/Components/GenderChoice/GenderChoice.js',
   'src/Utils/gender.js',
