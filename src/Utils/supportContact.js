@@ -2,17 +2,17 @@
 // (Q-WALLET-TEXT; the owner, A-217, 2026-11-26: the team picks the contact
 // shown, the support email placeholder while there is no official one).
 // Settings > Help & support shows it in both apps, and the Passenger's
-// "Contact support" on the rating page. No support address or number has been
-// given yet (Help Desk Pack v4.3: every contact is "[SUPPORT CONTACT TBC]"),
-// so the box shows a placeholder and offers nothing to tap. The phone number
-// the rating page used to dial was never confirmed as a support line.
+// "Contact support" on the rating page. The phone number the rating page used
+// to dial was never confirmed as a support line.
 //
-// The owner fills SUPPORT_EMAIL with the real address: that one line, shipped
-// as a self-update, and the box shows it with a "Write an email" button.
+// SUPPORT_EMAIL is the public support address the owner set (A-285 item 9,
+// the same one as the Google Play contact and the privacy policy): the box
+// shows it with a "Write an email" button. Were it ever emptied or not an
+// address, the box falls back to the placeholder and offers nothing to tap.
 // Pure (no RN imports) so it runs under `node --test`. The same file in both
 // apps (sharedUi.test.mjs).
 
-const SUPPORT_EMAIL = '';
+const SUPPORT_EMAIL = 'contact.pinoyride@gmail.com';
 
 const SUPPORT_EMAIL_PLACEHOLDER = '[support email to be announced]';
 

@@ -15,15 +15,32 @@ const {
 } = mod;
 
 // Q-WALLET-TEXT (the owner, A-217, 2026-11-26): the team picks the support
-// contact shown; with no official one yet, the support email placeholder.
+// contact shown; the owner set the public support email (A-285 item 9).
 // Settings > Help & support used to say "coming soon" in both apps.
 
 const app = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const read = path => readFileSync(join(app, path), 'utf8');
 
-test('no support email is given yet: the box shows the placeholder, 911 first in line after it', () => {
-  assert.equal(SUPPORT_EMAIL, '');
-  const [title, message, buttons] = supportAlert(() => {});
+test('the public support email is set (A-285): the box shows it with a button to write, never the placeholder', () => {
+  assert.equal(SUPPORT_EMAIL, 'contact.pinoyride@gmail.com');
+  assert.equal(supportEmail(), 'contact.pinoyride@gmail.com');
+  const opened = [];
+  const [title, message, buttons] = supportAlert(uri => opened.push(uri));
+  assert.equal(title, 'Help & support');
+  assert.equal(
+    message,
+    `Email us at contact.pinoyride@gmail.com.\n\n${EMERGENCY_LINE}`,
+  );
+  assert.doesNotMatch(message, /to be announced/);
+  assert.equal(buttons.length, 2);
+  buttons[1].onPress();
+  assert.deepEqual(opened, [
+    'mailto:contact.pinoyride@gmail.com?subject=Pinoy%20Ride%20support',
+  ]);
+});
+
+test('with no usable support email the box falls back to the placeholder, 911 first in line after it', () => {
+  const [title, message, buttons] = supportAlert(() => {}, '');
   assert.equal(title, 'Help & support');
   assert.equal(
     message,
@@ -77,7 +94,6 @@ test('something that is not an address counts as not given', () => {
     '',
     '   ',
     null,
-    undefined,
     'support',
     'a@b',
     'a b@c.d',
@@ -85,6 +101,9 @@ test('something that is not an address counts as not given', () => {
     assert.equal(supportEmail(value), '', String(value));
     assert.equal(supportAlert(() => {}, value).length, 2, String(value));
   }
+  // nothing passed means the set address, not "not given"
+  assert.equal(supportEmail(undefined), SUPPORT_EMAIL);
+  assert.equal(supportAlert(() => {}, undefined).length, 3);
   assert.equal(
     supportEmail('support@pinoyride.example'),
     'support@pinoyride.example',

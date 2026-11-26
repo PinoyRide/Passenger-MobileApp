@@ -128,7 +128,7 @@ const SettingsScreen = () => {
   };
 
   // the support contact, the same in both apps (Utils/supportContact.js;
-  // the owner, A-217: a placeholder until the support email is given)
+  // the owner, A-217; the public support email, A-285)
   const showSupport = () => appAlert(...supportAlert(Linking.openURL));
 
   return (
